@@ -1,6 +1,26 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RecordPage from "../app/record/RecordPageClient";
+
+// Create a test QueryClient with retries disabled for faster tests
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+        staleTime: 0,
+      },
+    },
+  });
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  const testQueryClient = createTestQueryClient();
+  return render(
+    <QueryClientProvider client={testQueryClient}>{ui}</QueryClientProvider>
+  );
+};
 
 // --- 1. MOCK DEPENDENCIES ---
 
@@ -117,7 +137,7 @@ describe("RecordPage", () => {
   });
 
   it("renders the main recording interface", () => {
-    render(<RecordPage />);
+    renderWithProviders(<RecordPage />);
 
     // Check Title
     expect(screen.getByText(/Record Your/)).toBeInTheDocument();
@@ -133,14 +153,14 @@ describe("RecordPage", () => {
   });
 
   it("shows the microphone button", () => {
-    render(<RecordPage />);
+    renderWithProviders(<RecordPage />);
     // The button usually contains an SVG, but we can check for the text around it or role
     const buttons = screen.getAllByRole("button");
     expect(buttons.length).toBeGreaterThan(0);
   });
 
   it("handles text input for title and transcription", () => {
-    render(<RecordPage />);
+    renderWithProviders(<RecordPage />);
 
     const titleInput = screen.getByPlaceholderText(
       "Give your story a title..."
@@ -161,7 +181,7 @@ describe("RecordPage", () => {
   });
 
   it("shows save button", () => {
-    render(<RecordPage />);
+    renderWithProviders(<RecordPage />);
     expect(screen.getByText("Save Privately")).toBeInTheDocument();
   });
 });
