@@ -56,4 +56,14 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# AI agent configs (local-only, may contain tokens/preferences)
 /.claude/
+/.cursor/
+/.gemini/
+/.codex/
+/.kimi/
+
+# MCP config (contains auth tokens)
+.mcp.json
+.vscode/mcp.json

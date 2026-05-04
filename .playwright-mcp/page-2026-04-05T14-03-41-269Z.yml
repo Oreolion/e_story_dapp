@@ -1,0 +1,418 @@
+- generic [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e15] [cursor=pointer]:
+    - img [ref=e16]
+  - alert [ref=e19]
+  - generic [ref=e24]:
+    - navigation [ref=e25]:
+      - generic [ref=e27]:
+        - link "eStories" [ref=e28] [cursor=pointer]:
+          - /url: /
+          - img [ref=e30]
+          - generic [ref=e55]: eStories
+        - generic [ref=e56]:
+          - link "Home" [ref=e57] [cursor=pointer]:
+            - /url: /
+            - img [ref=e58]
+            - generic [ref=e61]: Home
+          - link "Record" [ref=e62] [cursor=pointer]:
+            - /url: /record
+            - img [ref=e63]
+            - generic [ref=e66]: Record
+          - link "Archive" [ref=e67] [cursor=pointer]:
+            - /url: /library
+            - img [ref=e68]
+            - generic [ref=e71]: Archive
+          - link "Community" [ref=e72] [cursor=pointer]:
+            - /url: /social
+            - img [ref=e73]
+            - generic [ref=e78]: Community
+          - link "Profile" [ref=e79] [cursor=pointer]:
+            - /url: /profile
+            - img [ref=e80]
+            - generic [ref=e83]: Profile
+          - link "Tracker" [ref=e84] [cursor=pointer]:
+            - /url: /tracker
+            - img [ref=e85]
+            - generic [ref=e93]: Tracker
+        - generic [ref=e94]:
+          - button [ref=e96]:
+            - img [ref=e97]
+          - button [ref=e100]:
+            - img
+            - img
+          - button "Connect" [ref=e101]
+    - main [ref=e102]:
+      - generic [ref=e103]:
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - generic [ref=e107]:
+                - img [ref=e108]
+                - text: Private by default
+              - generic [ref=e111]:
+                - img [ref=e112]
+                - text: Your data, your ownership
+            - heading "Your voice. Your story. Actually yours. Forever." [level=1] [ref=e115]:
+              - text: Your voice. Your story.
+              - text: Actually yours. Forever.
+            - paragraph [ref=e116]: "The storytelling platform that listens, learns your patterns, and belongs to you — not us, not any platform. Write about anything: journals, history, culture, geopolitics. AI helps you become a better storyteller."
+          - generic [ref=e117]:
+            - button "Start Writing — Free" [active] [ref=e118]
+            - button "See How It Works" [ref=e119]
+        - generic [ref=e120]:
+          - generic [ref=e121]:
+            - heading "How eStories works" [level=2] [ref=e122]
+            - paragraph [ref=e123]: Three steps. No typing required.
+          - generic [ref=e126]:
+            - generic [ref=e128]:
+              - generic [ref=e129]: "1"
+              - img [ref=e131]
+              - heading "Talk" [level=3] [ref=e134]
+              - paragraph [ref=e135]: Hit record and speak. About your day, a realization, whatever's on your mind. No prompts needed.
+            - generic [ref=e137]:
+              - generic [ref=e138]: "2"
+              - img [ref=e140]
+              - heading "Understand" [level=3] [ref=e142]
+              - paragraph [ref=e143]: AI extracts themes, emotions, and patterns across your entries. See the arcs of your life over time.
+            - generic [ref=e145]:
+              - generic [ref=e146]: "3"
+              - img [ref=e148]
+              - heading "Own" [level=3] [ref=e151]
+              - paragraph [ref=e152]: Your stories are encrypted and stored permanently. No platform can delete them. No company can sell them. They're yours.
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - heading "Built for people who think deeply" [level=2] [ref=e155]
+            - paragraph [ref=e156]: A storytelling experience designed for reflection and craft, not engagement metrics. Write journals, history, culture, geopolitics — anything that matters to you.
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - img [ref=e161]
+                - generic [ref=e164]: Just talk
+              - generic [ref=e166]: Hit record and speak. About your day, a realization, a memory. AI transcribes perfectly. No typing required.
+            - generic [ref=e167]:
+              - generic [ref=e168]:
+                - img [ref=e170]
+                - generic [ref=e180]: See your patterns
+              - generic [ref=e182]: AI finds the themes, emotions, and arcs across your stories. The patterns you couldn't see alone — with advice to grow.
+            - generic [ref=e183]:
+              - generic [ref=e184]:
+                - img [ref=e186]
+                - generic [ref=e189]: Yours forever
+              - generic [ref=e191]: Your stories are encrypted and stored permanently. No platform shutdown, no acquisition, no server failure can touch them.
+            - generic [ref=e192]:
+              - generic [ref=e193]:
+                - img [ref=e195]
+                - generic [ref=e197]: Curate your story
+              - generic [ref=e199]: Compile entries into collections — a year of growth, a chapter of your life. Keep them private or share on your terms.
+            - generic [ref=e200]:
+              - generic [ref=e201]:
+                - img [ref=e203]
+                - generic [ref=e208]: Real stories, real people
+              - generic [ref=e210]: Read and share authentic human experiences. No algorithms, no feeds — just a library of real voices.
+            - generic [ref=e211]:
+              - generic [ref=e212]:
+                - img [ref=e214]
+                - generic [ref=e216]: Your story has value
+              - generic [ref=e218]: The community recognizes meaningful stories. Earn recognition for the experiences that resonate.
+        - generic [ref=e219]:
+          - heading "Why your voice matters more than ever" [level=2] [ref=e221]
+          - generic [ref=e222]:
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - img [ref=e227]
+                - generic [ref=e232]: 74%of new web content is AI-generated
+              - paragraph [ref=e233]: The internet is flooding with synthetic content. Your authentic voice — the hesitations, the emotion, the unscripted truth — is becoming the rarest signal online.
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - img [ref=e238]
+                - generic [ref=e244]: 100%of journaling apps store your data on their servers
+              - paragraph [ref=e245]: Your most private thoughts live on infrastructure you don't control. If they get acquired, shut down, or breached — your stories go with them.
+            - generic [ref=e247]:
+              - generic [ref=e248]:
+                - img [ref=e250]
+                - generic [ref=e259]: 51%of web traffic is now bots
+              - paragraph [ref=e260]: In a world where half the internet isn't even human, your voice, your story — recorded, timestamped, irreplaceably yours — is proof that you were here.
+        - generic [ref=e261]:
+          - heading "The eStories promise" [level=2] [ref=e263]
+          - generic [ref=e265]:
+            - img [ref=e266]
+            - paragraph [ref=e269]: “I built eStories because I needed it — a tool with less friction that could also help me improve over time. Other platforms force you to type, which makes journaling and writing harder. My most important thoughts ended up trapped on services I didn't control. Your stories and your voice shouldn't belong to a company — they should belong to you. We are living through one of the most important periods in human history. People should write more, care more about their stories, and take ownership of how their histories are written.”
+            - generic [ref=e270]:
+              - generic [ref=e271]: RA
+              - generic [ref=e272]:
+                - generic [ref=e273]: Remi
+                - generic [ref=e274]: Founder, eStories
+          - generic [ref=e275]:
+            - generic [ref=e276]:
+              - img [ref=e278]
+              - heading "We don't read your journal" [level=3] [ref=e283]
+              - paragraph [ref=e284]: Your entries are encrypted. We couldn't read them even if we wanted to.
+            - generic [ref=e285]:
+              - img [ref=e287]
+              - heading "No ads, no data mining" [level=3] [ref=e290]
+              - paragraph [ref=e291]: We don't sell your data. We don't profile you. We don't run ads. Ever.
+            - generic [ref=e292]:
+              - img [ref=e294]
+              - heading "You leave, you keep everything" [level=3] [ref=e297]
+              - paragraph [ref=e298]: If you ever leave eStories, your stories go with you. They're your files.
+        - generic [ref=e299]:
+          - generic [ref=e300]:
+            - heading "Simple, affordable pricing" [level=2] [ref=e301]
+            - paragraph [ref=e302]: Start writing for free. Upgrade when you want AI craft feedback, story collections, or creator tools.
+          - generic [ref=e303]:
+            - generic [ref=e304]:
+              - generic [ref=e305]:
+                - img [ref=e307]
+                - generic [ref=e310]: Free
+                - generic [ref=e311]: $0forever
+                - generic [ref=e312]: Start your storytelling journey.
+              - generic [ref=e313]:
+                - list [ref=e314]:
+                  - listitem [ref=e315]:
+                    - img [ref=e316]
+                    - generic [ref=e318]: Unlimited story recording & writing
+                  - listitem [ref=e319]:
+                    - img [ref=e320]
+                    - generic [ref=e322]: AI transcription (voice-to-text)
+                  - listitem [ref=e323]:
+                    - img [ref=e324]
+                    - generic [ref=e326]: AI text enhancement
+                  - listitem [ref=e327]:
+                    - img [ref=e328]
+                    - generic [ref=e330]: 5 AI story analyses per month
+                  - listitem [ref=e331]:
+                    - img [ref=e332]
+                    - generic [ref=e334]: Encrypted local vault
+                  - listitem [ref=e335]:
+                    - img [ref=e336]
+                    - generic [ref=e338]: Public story feed access
+                  - listitem [ref=e339]:
+                    - img [ref=e340]
+                    - generic [ref=e342]: Basic story insights
+                - button "Get Started Free" [ref=e343]
+            - generic [ref=e344]:
+              - generic [ref=e345]: Most Popular
+              - generic [ref=e346]:
+                - img [ref=e348]
+                - generic [ref=e350]: Storyteller
+                - generic [ref=e351]: $2.99/month
+                - generic [ref=e352]: AI-powered craft improvement.
+              - generic [ref=e353]:
+                - list [ref=e354]:
+                  - listitem [ref=e355]:
+                    - img [ref=e356]
+                    - generic [ref=e358]: "Everything in Free, plus:"
+                  - listitem [ref=e359]:
+                    - img [ref=e360]
+                    - generic [ref=e362]: Unlimited AI story analyses
+                  - listitem [ref=e363]:
+                    - img [ref=e364]
+                    - generic [ref=e366]: Actionable AI advice per story
+                  - listitem [ref=e367]:
+                    - img [ref=e368]
+                    - generic [ref=e370]: Story collections & continuations
+                  - listitem [ref=e371]:
+                    - img [ref=e372]
+                    - generic [ref=e374]: Weekly AI reflections
+                  - listitem [ref=e375]:
+                    - img [ref=e376]
+                    - generic [ref=e378]: Advanced theme & pattern tracking
+                  - listitem [ref=e379]:
+                    - img [ref=e380]
+                    - generic [ref=e382]: Storytelling progress reports
+                  - listitem [ref=e383]:
+                    - img [ref=e384]
+                    - generic [ref=e386]: Priority CRE verification
+                - button "Start Writing Better" [ref=e387]
+            - generic [ref=e388]:
+              - generic [ref=e389]:
+                - img [ref=e391]
+                - generic [ref=e393]: Creator
+                - generic [ref=e394]: $7.99/month
+                - generic [ref=e395]: Publish, monetize, build an audience.
+              - generic [ref=e396]:
+                - list [ref=e397]:
+                  - listitem [ref=e398]:
+                    - img [ref=e399]
+                    - generic [ref=e401]: "Everything in Storyteller, plus:"
+                  - listitem [ref=e402]:
+                    - img [ref=e403]
+                    - generic [ref=e405]: Unlimited public publishing
+                  - listitem [ref=e406]:
+                    - img [ref=e407]
+                    - generic [ref=e409]: Custom paywall pricing
+                  - listitem [ref=e410]:
+                    - img [ref=e411]
+                    - generic [ref=e413]: NFT book minting (no extra fee)
+                  - listitem [ref=e414]:
+                    - img [ref=e415]
+                    - generic [ref=e417]: Creator analytics dashboard
+                  - listitem [ref=e418]:
+                    - img [ref=e419]
+                    - generic [ref=e421]: Tip collection from readers
+                  - listitem [ref=e422]:
+                    - img [ref=e423]
+                    - generic [ref=e425]: Custom author profile page
+                  - listitem [ref=e426]:
+                    - img [ref=e427]
+                    - generic [ref=e429]: Priority support
+                - button "Become a Creator" [ref=e430]
+        - generic [ref=e431]:
+          - heading "Frequently asked questions" [level=2] [ref=e433]
+          - generic [ref=e436]:
+            - button "What can I write about on eStories?" [ref=e438]:
+              - generic [ref=e439]: What can I write about on eStories?
+              - img [ref=e440]
+            - button "How does the AI help me become a better writer?" [ref=e443]:
+              - generic [ref=e444]: How does the AI help me become a better writer?
+              - img [ref=e445]
+            - button "Is my data private and secure?" [ref=e448]:
+              - generic [ref=e449]: Is my data private and secure?
+              - img [ref=e450]
+            - button "Do I need a crypto wallet?" [ref=e453]:
+              - generic [ref=e454]: Do I need a crypto wallet?
+              - img [ref=e455]
+            - button "What are $STORY tokens?" [ref=e458]:
+              - generic [ref=e459]: What are $STORY tokens?
+              - img [ref=e460]
+            - button "What is CRE-verified quality?" [ref=e463]:
+              - generic [ref=e464]: What is CRE-verified quality?
+              - img [ref=e465]
+            - button "How do story collections work?" [ref=e468]:
+              - generic [ref=e469]: How do story collections work?
+              - img [ref=e470]
+            - button "Can I cancel anytime?" [ref=e473]:
+              - generic [ref=e474]: Can I cancel anytime?
+              - img [ref=e475]
+            - button "What happens if eStories shuts down?" [ref=e478]:
+              - generic [ref=e479]: What happens if eStories shuts down?
+              - img [ref=e480]
+        - generic [ref=e482]:
+          - heading "Your story starts here" [level=2] [ref=e483]
+          - paragraph [ref=e484]: Free to start. Your voice. Your memories. Actually yours.
+          - generic [ref=e485]:
+            - generic [ref=e486]:
+              - button "Start Writing — Free" [ref=e487]:
+                - img
+                - text: Start Writing — Free
+              - button "Read Real Stories" [ref=e488]:
+                - img
+                - text: Read Real Stories
+            - generic [ref=e489]:
+              - paragraph [ref=e490]: Want to be first when we launch the mobile app?
+              - generic [ref=e492]:
+                - textbox "your@email.com" [ref=e493]
+                - button "Join Waitlist" [ref=e494]:
+                  - img
+                  - text: Join Waitlist
+    - contentinfo [ref=e495]:
+      - generic [ref=e497]:
+        - generic [ref=e498]:
+          - generic [ref=e499]:
+            - link "eStories" [ref=e500] [cursor=pointer]:
+              - /url: /
+              - img [ref=e502]
+              - generic [ref=e527]: eStories
+            - paragraph [ref=e528]: Transform your life stories into lasting digital memories. Transform your stories into lasting digital memories in a community-driven Web3 ecosystem.
+            - generic [ref=e529]:
+              - link "Twitter" [ref=e530] [cursor=pointer]:
+                - /url: https://twitter.com
+                - img [ref=e531]
+              - link "GitHub" [ref=e533] [cursor=pointer]:
+                - /url: https://github.com
+                - img [ref=e534]
+              - link "Email" [ref=e537] [cursor=pointer]:
+                - /url: mailto:contact@estories.app
+                - img [ref=e538]
+          - generic [ref=e541]:
+            - heading "Product" [level=3] [ref=e542]:
+              - img [ref=e543]
+              - generic [ref=e545]: Product
+            - list [ref=e546]:
+              - listitem [ref=e547]:
+                - link "Features" [ref=e548] [cursor=pointer]:
+                  - /url: "#features"
+                  - generic [ref=e549]: Features
+                  - img [ref=e550]
+              - listitem [ref=e554]:
+                - link "Record Stories" [ref=e555] [cursor=pointer]:
+                  - /url: /record
+                  - generic [ref=e556]: Record Stories
+                  - img [ref=e557]
+              - listitem [ref=e561]:
+                - link "Explore Library" [ref=e562] [cursor=pointer]:
+                  - /url: /library
+                  - generic [ref=e563]: Explore Library
+                  - img [ref=e564]
+              - listitem [ref=e568]:
+                - link "Social" [ref=e569] [cursor=pointer]:
+                  - /url: /social
+                  - generic [ref=e570]: Social
+                  - img [ref=e571]
+          - generic [ref=e575]:
+            - heading "Community" [level=3] [ref=e576]:
+              - img [ref=e577]
+              - generic [ref=e580]: Community
+            - list [ref=e581]:
+              - listitem [ref=e582]:
+                - link "Discord" [ref=e583] [cursor=pointer]:
+                  - /url: https://discord.com
+                  - generic [ref=e584]: Discord
+                  - img [ref=e585]
+              - listitem [ref=e589]:
+                - link "Twitter" [ref=e590] [cursor=pointer]:
+                  - /url: https://twitter.com
+                  - generic [ref=e591]: Twitter
+                  - img [ref=e592]
+              - listitem [ref=e596]:
+                - link "GitHub" [ref=e597] [cursor=pointer]:
+                  - /url: https://github.com
+                  - generic [ref=e598]: GitHub
+                  - img [ref=e599]
+              - listitem [ref=e603]:
+                - link "Blog" [ref=e604] [cursor=pointer]:
+                  - /url: "#blog"
+                  - generic [ref=e605]: Blog
+          - generic [ref=e606]:
+            - heading "Legal" [level=3] [ref=e607]:
+              - img [ref=e608]
+              - generic [ref=e610]: Legal
+            - list [ref=e611]:
+              - listitem [ref=e612]:
+                - link "Privacy Policy" [ref=e613] [cursor=pointer]:
+                  - /url: /privacy
+                  - generic [ref=e614]: Privacy Policy
+                  - img [ref=e615]
+              - listitem [ref=e619]:
+                - link "Terms of Service" [ref=e620] [cursor=pointer]:
+                  - /url: /terms
+                  - generic [ref=e621]: Terms of Service
+                  - img [ref=e622]
+              - listitem [ref=e626]:
+                - link "Contact" [ref=e627] [cursor=pointer]:
+                  - /url: mailto:contact@estories.app
+                  - generic [ref=e628]: Contact
+                  - img [ref=e629]
+        - generic [ref=e634]:
+          - generic [ref=e635]: Smart Contracts
+          - generic [ref=e636]:
+            - link "NFT Contract" [ref=e637] [cursor=pointer]:
+              - /url: https://sepolia.basescan.org/address/0xF61E9D022Df3835FdFbDD97069F293a39783635B
+              - text: NFT Contract
+              - img [ref=e638]
+            - link "$STORY Token" [ref=e642] [cursor=pointer]:
+              - /url: https://sepolia.basescan.org/address/0xc50E1E89f65cA75CA2994Bf8C9AdB30870cf729a
+              - text: $STORY Token
+              - img [ref=e643]
+        - generic [ref=e647]:
+          - paragraph [ref=e648]:
+            - text: © 2026 EStories. All rights reserved. Built with
+            - img [ref=e649]
+            - text: by the eStories Team
+          - generic [ref=e651]:
+            - generic [ref=e652]:
+              - img [ref=e653]
+              - generic [ref=e655]: Web3
+            - generic [ref=e657]: Blockchain
+            - generic [ref=e659]: AI
+          - generic [ref=e662]: All systems operational

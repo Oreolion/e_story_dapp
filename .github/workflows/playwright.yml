@@ -7,9 +7,10 @@ on:
 
 env:
   # Placeholder env vars for Next.js build (safe to expose - not real credentials)
-  # Playwright tests only check UI navigation, they don't call these services
+  # API tests that call Supabase will receive empty/graceful responses with these placeholders
   NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
   NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
   NEXT_PUBLIC_PROJECT_ID: placeholder-walletconnect-id
   NEXT_PUBLIC_IPFS_GATEWAY: https://gateway.pinata.cloud/ipfs/
   NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS: "0x0000000000000000000000000000000000000000"
@@ -27,12 +28,12 @@ jobs:
 
     - uses: actions/setup-node@v4
       with:
-        node-version: lts/*
+        node-version: 22
         cache: 'npm'
         cache-dependency-path: package-lock.json
 
     - name: Install dependencies
-      run: npm ci
+      run: npm ci --legacy-peer-deps
 
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
