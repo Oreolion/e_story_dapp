@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="lLP" x1="88" y1="90" x2="18" y2="155" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b07832"/>
+      <stop offset="35%" stop-color="#7c5cc0"/>
+      <stop offset="100%" stop-color="#4a2890"/>
+    </linearGradient>
+    <linearGradient id="lRP" x1="92" y1="88" x2="168" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b07832"/>
+      <stop offset="30%" stop-color="#7c5cc0"/>
+      <stop offset="100%" stop-color="#4e2c98"/>
+    </linearGradient>
+    <linearGradient id="lPen" x1="126" y1="78" x2="156" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c49030"/>
+      <stop offset="100%" stop-color="#8a5a20"/>
+    </linearGradient>
+    <linearGradient id="lSpine" x1="90" y1="80" x2="90" y2="158" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c49030"/>
+      <stop offset="100%" stop-color="#8a5a20"/>
+    </linearGradient>
+  </defs>
+  <path d="M 22,76 Q 55,81 88,86 C 87,108 87,134 88,156 Q 55,153 22,152 Z" fill="url(#lLP)" opacity=".82"/>
+  <path d="M 24,77 Q 55,81.5 86,86" stroke="rgba(255,255,255,.2)" stroke-width=".6" fill="none"/>
+  <path d="M 87,88 C 86,108 86,134 87,154" stroke="rgba(0,0,0,.08)" stroke-width="1.2" fill="none"/>
+  <path d="M 92,86 Q 128,79 168,72 L 168,150 Q 128,153 92,156 Z" fill="url(#lRP)" opacity=".85"/>
+  <path d="M 94,86 Q 130,79.5 166,73" stroke="rgba(255,255,255,.25)" stroke-width=".6" fill="none"/>
+  <path d="M 93,88 C 94,108 94,134 93,154" stroke="rgba(0,0,0,.06)" stroke-width="1.2" fill="none"/>
+  <line x1="90" y1="84" x2="90" y2="157" stroke="url(#lSpine)" stroke-width="2" stroke-linecap="round"/>
+  <line x1="32" y1="98" x2="78" y2="96" stroke="rgba(0,0,0,.08)" stroke-width=".6" stroke-linecap="round"/>
+  <line x1="30" y1="108" x2="80" y2="106" stroke="rgba(0,0,0,.06)" stroke-width=".6" stroke-linecap="round"/>
+  <path d="M 28,118 Q 45,116 55,118 Q 65,120 78,117" stroke="rgba(0,0,0,.05)" stroke-width=".6" fill="none"/>
+  <line x1="32" y1="128" x2="75" y2="127" stroke="rgba(0,0,0,.04)" stroke-width=".5"/>
+  <path d="M 102,96 Q 118,93 130,96 Q 142,99 155,95" stroke="rgba(160,100,30,.15)" stroke-width=".8" fill="none"/>
+  <path d="M 100,106 Q 115,102 128,106 Q 140,110 158,104" stroke="rgba(160,100,30,.12)" stroke-width=".7" fill="none"/>
+  <path d="M 102,116 Q 120,113 132,117 Q 145,121 160,115" stroke="rgba(100,60,160,.08)" stroke-width=".6" fill="none"/>
+  <path d="M 100,127 Q 115,124 126,127 Q 138,130 155,126" stroke="rgba(100,60,160,.06)" stroke-width=".6" fill="none"/>
+  <path d="M 153,22 C 147,34 138,52 127.5,76 L 126,79 L 125.5,76.5 C 136,53 145,34 151,21 Z" fill="url(#lPen)"/>
+  <line x1="127" y1="75" x2="126.2" y2="78.5" stroke="rgba(100,60,20,.3)" stroke-width=".3"/>
+  <circle cx="126" cy="79" r="8" fill="rgba(196,144,48,.2)"/>
+  <circle cx="126" cy="79" r="1.4" fill="#8a5a20"/>
+  <path d="M 26,153 Q 55,158 90,157 Q 125,158 164,152" stroke="rgba(0,0,0,.04)" stroke-width=".8" fill="none"/>
+</svg>
