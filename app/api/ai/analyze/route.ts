@@ -14,6 +14,7 @@ const MIN_CONTENT_LENGTH = 50;
 const MAX_RETRIES = 3;
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
+const FREE_MONTHLY_ANALYSIS_LIMIT = 10;
 
 // Valid values for validation
 const VALID_EMOTIONAL_TONES = [
@@ -26,7 +27,7 @@ const VALID_LIFE_DOMAINS = [
   'creativity', 'spirituality', 'family', 'adventure', 'learning', 'general'
 ] as const;
 
-const ANALYSIS_PROMPT = `You are a cognitive analysis engine for a personal journaling app. Analyze the following story and extract structured metadata.
+const ANALYSIS_PROMPT = `You are a cognitive analysis engine for a storytelling platform. Users write about anything — personal journals, history, geopolitics, culture, creative non-fiction, and more. Analyze the following story and extract structured metadata.
 
 Story:
 """
@@ -44,19 +45,21 @@ Extract and return ONLY valid JSON (no markdown, no code blocks, no explanation)
   "people_mentioned": ["name1", "name2"],
   "places_mentioned": ["place1", "place2"],
   "time_references": ["reference1", "reference2"],
-  "brief_insight": "A single sentence insight about this story's meaning or significance."
+  "brief_insight": "A single sentence insight about this story's meaning or significance.",
+  "actionable_advice": "A practical, encouraging suggestion based on the themes and content of this story."
 }
 
 Guidelines:
-- themes: 1-5 key themes from the story (e.g., "growth", "loss", "discovery", "connection")
+- themes: 1-5 key themes from the story (e.g., "growth", "loss", "discovery", "connection", "geopolitics", "culture", "history")
 - emotional_tone: MUST be one of: reflective, joyful, anxious, hopeful, melancholic, grateful, frustrated, peaceful, excited, uncertain, neutral
 - life_domain: MUST be one of: work, relationships, health, identity, growth, creativity, spirituality, family, adventure, learning, general
 - intensity_score: 0.0-1.0, how emotionally charged is this story?
-- significance_score: 0.0-1.0, how important is this event to the person's life story?
+- significance_score: 0.0-1.0, how important is this event to the person's life story or the topic explored?
 - people_mentioned: Extract proper names of people mentioned (empty array if none)
 - places_mentioned: Extract specific locations mentioned (empty array if none)
 - time_references: Extract time references like "last summer", "when I was 12", "yesterday" (empty array if none)
 - brief_insight: A compassionate, insightful one-sentence observation about the story's meaning
+- actionable_advice: A specific, practical suggestion the author could act on based on what they wrote. For personal stories, this could be a self-improvement tip or reflection prompt. For historical/geopolitical/cultural stories, this could be a suggestion to explore a related topic, research a source, or consider an alternative perspective. Keep it encouraging, not prescriptive. 1-2 sentences max.
 
 Return ONLY the JSON object, nothing else.`;
 
@@ -262,6 +265,9 @@ function sanitizeMetadata(metadata: Record<string, unknown>): Record<string, unk
     brief_insight: typeof metadata.brief_insight === 'string'
       ? metadata.brief_insight.slice(0, 500)
       : null,
+    actionable_advice: typeof metadata.actionable_advice === 'string'
+      ? metadata.actionable_advice.slice(0, 500)
+      : null,
   };
 }
 
@@ -293,6 +299,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     storyId = body.storyId || "unknown";
     let storyText = body.storyText;
+    const storyType: string | undefined = body.storyType;
 
     // Input validation
     if (!body.storyId || !storyText) {
@@ -316,6 +323,48 @@ export async function POST(req: NextRequest) {
 
     if (storyOwner && storyOwner.author_id !== authenticatedUserId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // ── Subscription-based analysis limit ──────────────────────────────
+    const { data: userRow } = await ownershipSupabase
+      .from("users")
+      .select("subscription_plan, subscription_expires_at")
+      .eq("id", authenticatedUserId)
+      .single();
+
+    const subPlan = userRow?.subscription_plan ?? "free";
+    const subExpires = userRow?.subscription_expires_at;
+    const isPaid = subPlan !== "free" && subExpires && new Date(subExpires) > new Date();
+
+    if (!isPaid) {
+      // Count total analyses this calendar month across ALL user's stories
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      const { data: userStories } = await ownershipSupabase
+        .from("stories")
+        .select("id")
+        .eq("author_id", authenticatedUserId);
+
+      if (userStories && userStories.length > 0) {
+        const storyIds = userStories.map((s: { id: string }) => s.id);
+        const { count: monthlyCount } = await ownershipSupabase
+          .from("story_metadata")
+          .select("story_id", { count: "exact", head: true })
+          .in("story_id", storyIds)
+          .gte("updated_at", monthStart);
+
+        if ((monthlyCount ?? 0) >= FREE_MONTHLY_ANALYSIS_LIMIT) {
+          return NextResponse.json(
+            {
+              error: "Free plan limit reached (10 analyses/month). Upgrade to Storyteller for unlimited analyses.",
+              code: "PLAN_LIMIT_REACHED",
+              usage: { used: monthlyCount, limit: FREE_MONTHLY_ANALYSIS_LIMIT },
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Minimum content length check
@@ -371,8 +420,21 @@ export async function POST(req: NextRequest) {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+      // Build story-type-specific prompt context
+      const storyTypeContext: Record<string, string> = {
+        personal_journal: "This is a personal journal entry. Focus on emotional depth, personal growth, self-awareness, and reflective patterns. Prioritize life_domain accuracy and emotional_tone nuance.",
+        historical_narrative: "This is a historical narrative. Focus on historical significance, cultural context, factual references, and the narrative's contribution to preserving collective memory. Weight significance_score toward historical importance.",
+        geopolitical_analysis: "This is a geopolitical analysis. Focus on analytical rigor, multiple perspectives, power dynamics, and systemic implications. Favor themes like 'geopolitics', 'power', 'policy'. Use life_domain 'general' or 'learning' unless another clearly fits.",
+        cultural_tale: "This is a cultural tale or tradition being preserved. Focus on cultural preservation, oral tradition markers, community values, and intergenerational knowledge transfer. Weight significance_score toward cultural importance.",
+        creative_nonfiction: "This is creative non-fiction. Focus on literary craft, narrative structure, voice, imagery, and the author's storytelling technique. Note both the content themes and the artistic choices.",
+      };
+
+      const typeContext = storyType && storyTypeContext[storyType]
+        ? `\n\nContext: ${storyTypeContext[storyType]}\n`
+        : "";
+
       // Generate analysis with retry logic
-      const prompt = ANALYSIS_PROMPT.replace("{STORY_TEXT}", storyText);
+      const prompt = ANALYSIS_PROMPT.replace("{STORY_TEXT}", storyText) + typeContext;
       const { text: analysisText, attempt } = await callGeminiWithRetry(model, prompt, storyId);
 
       // Parse and validate the response
@@ -442,10 +504,14 @@ export async function POST(req: NextRequest) {
         wasTruncated,
       });
 
+      // Strip actionable_advice for free users — paid feature only
+      const responseMetadata = isPaid ? data : { ...data, actionable_advice: null };
+
       return NextResponse.json({
         success: true,
-        metadata: data,
+        metadata: responseMetadata,
         insight: sanitizedMetadata.brief_insight,
+        plan: isPaid ? subPlan : "free",
       });
 
     } finally {

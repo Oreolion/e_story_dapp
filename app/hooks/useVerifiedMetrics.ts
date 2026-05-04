@@ -41,6 +41,10 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
   const [isAuthor, setIsAuthor] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasFetchedRef = useRef(false);
+  // Stable ref for getAccessToken to avoid callback cascade
+  const getAccessTokenRef = useRef(getAccessToken);
+  getAccessTokenRef.current = getAccessToken;
 
   const fetchMetrics = useCallback(async () => {
     if (!storyId) return;
@@ -48,7 +52,7 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
     try {
       setError(null);
 
-      const token = await getAccessToken();
+      const token = await getAccessTokenRef.current();
       if (!token) return;
 
       const res = await fetch("/api/cre/check", {
@@ -61,6 +65,7 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
       });
 
       if (!res.ok) {
+        if (res.status === 429) return; // Rate limited — silently skip
         if (res.status !== 401) {
           setError("Failed to load verification status");
         }
@@ -72,7 +77,6 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
       if (data.verified) {
         setIsAuthor(!!data.isAuthor);
 
-        // Set proof (always available when verified)
         if (data.proof) {
           setProof({
             qualityTier: data.proof.qualityTier,
@@ -83,7 +87,6 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
           });
         }
 
-        // Set full metrics (only for author)
         if (data.metrics) {
           setMetrics({
             significance_score: data.metrics.significance_score,
@@ -97,14 +100,11 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
         }
 
         setIsPending(false);
-        // Stop polling — we have results
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
         }
       } else {
-        // Not verified — check if pending by looking for a pending state
-        // The trigger route sets this, so if not verified, poll a few times
         setIsPending(false);
         setMetrics(null);
         setProof(null);
@@ -113,18 +113,27 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
       console.error("[useVerifiedMetrics] Error:", err);
       setError("Failed to load verification status");
     }
-  }, [storyId, getAccessToken]);
+  }, [storyId]); // Only depends on storyId — stable across renders
 
-  // Initial fetch
+  // Fetch once on mount (or when storyId changes)
   useEffect(() => {
+    if (!storyId) return;
+    // Prevent duplicate initial fetches from React strict mode
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     fetchMetrics();
-  }, [fetchMetrics]);
+  }, [storyId, fetchMetrics]);
 
-  // Poll every 10 seconds while pending
+  // Reset fetch guard when storyId changes
   useEffect(() => {
-    if (isPending && !pollIntervalRef.current) {
-      pollIntervalRef.current = setInterval(fetchMetrics, 10000);
-    }
+    hasFetchedRef.current = false;
+  }, [storyId]);
+
+  // Poll every 15 seconds while pending (only when actively waiting for CRE result)
+  useEffect(() => {
+    if (!isPending) return;
+
+    pollIntervalRef.current = setInterval(fetchMetrics, 15000);
 
     return () => {
       if (pollIntervalRef.current) {
@@ -134,11 +143,6 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
     };
   }, [isPending, fetchMetrics]);
 
-  // Expose a startPolling function for when trigger is called
-  const startPolling = useCallback(() => {
-    setIsPending(true);
-  }, []);
-
   return {
     metrics,
     proof,
@@ -147,7 +151,7 @@ export function useVerifiedMetrics(storyId: string | null): UseVerifiedMetricsRe
     isAuthor,
     error,
     refetch: () => {
-      startPolling();
+      setIsPending(true);
       fetchMetrics();
     },
   };

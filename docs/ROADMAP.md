@@ -161,52 +161,188 @@ __tests__/vault/keyManager.test.ts       (new — 15 key lifecycle tests)
 __tests__/setup.ts                       (modified — IndexedDB + crypto polyfills)
 ```
 
-## Phase 2: Patterns & Discovery (Next Up)
+## Phase 2.6: Quick Fixes & Auth Hardening -- COMPLETE
+
+**Goal:** Fix known issues and harden auth before moving to new features.
+
+**Tasks:**
+- [x] Fix waitlist email URL → `estories.app` (production domain)
+- [x] Fix welcome email URL → `estories.app`
+- [x] Add auth guard (`validateAuthOrReject`) to `/api/ai/reflection` GET and POST
+- [x] Add client-side short text guard (< 50 chars) on RecordPage — show toast instead of silent failure
+- [x] Update all docs/README with storytelling platform positioning (not just journaling)
+- [x] Run Supabase migrations: `005_create_waitlist.sql`, `006_create_verified_metrics_tables.sql`, `007_add_actionable_advice_and_story_collections.sql`
+- [x] Auth overhaul: Google/OAuth first in AuthModal, OnboardingModal for all new users (including Google), prefill name/email
+- [x] Story collections: `parent_story_id` for story continuation/series, collection CRUD, collection detail page
+- [x] Pricing page with affordable tiers + FAQ
+- [x] Rebrand eStory → eStories across all user-facing text (~25 files)
+- [x] Logo boldness: darker page fills, edge strokes, thicker spine shadows
+
+## Phase 2: Patterns & Discovery -- COMPLETE
 
 **Goal:** Users can see patterns across their stories.
 
 **Tasks:**
-- [ ] Add "Themes" tab to Library page with story grouping
-- [ ] Add "Life Domains" grouping view
-- [ ] Implement "Mark as Canonical" button on story detail
-- [ ] Create monthly summary component
-- [ ] Add visual indicators for canonical stories in lists
-- [ ] Update navigation hierarchy (Archive before Social)
+- [x] Add "Themes" tab to Library page with story grouping
+- [x] Add "Life Domains" grouping view with distribution chart
+- [x] Implement "Mark as Canonical" button on story detail (CanonicalBadge)
+- [x] Create monthly summary component (MonthlySummary)
+- [x] Add visual indicators for canonical stories in lists
+- [x] usePatterns hook with theme groups, domain groups, canonical stories, monthly summary
 
-**Key files to create/modify:**
+**Key files created/modified:**
 ```
-app/library/page.tsx                 (modify - add tabs)
-components/ThemesView.tsx            (new)
-components/DomainsView.tsx           (new)
-components/CanonicalBadge.tsx        (new)
-components/MonthlySummary.tsx        (new)
-app/hooks/usePatterns.ts             (new)
+app/library/LibraryPageClient.tsx             (modified — Themes + Domains tabs)
+components/patterns/ThemesView.tsx            (new — expandable theme cards)
+components/patterns/DomainsView.tsx           (new — domain distribution + cards)
+components/patterns/MonthlySummary.tsx         (new — monthly stats)
+components/CanonicalBadge.tsx                  (new — mark as important)
+app/hooks/usePatterns.ts                       (new — pattern data hook)
 ```
 
-## Phase 3: AI Reflection
+## Phase 3: AI Reflection & Actionable Advice -- COMPLETE
 
-**Goal:** AI generates insights about the user's life patterns.
+**Goal:** AI generates insights about the user's life patterns and provides actionable advice based on analyzed themes.
 
 **Tasks:**
-- [ ] Create `weekly_reflections` table
-- [ ] Build `/api/ai/reflection` endpoint
-- [ ] Display reflection on Profile page
-- [ ] Add "Generate Reflection" trigger
-- [ ] Weight canonical stories higher in reflection
+- [x] Create `weekly_reflections` table
+- [x] Build `/api/ai/reflection` endpoint
+- [x] Add auth guard to reflection endpoint
+- [x] Display reflection on Profile page (WeeklyReflectionSection)
+- [x] useReflection hook for fetching/triggering reflections
+- [x] AI actionable advice in analyze endpoint (actionable_advice field per story)
+- [ ] Weight canonical stories higher in reflection — future refinement
+- [ ] Storytelling craft feedback: Track narrative quality improvement over time — future
 
-**Key files to create/modify:**
+**Key files created/modified:**
 ```
-app/api/ai/reflection/route.ts       (new)
-app/profile/page.tsx                 (modify - add reflection section)
-components/WeeklyReflection.tsx      (new)
+app/api/ai/reflection/route.ts       (modified — auth guard added)
+app/api/ai/analyze/route.ts          (modified — actionable_advice field)
+app/profile/ProfilePageClient.tsx     (modified — WeeklyReflectionSection)
+components/WeeklyReflection.tsx       (new)
 app/hooks/useReflection.ts           (new)
 ```
+
+## Phase 4: Story Collections & Continuations -- COMPLETE
+
+**Goal:** Users can create story series and add continuations to existing stories.
+
+**Tasks:**
+- [x] Add `parent_story_id` column to stories table (migration 007)
+- [x] Create `story_collections` + `collection_stories` tables (migration 007)
+- [x] API routes: `/api/stories/collections` (CRUD), `[collectionId]` (detail), `[collectionId]/stories` (add/remove)
+- [x] UI for "Continue this story" on story detail page
+- [x] Collection view page (`/library/collections/[collectionId]`)
+- [x] Collections tab in Library page with create/delete
+- [ ] NFT minting for collections (thematic book compilation) — future
+
+**Key files created/modified:**
+```
+supabase/migrations/007_add_actionable_advice_and_story_collections.sql  (new)
+app/api/stories/collections/route.ts                                      (new)
+app/api/stories/collections/[collectionId]/route.ts                       (new)
+app/api/stories/collections/[collectionId]/stories/route.ts               (new)
+app/story/[storyId]/StoryPageClient.tsx                                   (modified — "Continue Story" button)
+app/record/RecordPageClient.tsx                                           (modified — continuation banner + parent_story_id)
+app/library/LibraryPageClient.tsx                                         (modified — Collections tab)
+app/library/collections/[collectionId]/CollectionPageClient.tsx           (new)
+app/library/collections/[collectionId]/page.tsx                           (new)
+```
+
+## Phase 5: Pricing & Monetization -- COMPLETE
+
+**Goal:** Affordable pricing tiers and a sustainable creator economy.
+
+**Tasks:**
+- [x] Design pricing page with Free / Storyteller / Creator tiers
+- [x] FAQ page addressing common questions (10 FAQs)
+- [ ] Implement subscription logic (Stripe integration) — future
+- [ ] Enhanced paywall analytics for creators — future
+
+**Key files created:**
+```
+app/pricing/page.tsx                  (new — server component with metadata)
+app/pricing/PricingPageClient.tsx     (new — pricing cards, features, FAQ)
+```
+
+## Phase 6: Onboarding Overhaul -- COMPLETE
+
+**Goal:** Production-ready onboarding with OAuth-first auth and vault setup.
+
+**Tasks:**
+- [x] OAuth/Google sign-in as primary entry (reordered in AuthModal: Google first, wallet second)
+- [x] Google users now go through OnboardingModal (pick username, pre-filled name/email)
+- [x] Fixed empty onComplete callback in AuthButton (was no-op, now redirects to /onboarding)
+- [x] Dedicated onboarding page/flow (`/onboarding` — multi-step with progress bar)
+- [x] Vault setup step during onboarding (optional PIN setup for encrypted local storage)
+- [x] Optional wallet connection step (for Google users who want Web3 features)
+- [x] Progressive disclosure: steps reveal features incrementally, Web3 is clearly optional
+- [x] Contribution heatmap fix: dynamic month labels with year, data covers full 365-day grid
+
+**Key files created/modified:**
+```
+app/onboarding/page.tsx                 (new — server component with metadata)
+app/onboarding/OnboardingPageClient.tsx (new — multi-step onboarding flow)
+components/AuthButton.tsx               (modified — redirect to /onboarding instead of inline modal)
+app/profile/ProfilePageClient.tsx       (modified — heatmap data + dynamic month labels)
+```
+
+## Monetization Architecture (Current)
+
+**Two independent payment systems:**
+
+| System | Currency | Status | Purpose |
+|--------|----------|--------|---------|
+| **Subscriptions** | USDC via Blockradar | **Live** (mainnet) | Monthly plans ($2.99/$7.99) for premium features |
+| **Token economy** | $STORY (ERC-20) | **Testnet** (disabled in UI) | Tips, paywalls, NFT minting |
+
+**Current state:**
+- Subscriptions process real USDC on Base via Blockradar wallet infrastructure
+- Tips, paywalls, and NFT minting buttons are visible but disabled ("Coming soon")
+- $STORY token contracts remain deployed on Base Sepolia testnet only
+- All smart contract code is preserved — no code removed, only UI disabled
+
+**Mainnet migration criteria for token economy:**
+- 100+ registered users (minimum viable community)
+- Subscription system stable for 4+ weeks
+- Then: deploy $STORY, StoryProtocol, StoryNFT contracts to Base mainnet
+- Tips/paywalls will use USDC on-chain (direct wallet-to-wallet via contract)
+- $STORY token becomes optional governance/loyalty layer
+- No liquidity pool until sufficient adoption warrants it
+
+**To re-enable token features:** Remove `disabled`, `opacity-50`, `cursor-not-allowed` classes and "Coming soon" labels from:
+- `app/story/[storyId]/StoryPageClient.tsx` — tip button, mint button, paywall unlock
+- `components/StoryCard.tsx` — tip button, paywall unlock
+- `app/profile/ProfilePageClient.tsx` — daily journal mint button
+- Reconnect `handleTip`, `handleMintStory`, `handleUnlock` handlers
+
+## Phase 2.9: Nav Dropdown Wallet Status & OAuth Fixes -- COMPLETE
+
+**Goal:** Improve wallet connection UX and fix OAuth redirect for local development.
+
+**Tasks:**
+- [x] Add wallet status to nav dropdown — shows "Wallet: 0x12...ab" (green check) when linked, or "Connect Wallet" button when not
+- [x] Fix OAuth redirect: `localhost:3000/api/auth/callback` added to Supabase allowed redirect URLs
+- [x] Fix `auth_error=missing_code` URL noise — callback now silently redirects home for implicit flow (no `?code`)
+- [x] Document implicit OAuth flow decision and PKCE migration plan
+
+**Key files modified:**
+```
+components/AuthButton.tsx               (wallet status in dropdown)
+app/api/auth/callback/route.ts          (graceful handling of missing code)
+docs/DECISIONS.md                       (implicit flow + wallet dropdown decisions)
+```
+
+**Pending (next priority):**
+- [ ] Migrate OAuth from implicit flow to PKCE (security — see memory `oauth-pkce-migration.md`)
 
 ## Future Phases (Post-MVP)
 
 - Vault → Cloud sync (process syncQueue, upload encrypted stories to Supabase storage)
 - Multi-device vault recovery via `getWrappedKeyMaterial` / `importWrappedKeyMaterial`
 - Graph-based memory (theme -> story relationships)
+- Topic-driven story discovery (History, Culture, Geopolitics, Science, Philosophy categories)
+- Storytelling progression tracking (narrative quality improvement over time)
 - Memory API for external AI agents
 - Default to private with public opt-in
 - Only canonical stories can be shared publicly

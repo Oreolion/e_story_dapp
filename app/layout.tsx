@@ -1,38 +1,45 @@
 import "../app/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Love_Light } from "next/font/google";
 import { ProvidersDynamic } from "../components/ProvidersDynamic";
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
 import { Toaster } from "react-hot-toast";
 import { GlobalBackgroundDynamic } from "../components/three/GlobalBackgroundDynamic";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
+const loveLight = Love_Light({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-brand",
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://estory.vercel.app"),
+  metadataBase: new URL("https://estories.app"),
   title: {
-    default: "eStory - AI-Powered Blockchain Journaling",
-    template: "%s | eStory",
+    default: "eStories - AI-Powered Sovereign Storytelling",
+    template: "%s | eStories",
   },
   description:
-    "Record your life stories with AI voice transcription, store them permanently on the blockchain, discover cognitive patterns, and mint your journals as NFT books.",
+    "Record and write stories about anything — personal journals, history, geopolitics, culture, creative non-fiction. AI-powered insights, blockchain provenance, and privacy by default.",
   keywords: [
-    "journaling",
+    "storytelling",
     "blockchain",
     "NFT",
     "AI",
     "speech-to-text",
     "Web3",
-    "voice journal",
-    "digital diary",
+    "voice stories",
+    "sovereign storytelling",
     "Base",
     "Ethereum",
     "story NFT",
-    "eStory",
+    "eStories",
   ],
-  authors: [{ name: "eStory Team" }],
+  authors: [{ name: "eStories Team" }],
   robots: {
     index: true,
     follow: true,
@@ -47,23 +54,26 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://estory.vercel.app",
-    siteName: "eStory",
-    title: "eStory - AI-Powered Blockchain Journaling",
+    url: "https://estories.app",
+    siteName: "eStories",
+    title: "eStories - AI-Powered Sovereign Storytelling",
     description:
-      "Record your life stories with AI voice transcription, store them permanently on the blockchain, and mint your journals as NFT books.",
+      "Record and write stories about anything — personal journals, history, geopolitics, culture, creative non-fiction. AI-powered insights and blockchain provenance.",
     images: ["/opengraph-image"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "eStory - AI-Powered Blockchain Journaling",
+    title: "eStories - AI-Powered Sovereign Storytelling",
     description:
-      "AI voice transcription, blockchain permanence, and NFT books for your personal stories.",
+      "AI voice transcription, blockchain permanence, and NFT books for your stories.",
     images: ["/opengraph-image"],
   },
   icons: {
-    icon: "/favicon.ico",
-    apple: "/favicon.ico",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   manifest: "/manifest.json",
 };
@@ -73,19 +83,19 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "Organization",
-      name: "eStory",
-      url: "https://estory.vercel.app",
-      logo: "https://estory.vercel.app/favicon.ico",
+      name: "eStories",
+      url: "https://estories.app",
+      logo: "https://estories.app/logo-mark.svg",
       description:
-        "AI-powered blockchain journaling platform that transforms personal narratives into sovereign memory infrastructure.",
+        "AI-powered sovereign storytelling platform that transforms narratives into structured, permanent, and verifiable memory infrastructure.",
     },
     {
       "@type": "WebSite",
-      name: "eStory",
-      url: "https://estory.vercel.app",
+      name: "eStories",
+      url: "https://estories.app",
       potentialAction: {
         "@type": "SearchAction",
-        target: "https://estory.vercel.app/social?q={search_term_string}",
+        target: "https://estories.app/social?q={search_term_string}",
         "query-input": "required name=search_term_string",
       },
     },
@@ -105,8 +115,13 @@ export default async function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{})})}`,
+          }}
+        />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${loveLight.variable}`}>
         <ProvidersDynamic>
           {/* 3D Background - renders behind all content */}
           <GlobalBackgroundDynamic />
@@ -127,6 +142,8 @@ export default async function RootLayout({
             />
           </div>
         </ProvidersDynamic>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

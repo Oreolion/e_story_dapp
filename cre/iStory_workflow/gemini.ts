@@ -1,19 +1,23 @@
 /**
- * CRE AI Analysis — Gemini Flash with ConfidentialHTTPClient
+ * CRE AI Analysis — Gemini Flash with HTTPClient
  *
- * Uses ConfidentialHTTPClient so the Gemini API call (which contains
- * the user's private story content) runs inside the encrypted enclave.
- * Story content never leaves the enclave unencrypted.
+ * Uses HTTPClient for simulation compatibility. ConfidentialHTTPClient
+ * requires actual DON enclave hardware and is not supported in local
+ * simulation mode (capability "confidential-http@1.0.0-alpha" not registered).
  *
- * API key is injected via Vault DON template syntax, not runtime.getSecret().
+ * TODO: Switch to ConfidentialHTTPClient for production deployment:
+ *   - Replace HTTPClient → ConfidentialHTTPClient
+ *   - Replace HTTPSendRequester → ConfidentialHTTPSendRequester
+ *   - Replace headers → multiHeaders with Vault DON templates
+ *   - Replace runtime.getSecret() → vaultDonSecrets
  */
 
 import {
-  ConfidentialHTTPClient,
+  cre,
   consensusIdenticalAggregation,
   ok,
   type Runtime,
-  type ConfidentialHTTPSendRequester,
+  type HTTPSendRequester,
 } from "@chainlink/cre-sdk";
 import type { Config } from "./main";
 
@@ -53,22 +57,23 @@ interface GeminiResult {
 }
 
 /**
- * Analyze story content using Gemini via CRE ConfidentialHTTPClient.
- * Story content stays encrypted inside the DON enclave.
+ * Analyze story content using Gemini via CRE HTTPClient.
+ * Uses runtime.getSecret() for API key (simulation-compatible).
  */
 export function askGemini(
   runtime: Runtime<Config>,
   title: string,
   content: string
 ): StoryMetrics {
-  runtime.log("[Gemini] Querying AI for story analysis (confidential)...");
+  runtime.log("[Gemini] Querying AI for story analysis...");
 
-  const confClient = new ConfidentialHTTPClient();
+  const geminiApiKey = runtime.getSecret({ id: "GEMINI_API_KEY" }).result().value;
+  const httpClient = new cre.capabilities.HTTPClient();
 
-  const result = confClient
+  const result = httpClient
     .sendRequest(
       runtime,
-      buildGeminiRequest(title, content),
+      buildGeminiRequest(title, content, geminiApiKey),
       consensusIdenticalAggregation<GeminiResult>()
     )(runtime.config)
     .result();
@@ -80,19 +85,15 @@ export function askGemini(
 }
 
 /**
- * Build the Gemini request function for ConfidentialHTTPClient.
+ * Build the Gemini request function for HTTPClient.
  * Returns a curried function: (sendRequester, config) => GeminiResult
  *
- * Key differences from HTTPClient:
- * - Uses ConfidentialHTTPSendRequester instead of HTTPSendRequester
- * - API key via Vault DON template: {{.geminiApiKey}}
- * - multiHeaders instead of headers
- * - vaultDonSecrets to reference Vault DON secrets
- * - Request body (story content) encrypted inside enclave
+ * Uses flat headers and runtime.getSecret() (simulation-compatible).
+ * For production: switch to ConfidentialHTTPSendRequester + multiHeaders + vaultDonSecrets.
  */
 const buildGeminiRequest =
-  (title: string, content: string) =>
-  (sendRequester: ConfidentialHTTPSendRequester, config: Config): GeminiResult => {
+  (title: string, content: string, apiKey: string) =>
+  (sendRequester: HTTPSendRequester, config: Config): GeminiResult => {
     const userPrompt = `Title: "${title}"
 
 Content:
@@ -117,19 +118,13 @@ ${content}
 
     const resp = sendRequester
       .sendRequest({
-        request: {
-          url: `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent`,
-          method: "POST" as const,
-          body,
-          multiHeaders: {
-            "Content-Type": { values: ["application/json"] },
-            "x-goog-api-key": { values: ["{{.geminiApiKey}}"] },
-          },
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
         },
-        vaultDonSecrets: [
-          { key: "geminiApiKey", owner: config.owner },
-        ],
-        // encryptOutput not used — we need to parse the response in-workflow
+        body,
       })
       .result();
 

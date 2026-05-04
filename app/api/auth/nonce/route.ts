@@ -16,20 +16,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Cleanup old nonces
-    cleanupExpiredNonces();
+    await cleanupExpiredNonces();
 
     const nonce = randomUUID();
     const timestamp = new Date().toISOString();
     const expiresAt = new Date(Date.now() + NONCE_EXPIRY_MS).toISOString();
 
     // Store nonce for validation
-    storeNonce(address, nonce);
+    await storeNonce(address, nonce);
 
-    const message = `Welcome to EStory
+    const message = `Welcome to EStories
 
 Sign this message to log in securely.
 
-Site: eStory
+Site: eStories
 Address: ${address}
 
 No transaction · No gas fees · Completely free

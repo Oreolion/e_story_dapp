@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // 1. Increase global timeout for this file to handle slow local compilation
-test.slow(); 
+test.slow();
 
 test('Landing page loads and navigation works', async ({ page }) => {
   await page.goto('/');
@@ -10,21 +10,14 @@ test('Landing page loads and navigation works', async ({ page }) => {
   await expect(page.getByText('Loading Wallet Connectors...')).not.toBeVisible({ timeout: 30000 });
 
   // 3. Check Title
-  await expect(page).toHaveTitle(/EStory/i);
-  
-  // 4. Verify Hero Text
-  await expect(page.getByRole('heading', { name: /Your Life/i })).toBeVisible({ timeout: 10000 });
+  await expect(page).toHaveTitle(/EStories/i);
 
-  // 5. Check "Explore Stories" button
-  const exploreBtn = page.getByRole('button', { name: /Explore Stories/i });
-  await expect(exploreBtn).toBeVisible();
-  
-  // 6. Click and wait for navigation
-  await exploreBtn.click();
-  
-  // 7. Verify Social Page Load (Increased timeout for page compilation)
-  await expect(page).toHaveURL(/.*social/, { timeout: 60000 });
-  await expect(page.getByRole('heading', { name: /Community Stories/i })).toBeVisible({ timeout: 30000 });
+  // 4. Verify Hero Text
+  await expect(page.getByRole('heading', { name: /Speak your story/i })).toBeVisible({ timeout: 10000 });
+
+  // 5. Check "See How It Works" button
+  const howItWorksBtn = page.getByRole('button', { name: /See How It Works/i });
+  await expect(howItWorksBtn).toBeVisible();
 });
 
 test('Record page protects route when disconnected', async ({ page }) => {

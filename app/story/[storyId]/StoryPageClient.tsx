@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import { useAuth } from "../../../components/AuthProvider";
 import { useEStoryToken } from "../../hooks/useIStoryToken";
 import { useStoryProtocol } from "../../hooks/useStoryProtocol";
 import { useStoryNFT } from "../../hooks/useStoryNFT";
+import { useWalletGuard } from "../../hooks/useWalletGuard";
 import { supabaseClient } from "../../utils/supabase/supabaseClient";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,13 +32,22 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { StoryDataType, CommentDataTypes, moodColors } from '../../types/index';
+import { StoryDataType, CommentDataTypes, moodColors, getStoryTypeConfig } from '../../types/index';
 import { StoryInsights } from '@/components/StoryInsights';
 import { CanonicalBadge } from '@/components/CanonicalBadge';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { VerifiedMetricsCard } from '@/components/VerifiedMetricsCard';
+import { TestnetBanner } from '@/components/TestnetBanner';
 import { useStoryMetadata } from '../../hooks/useStoryMetadata';
 import { useVerifiedMetrics } from '../../hooks/useVerifiedMetrics';
+import {
+  useStory,
+  useLikeStatus,
+  useFollowStatus,
+  useToggleLike,
+  useToggleFollow,
+  usePostComment,
+} from "@/lib/queries/hooks";
 
 import {
   Heart,
@@ -53,8 +63,13 @@ import {
   Send,
   Edit,
   KeyRound,
-  Globe, 
+  Globe,
+  PenLine,
+  BookOpen,
+  Users,
+  Eye,
 } from "lucide-react";
+import { BrandedLoader } from "@/components/ui/branded-loader";
 
 export default function StoryPage({
   params,
@@ -84,19 +99,30 @@ export default function StoryPage({
     hash: payHash,
   } = useStoryProtocol();
   const { mintBook, isPending: isMinting } = useStoryNFT();
-  //   const likeSystem = useLikeSystem();
+  const { requireWallet } = useWalletGuard();
+
+  // React Query hooks
+  const {
+    data: storyApiData,
+    isLoading: isStoryLoading,
+    isError: isStoryError,
+    error: storyError,
+  } = useStory(storyId);
+  const { data: likeStatusData } = useLikeStatus(storyId);
+  const { data: followStatusData } = useFollowStatus(storyApiData?.story?.author?.id || "");
+  const likeMutation = useToggleLike();
+  const followMutation = useToggleFollow();
+  const commentMutation = usePostComment();
 
   // State
   const [story, setStory] = useState<StoryDataType | null>(null);
   const [comments, setComments] = useState<CommentDataTypes[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [parentStory, setParentStory] = useState<{ id: string; title: string } | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
 
   // Actions State
-  const [isLiking, setIsLiking] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isTipping, setIsTipping] = useState(false);
-  const [isPostingComment, setIsPostingComment] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isFollowingAuthor, setIsFollowingAuthor] = useState(false);
   const [authorFollowers, setAuthorFollowers] = useState(0);
@@ -109,154 +135,113 @@ export default function StoryPage({
   const [showTipDialog, setShowTipDialog] = useState(false);
   const [showPaywallDialog, setShowPaywallDialog] = useState(false);
 
-  // --- 1. Fetch Data ---
+  const isLoading = isStoryLoading;
+  const isAuthError =
+    isStoryError &&
+    (storyError as any)?.status === 401;
+
+  // Sync story data from React Query into local state
   useEffect(() => {
-    // Stop if requirements aren't met
-    if (!supabase || !storyId) {
-      // Only stop loading if storyId is definitely missing/undefined
-      if (storyId === undefined) return;
-      setIsLoading(false);
+    if (!storyApiData?.story) {
+      setStory(null);
+      setComments([]);
+      setParentStory(null);
       return;
     }
 
-    const fetchStoryAndComments = async () => {
-      try {
-        setIsLoading(true);
+    const s = storyApiData.story;
+    const authorData = s.author;
 
-        // A. Fetch Story
-        const { data: storyData, error: storyError } = await supabase
-          .from("stories")
-          .select(
-            `
-            id, numeric_id, title, content, teaser, created_at, story_date, is_public, likes, shares, has_audio, audio_url, mood, tags, paywall_amount,
-            author:users!stories_author_wallet_fkey (
-              id, name, username, avatar, wallet_address, followers_count, badges
-            )
-          `
-          )
-          .eq("id", storyId)
-          .maybeSingle();
+    setStory({
+      id: s.id as any,
+      numeric_id: s.numeric_id as any,
+      title: s.title,
+      content: s.content,
+      teaser: s.teaser,
+      created_at: s.created_at,
+      story_date: s.story_date || s.created_at,
+      is_public: s.is_public || false,
+      timestamp: s.created_at,
+      likes: s.likes || 0,
+      comments: s.comments_count || 0,
+      shares: s.shares || 0,
+      views: s.view_count || 0,
+      hasAudio: s.has_audio || false,
+      audio_url: s.audio_url ?? undefined,
+      isLiked: likeStatusData?.liked ?? false,
+      mood: s.mood || "neutral",
+      tags: s.tags || [],
+      paywallAmount: s.paywall_amount || 0,
+      story_type: (s.story_type as any) || undefined,
+      author: {
+        id: authorData?.id,
+        name: authorData?.name || null,
+        username: authorData?.username || null,
+        avatar: authorData?.avatar || null,
+        wallet_address: authorData?.wallet_address || null,
+        followers: authorData?.followers_count || 0,
+        badges: authorData?.badges || [],
+        isFollowing: followStatusData?.following ?? false,
+      },
+      author_wallet: {
+        id: authorData?.id,
+        name: authorData?.name || null,
+        username: authorData?.username || null,
+        avatar: authorData?.avatar || null,
+        wallet_address: authorData?.wallet_address || null,
+        followers: authorData?.followers_count || 0,
+        badges: authorData?.badges || [],
+        isFollowing: followStatusData?.following ?? false,
+      },
+    });
 
-        if (storyError) throw storyError;
+    const formattedComments = (storyApiData.comments || []).map((c: any) => {
+      const commentAuthor = Array.isArray(c.author) ? c.author[0] : c.author;
+      return {
+        id: c.id,
+        content: c.content,
+        created_at: c.created_at,
+        author: {
+          name: commentAuthor?.name || "Anonymous",
+          avatar: commentAuthor?.avatar,
+          wallet_address: commentAuthor?.wallet_address,
+        },
+      };
+    });
 
-        if (storyData && storyData.author) {
-          // Handle author data - could be array or single object from Supabase
-          const authorData = Array.isArray(storyData.author)
-            ? storyData.author[0]
-            : storyData.author;
+    setComments(formattedComments);
+    setParentStory(s.parentStory || null);
+  }, [storyApiData, likeStatusData, followStatusData]);
 
-          setStory({
-            id: storyData.id,
-            numeric_id: storyData.numeric_id,
-            title: storyData.title,
-            content: storyData.content,
-            teaser: storyData.teaser,
-            created_at: storyData.created_at,
-            story_date: storyData.story_date || storyData.created_at,
-            is_public: storyData.is_public || false,
-            timestamp: storyData.created_at,
-            likes: storyData.likes || 0,
-            comments: 0,
-            shares: storyData.shares || 0,
-            hasAudio: storyData.has_audio || false,
-            audio_url: storyData.audio_url,
-            isLiked: false,
-            mood: storyData.mood || "neutral",
-            tags: storyData.tags || [],
-            paywallAmount: storyData.paywall_amount || 0,
-            author: {
-              id: authorData?.id,
-              name: authorData?.name || null,
-              username: authorData?.username || null,
-              avatar: authorData?.avatar || null,
-              wallet_address: authorData?.wallet_address || null,
-              followers: authorData?.followers_count || 0,
-              badges: authorData?.badges || [],
-              isFollowing: false,
-            },
-            author_wallet: {
-              id: authorData?.id,
-              name: authorData?.name || null,
-              username: authorData?.username || null,
-              avatar: authorData?.avatar || null,
-              wallet_address: authorData?.wallet_address || null,
-              followers: authorData?.followers_count || 0,
-              badges: authorData?.badges || [],
-              isFollowing: false,
-            },
-          });
-
-          // Check if unlocked in DB
-          if (authInfo?.id && storyData.paywall_amount > 0) {
-            const { data: unlockData } = await supabase
-              .from("unlocked_content")
-              .select("id")
-              .eq("user_id", authInfo.id)
-              .eq("story_id", storyId)
-              .maybeSingle();
-
-            if (unlockData) setIsUnlocked(true);
-          }
-        } else {
-          setStory(null);
-        }
-
-        // B. Fetch Comments
-        const { data: commentsData } = await supabase
-          .from("comments")
-          .select(
-            `
-            id, content, created_at,
-            author:users!comments_author_id_fkey (name, avatar, wallet_address)
-          `
-          )
-          .eq("story_id", storyId)
-          .order("created_at", { ascending: false });
-
-        const formattedComments = (commentsData || []).map((c: any) => ({
-          id: c.id,
-          content: c.content,
-          created_at: c.created_at,
-          author: {
-            name: c.author?.name || "Anonymous",
-            avatar: c.author?.avatar,
-            wallet_address: c.author?.wallet_address,
-          },
-        }));
-
-        setComments(formattedComments);
-      } catch (error) {
-        console.error("Error fetching details:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStoryAndComments();
-  }, [supabase, storyId, authInfo?.id]);
-
-  // --- 1b. Fetch follow status once story and user are available ---
+  // Sync follow status + followers when story changes
   useEffect(() => {
-    if (!story?.author?.wallet_address || !address) return;
-    const authorWallet = story.author.wallet_address.toLowerCase();
-    if (address.toLowerCase() === authorWallet) return; // Can't follow yourself
+    if (story?.author) {
+      setIsFollowingAuthor(story.author.isFollowing);
+      setAuthorFollowers(story.author.followers || 0);
+    }
+  }, [story?.author?.isFollowing, story?.author?.followers]);
 
-    const checkFollow = async () => {
-      try {
-        const res = await fetch(
-          `/api/social/follow?follower_wallet=${address.toLowerCase()}&followed_wallets=${authorWallet}`
-        );
-        if (res.ok) {
-          const { following } = await res.json();
-          setIsFollowingAuthor(following[authorWallet] || false);
-        }
-      } catch (err) {
-        console.error("[STORY PAGE] Follow status check error:", err);
-      }
+  // Sync like status when query updates
+  useEffect(() => {
+    setIsLiked(likeStatusData?.liked ?? false);
+  }, [likeStatusData]);
+
+  // Check unlock status via Supabase
+  useEffect(() => {
+    if (!authInfo?.id || !storyId || !supabase) return;
+    if (!story || story.paywallAmount <= 0) return;
+
+    const checkUnlock = async () => {
+      const { data: unlockData } = await supabase
+        .from("unlocked_content")
+        .select("id")
+        .eq("user_id", authInfo.id)
+        .eq("story_id", storyId)
+        .maybeSingle();
+      if (unlockData) setIsUnlocked(true);
     };
-    checkFollow();
-    setAuthorFollowers(story.author.followers || 0);
-  }, [story?.author?.wallet_address, address]);
+    checkUnlock();
+  }, [authInfo?.id, storyId, story?.paywallAmount]);
 
   // --- 2. Payment Verification Listener ---
   useEffect(() => {
@@ -322,34 +307,38 @@ export default function StoryPage({
   };
 
   const handleLike = async () => {
-    if (!isConnected) return toast.error("Please connect your wallet");
+    if (!authInfo) return toast.error("Please sign in to like stories");
     if (!story) return;
 
+    const prevLiked = isLiked;
+    const prevLikes = story.likes;
+
+    // Optimistic UI
+    setIsLiked(!prevLiked);
+    setStory((prev) =>
+      prev
+        ? { ...prev, likes: prevLiked ? prev.likes - 1 : prev.likes + 1 }
+        : null
+    );
+
     try {
-      setIsLiking(true);
-      //   const numericIdBigInt = BigInt(story.numeric_id);
-      //   const likerAddress = address as `0x${string}`;
-
-      //   await likeSystem.write.likeStory(numericIdBigInt, likerAddress);
-
-      setIsLiked(!isLiked);
+      const { data } = await likeMutation.mutateAsync(storyId);
+      setIsLiked(data.isLiked);
       setStory((prev) =>
-        prev
-          ? { ...prev, likes: isLiked ? prev.likes - 1 : prev.likes + 1 }
-          : null
+        prev ? { ...prev, likes: data.totalLikes } : null
       );
-      toast.success(isLiked ? "Story unliked" : "Story liked!");
     } catch (error: any) {
       console.error("Like error:", error);
+      // Revert on failure
+      setIsLiked(prevLiked);
+      setStory((prev) => (prev ? { ...prev, likes: prevLikes } : null));
       toast.error("Failed to like story");
-    } finally {
-      setIsLiking(false);
     }
   };
 
   const handleTip = async () => {
-    if (!isConnected) return toast.error("Please connect your wallet");
-    if (!story) return; // Removed eStoryToken check as it was not defined in original
+    if (!requireWallet("tip authors")) return;
+    if (!story) return;
 
     try {
       setIsTipping(true);
@@ -368,32 +357,15 @@ export default function StoryPage({
   const handlePostComment = async () => {
     if (!newComment.trim()) return;
     if (!authInfo?.id) return toast.error("Please sign in to comment");
-    if (!supabase) return;
 
-    setIsPostingComment(true);
     try {
-      const { data, error } = await supabase
-        .from("comments")
-        .insert({
-          story_id: storyId,
-          author_id: authInfo.id,
-          author_wallet: authInfo.wallet_address,
-          content: newComment,
-        })
-        .select(
-          `
-            id, content, created_at,
-            author:users!comments_author_id_fkey (name, avatar, wallet_address)
-        `
-        )
-        .single();
+      const payload = await commentMutation.mutateAsync({
+        story_id: storyId,
+        content: newComment,
+      });
 
-      if (error) throw error;
-
-      // Handle author data - could be array or single object from Supabase
-      const authorData = Array.isArray(data.author)
-        ? data.author[0]
-        : data.author;
+      const data = payload?.data;
+      const authorData = Array.isArray(data?.author) ? data.author[0] : data?.author;
 
       const newCommentObj: CommentDataTypes = {
         id: data.id,
@@ -412,14 +384,12 @@ export default function StoryPage({
     } catch (error) {
       console.error("Comment error:", error);
       toast.error("Failed to post comment");
-    } finally {
-      setIsPostingComment(false);
     }
   };
 
   const handleFollow = async () => {
-    if (!isConnected || !address) return toast.error("Connect wallet to follow");
-    if (!story?.author?.wallet_address) return;
+    if (!authInfo) return toast.error("Please sign in to follow writers.");
+    if (!story?.author?.id) return;
 
     const prevState = isFollowingAuthor;
     const prevCount = authorFollowers;
@@ -428,25 +398,18 @@ export default function StoryPage({
     setAuthorFollowers(prevState ? Math.max(0, prevCount - 1) : prevCount + 1);
 
     try {
-      const followToken = await getAccessToken();
-      const res = await fetch("/api/social/follow", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(followToken ? { Authorization: `Bearer ${followToken}` } : {}),
-        },
-        body: JSON.stringify({
-          follower_wallet: address,
-          followed_wallet: story.author.wallet_address,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Follow action failed");
-
-      const { isFollowing, followers_count } = await res.json();
+      const { isFollowing, followers_count } = await followMutation.mutateAsync(
+        story.author.id
+      );
       setIsFollowingAuthor(isFollowing);
       setAuthorFollowers(followers_count);
-      toast.success(isFollowing ? "Followed!" : "Unfollowed");
+      const authorName =
+        story.author?.name || story.author?.username || "this writer";
+      toast.success(
+        isFollowing
+          ? `You're now following ${authorName}. Their new stories will appear in your feed.`
+          : `You unfollowed ${authorName}.`
+      );
     } catch (error) {
       console.error("Follow error:", error);
       setIsFollowingAuthor(prevState);
@@ -456,7 +419,7 @@ export default function StoryPage({
   };
 
   const handleMintStory = async () => {
-    if (!isConnected) return toast.error("Connect wallet");
+    if (!requireWallet("mint NFTs")) return;
     if (!story?.numeric_id) return;
     if (!supabase) return toast.error("Database not available");
 
@@ -475,8 +438,10 @@ export default function StoryPage({
 
   // --- Helpers ---
   const isAuthor =
-    authInfo?.wallet_address?.toLowerCase() ===
-    story?.author.wallet_address?.toLowerCase();
+    (authInfo?.id && story?.author?.id && authInfo.id === story.author.id) ||
+    (authInfo?.wallet_address && story?.author?.wallet_address &&
+     authInfo.wallet_address.toLowerCase() === story.author.wallet_address.toLowerCase()) ||
+    false;
   const isPaywalled =
     (story?.paywallAmount || 0) > 0 && !isUnlocked && !isAuthor;
   const gradientClass = story
@@ -525,11 +490,25 @@ export default function StoryPage({
   // --- Render ---
 
   if (isLoading) {
+    return <BrandedLoader fullScreen message="Loading story..." />;
+  }
+
+  if (isAuthError) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto text-purple-600" />
-          <p className="text-gray-600 dark:text-gray-400">Loading story...</p>
+      <div className="min-h-[60vh] flex items-center justify-center px-4">
+        <div className="text-center space-y-6 max-w-sm">
+          <div className="w-16 h-16 mx-auto rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+            <Lock className="w-8 h-8 text-red-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-foreground">Session Expired</h2>
+            <p className="text-sm text-muted-foreground">
+              Your session has expired. Please sign in again to view this story.
+            </p>
+          </div>
+          <Button onClick={() => router.push("/")} className="bg-indigo-600">
+            Sign In
+          </Button>
         </div>
       </div>
     );
@@ -537,23 +516,39 @@ export default function StoryPage({
 
   if (!story) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Story Not Found</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <div className="min-h-[60vh] flex items-center justify-center px-4">
+        <div className="text-center space-y-6 max-w-sm">
+          <div className="w-16 h-16 mx-auto rounded-full bg-[hsl(var(--memory-500)/0.1)] flex items-center justify-center">
+            <BookOpen className="w-8 h-8 text-[hsl(var(--memory-400))]" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-foreground">Story not found</h2>
+            <p className="text-sm text-muted-foreground">
+              This story may have been removed, set to private, or the link may be incorrect.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link href="/social">
-              <Button className="w-full">Back to Social Feed</Button>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <Users className="w-4 h-4 mr-2" />
+                Community
+              </Button>
             </Link>
-          </CardContent>
-        </Card>
+            <Link href="/library">
+              <Button className="w-full sm:w-auto">
+                <BookOpen className="w-4 h-4 mr-2" />
+                My Stories
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <TestnetBanner />
       {/* Top Navigation */}
       <div className="flex justify-between items-center">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -617,9 +612,23 @@ export default function StoryPage({
                       txHash={verifiedMetrics?.on_chain_tx_hash}
                       qualityTier={verifiedProof?.qualityTier}
                     />
+                    {story.story_type && story.story_type !== "personal_journal" && (
+                      <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
+                        {getStoryTypeConfig(story.story_type).shortLabel}
+                      </Badge>
+                    )}
                   </div>
+                  {parentStory && (
+                    <Link
+                      href={`/story/${parentStory.id}`}
+                      className="flex items-center gap-1.5 text-sm text-white/80 hover:text-white transition-colors mt-1"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Continues from: <span className="underline underline-offset-2">{parentStory.title}</span></span>
+                    </Link>
+                  )}
                 </div>
-                
+
                 {/* UPDATED: Date Display using story_date */}
                 <div className="text-right text-white/90 text-sm font-medium hidden md:block">
                   <div className="flex items-center justify-end gap-2" title="Memory Date">
@@ -675,6 +684,9 @@ export default function StoryPage({
                   <span className="flex items-center">
                     <Share2 className="w-4 h-4 mr-1" /> {story.shares}
                   </span>
+                  <span className="flex items-center">
+                    <Eye className="w-4 h-4 mr-1" /> {story.views}
+                  </span>
                 </div>
                 {!isAuthor && (
                   <Button
@@ -699,14 +711,15 @@ export default function StoryPage({
                   <p className="text-gray-500">
                     Support the author to read the full story.
                   </p>
-                  <div className="flex justify-center pt-4">
+                  <div className="flex flex-col items-center gap-2 pt-4">
                     <Button
                       size="lg"
-                      className="bg-linear-to-r from-purple-600 to-indigo-600 shadow-lg hover:scale-105 transition-transform"
-                      onClick={() => setShowPaywallDialog(true)}
+                      disabled
+                      className="bg-linear-to-r from-purple-600 to-indigo-600 shadow-lg opacity-50 cursor-not-allowed"
                     >
-                      Unlock for {story.paywallAmount} $ESTORY
+                      Unlock Story
                     </Button>
+                    <p className="text-xs text-muted-foreground">Paywall unlocking coming soon with USDC on mainnet</p>
                   </div>
                   <div className="absolute inset-0 -z-10 opacity-10 blur-sm p-8 select-none overflow-hidden">
                     {story.teaser || "This content is hidden behind a paywall..."}
@@ -722,16 +735,38 @@ export default function StoryPage({
               </div>
             ) : (
               <div className="space-y-6">
-                {story.hasAudio && story.audio_url && (
+                {story.hasAudio && story.audio_url && isAuthor && (
                   <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white">
+                    <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white shrink-0">
                       <Volume2 className="w-5 h-5" />
                     </div>
                     <audio
                       controls
                       src={story.audio_url}
                       className="w-full h-10"
+                      onError={(e) => {
+                        // Hide the broken audio element and show fallback text
+                        const target = e.currentTarget;
+                        target.style.display = "none";
+                        const fallback = target.nextElementSibling;
+                        if (fallback) (fallback as HTMLElement).style.display = "block";
+                      }}
                     />
+                    <span className="text-sm text-muted-foreground hidden">
+                      Voice recording unavailable. The audio file may have expired — try refreshing the page.
+                    </span>
+                  </div>
+                )}
+                {story.hasAudio && !story.audio_url && isAuthor && (
+                  <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex items-center gap-3 text-sm text-muted-foreground">
+                    <Volume2 className="w-4 h-4 shrink-0" />
+                    <span>This story has a voice recording but the audio file could not be loaded.</span>
+                  </div>
+                )}
+                {story.hasAudio && !isAuthor && (
+                  <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex items-center gap-3 text-sm text-muted-foreground">
+                    <Volume2 className="w-4 h-4 shrink-0" />
+                    <span>This story was voice-recorded. Audio is private to the author.</span>
                   </div>
                 )}
                 <article className="prose dark:prose-invert max-w-none text-lg leading-8 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
@@ -755,7 +790,7 @@ export default function StoryPage({
 
             {/* Actions */}
             <div className="flex justify-between items-center">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant={isLiked ? "default" : "outline"}
                   className={
@@ -770,18 +805,31 @@ export default function StoryPage({
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setShowTipDialog(true)}
+                  disabled
+                  title="Tipping with USDC coming soon"
+                  className="opacity-50 cursor-not-allowed"
                 >
                   <Sparkles className="w-4 h-4 mr-2 text-yellow-500" /> Tip
+                  <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">Soon</span>
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={handleMintStory}
-                  disabled={isMinting}
+                  disabled
+                  title="NFT minting coming to mainnet"
+                  className="opacity-50 cursor-not-allowed"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />{" "}
-                  {isMinting ? "Minting..." : "Mint NFT"}
+                  Mint NFT
+                  <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">Soon</span>
                 </Button>
+                {isAuthor && (
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/record?parentId=${storyId}`)}
+                  >
+                    <PenLine className="w-4 h-4 mr-2" /> Continue Story
+                  </Button>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -836,10 +884,10 @@ export default function StoryPage({
                 <Button
                   size="sm"
                   onClick={handlePostComment}
-                  disabled={isPostingComment || !newComment.trim()}
+                  disabled={commentMutation.isPending || !newComment.trim()}
                   className="bg-indigo-600"
                 >
-                  {isPostingComment ? (
+                  {commentMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Send className="w-4 h-4 mr-2" />
@@ -875,51 +923,36 @@ export default function StoryPage({
         </div>
       </div>
 
-      {/* Paywall Dialog */}
+      {/* Paywall Dialog — disabled until mainnet */}
       <Dialog open={showPaywallDialog} onOpenChange={setShowPaywallDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Unlock Premium Story</DialogTitle>
             <DialogDescription>
-              Confirm payment to access the full content.
+              Paywall unlocking is coming soon.
             </DialogDescription>
           </DialogHeader>
           <div className="py-6 text-center space-y-2">
-            <Lock className="w-12 h-12 mx-auto text-emerald-500 mb-4" />
-            <p>Price to Unlock</p>
-            <p className="text-3xl font-bold text-emerald-600">
-              {story?.paywallAmount} $ESTORY
+            <Lock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              Paywall payments with USDC will be available when we launch on mainnet. Stay tuned!
             </p>
           </div>
-          <DialogFooter>
-            <Button
-              onClick={handleUnlock}
-              disabled={btnState.disabled}
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              {btnState.icon} {btnState.text}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Tip Dialog */}
+      {/* Tip Dialog — disabled until mainnet */}
       <Dialog open={showTipDialog} onOpenChange={setShowTipDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Send a Tip</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <p>How much do you want to tip?</p>
-            <Input
-              type="number"
-              value={tipAmount}
-              onChange={(e) => setTipAmount(Number(e.target.value))}
-            />
+          <div className="py-6 text-center space-y-2">
+            <Sparkles className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              Tipping with USDC is coming soon. You&apos;ll be able to support your favorite storytellers directly.
+            </p>
           </div>
-          <DialogFooter>
-            <Button onClick={handleTip}>Send {tipAmount} $ESTORY</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

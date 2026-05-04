@@ -11,15 +11,24 @@ async function getStoryData(storyId: string) {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("stories")
-      .select(
-        `title, content, teaser, tags, mood, is_public, story_date, created_at,
-        author:users!stories_author_wallet_fkey (name)`
-      )
+      .select(`title, content, teaser, tags, mood, is_public, story_date, created_at, author_id`)
       .eq("id", storyId)
       .maybeSingle();
 
     if (error || !data) return null;
-    return data;
+
+    // Fetch author name separately (works for both wallet and OAuth users)
+    let authorName: string | null = null;
+    if (data.author_id) {
+      const { data: authorRow } = await supabase
+        .from("users")
+        .select("name")
+        .eq("id", data.author_id)
+        .single();
+      authorName = authorRow?.name || null;
+    }
+
+    return { ...data, author: authorName ? { name: authorName } : null };
   } catch {
     return null;
   }
@@ -29,13 +38,13 @@ export async function generateMetadata({
   params,
 }: StoryPageProps): Promise<Metadata> {
   const { storyId } = await params;
-  const baseUrl = "https://estory.vercel.app";
+  const baseUrl = "https://estories.app";
   const story = await getStoryData(storyId);
 
   if (!story) {
     return {
       title: "Story Not Found",
-      description: "This story could not be found on eStory.",
+      description: "This story could not be found on eStories.",
     };
   }
 
@@ -65,7 +74,7 @@ export async function generateMetadata({
       title: story.title || "Untitled Story",
       description,
       url: `${baseUrl}/story/${storyId}`,
-      siteName: "eStory",
+      siteName: "eStories",
       publishedTime: story.story_date || story.created_at,
       authors: [authorName],
       tags,
@@ -85,7 +94,7 @@ export async function generateMetadata({
 
 export default async function Page({ params }: StoryPageProps) {
   const { storyId } = await params;
-  const baseUrl = "https://estory.vercel.app";
+  const baseUrl = "https://estories.app";
   const story = await getStoryData(storyId);
 
   // Build JSON-LD for public stories
@@ -110,8 +119,8 @@ export default async function Page({ params }: StoryPageProps) {
       },
       publisher: {
         "@type": "Organization",
-        name: "eStory",
-        url: "https://estory.vercel.app",
+        name: "eStories",
+        url: "https://estories.app",
       },
       url: `${baseUrl}/story/${storyId}`,
       keywords: (story.tags || []).join(", "),

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/app/utils/supabase/supabaseServer";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 
 export async function GET(
   req: NextRequest,
@@ -47,10 +49,9 @@ export async function GET(
     });
 
   } catch (error: unknown) {
-    console.error("Metadata fetch error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    console.error("[METADATA] Fetch error:", error);
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -82,23 +83,17 @@ export async function PATCH(
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const authResult = await validateAuthOrReject(req);
+    if (isAuthError(authResult)) return authResult;
+    const userId = await resolveUserId(authResult);
 
-    // Get the current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const supabase = createSupabaseAdminClient();
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    // Get the user's record to find their ID
+    // Get the user's wallet_address for ownership check
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("id, wallet_address")
-      .eq("auth_id", user.id)
+      .eq("id", userId)
       .maybeSingle();
 
     if (userError || !userData) {
@@ -218,10 +213,9 @@ export async function PATCH(
     });
 
   } catch (error: unknown) {
-    console.error("Metadata update error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    console.error("[METADATA] Update error:", error);
     return NextResponse.json(
-      { error: errorMessage },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

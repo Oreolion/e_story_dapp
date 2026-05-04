@@ -1,16 +1,63 @@
 {
-  "name": "eStory - AI-Powered Blockchain Journaling",
-  "short_name": "eStory",
-  "description": "Record your life stories with AI transcription, store them on blockchain, and discover patterns in your narrative.",
+  "name": "eStories - AI-Powered Sovereign Storytelling",
+  "short_name": "eStories",
+  "description": "Record and write stories about anything you're passionate about — personal journals, history, geopolitics, culture, creative non-fiction. AI-powered insights, blockchain provenance, and privacy by default.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0a0a0a",
-  "theme_color": "#1a56db",
+  "theme_color": "#d4a04a",
+  "categories": ["lifestyle", "productivity", "social"],
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "any",
-      "type": "image/x-icon"
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Record Story",
+      "short_name": "Record",
+      "url": "/record",
+      "description": "Start recording a new story"
+    },
+    {
+      "name": "My Library",
+      "short_name": "Library",
+      "url": "/library",
+      "description": "View your story archive"
+    },
+    {
+      "name": "Social Feed",
+      "short_name": "Social",
+      "url": "/social",
+      "description": "Explore community stories"
     }
   ]
 }

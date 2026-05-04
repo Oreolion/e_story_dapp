@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, Check, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNotifications } from "@/app/hooks/useNotifications";
@@ -16,6 +17,7 @@ export function NotificationDropdown() {
     deleteNotification,
     loading,
   } = useNotifications();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -102,7 +104,7 @@ export function NotificationDropdown() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="absolute right-0 mt-2 w-96 max-h-96 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
+            className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-h-[80vh] sm:max-h-96 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
@@ -123,7 +125,7 @@ export function NotificationDropdown() {
             </div>
 
             {/* Notifications List */}
-            <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-96 overflow-y-auto">
+            <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] sm:max-h-80 overflow-y-auto">
               {loading && notifications.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-gray-500 dark:text-gray-400">
@@ -143,6 +145,16 @@ export function NotificationDropdown() {
                     key={notification.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
+                    onClick={() => {
+                      if (!notification.read) markAsRead(notification.id);
+                      const target =
+                        notification.link ||
+                        (notification.story_id ? `/story/${notification.story_id}` : null);
+                      if (target) {
+                        setIsOpen(false);
+                        router.push(target);
+                      }
+                    }}
                     className={cn(
                       "px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
                       !notification.read && "bg-purple-50 dark:bg-purple-900/20"
@@ -168,7 +180,7 @@ export function NotificationDropdown() {
                             <div className="w-2 h-2 bg-purple-600 rounded-full flex-shrink-0 ml-2 mt-1" />
                           )}
                         </div>
-                        <p className="text-gray-600 dark:text-gray-400 text-xs mt-1">
+                        <p className="text-gray-600 dark:text-gray-400 text-xs mt-1 line-clamp-2">
                           {notification.message}
                         </p>
                         <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
@@ -225,6 +237,10 @@ export function NotificationDropdown() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => {
+                    setIsOpen(false);
+                    router.push("/notifications");
+                  }}
                   className="text-xs text-gray-600 dark:text-gray-400 hover:text-purple-600"
                 >
                   View all notifications

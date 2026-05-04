@@ -35,7 +35,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-center">Connect to eStory</DialogTitle>
+          <DialogTitle className="text-center">Connect to eStories</DialogTitle>
           <DialogDescription className="text-center">
             Choose how to get started
           </DialogDescription>
@@ -45,13 +45,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <Button
             variant="outline"
             className="w-full h-14 justify-start gap-3 text-left"
-            onClick={handleWalletConnect}
+            onClick={handleGoogleSignIn}
           >
-            <Wallet className="w-5 h-5 shrink-0" />
+            <Chrome className="w-5 h-5 shrink-0" />
             <div>
-              <div className="font-medium">Connect Wallet</div>
+              <div className="font-medium">Continue with Google</div>
               <div className="text-xs text-muted-foreground">
-                MetaMask, WalletConnect
+                Quick sign in — recommended
               </div>
             </div>
           </Button>
@@ -70,13 +70,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           <Button
             variant="outline"
             className="w-full h-14 justify-start gap-3 text-left"
-            onClick={handleGoogleSignIn}
+            onClick={handleWalletConnect}
           >
-            <Chrome className="w-5 h-5 shrink-0" />
+            <Wallet className="w-5 h-5 shrink-0" />
             <div>
-              <div className="font-medium">Continue with Google</div>
+              <div className="font-medium">Connect Wallet</div>
               <div className="text-xs text-muted-foreground">
-                Quick sign in
+                MetaMask, WalletConnect
               </div>
             </div>
           </Button>

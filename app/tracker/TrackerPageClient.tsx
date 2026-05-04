@@ -34,7 +34,7 @@ const MOODS = [
 ];
 
 export default function TasksPage() {
-  const { profile: authInfo, getAccessToken } = useAuth();
+  const { profile: authInfo, getAccessToken, isLoading: isAuthLoading } = useAuth();
   const supabase = useBrowserSupabase();
 
   // Set background mode for this page
@@ -64,11 +64,16 @@ export default function TasksPage() {
 
   // --- Fetch Data via API (bypasses RLS issues for wallet-auth users) ---
   useEffect(() => {
-    if (!authInfo?.id || !supabase) return;
+    if (isAuthLoading || !authInfo?.id || !supabase) return;
 
     const loadData = async () => {
       try {
-        const headers = await getAuthHeaders();
+        const token = await getAccessToken();
+        if (!token) return;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
         const res = await fetch(`/api/habits?user_id=${authInfo.id}&date=${todayStr}`, { headers });
         if (!res.ok) {
           console.error("Failed to load tracker data:", res.status);
@@ -91,7 +96,7 @@ export default function TasksPage() {
     };
 
     loadData();
-  }, [authInfo?.id, todayStr, getAuthHeaders, supabase]);
+  }, [authInfo?.id, todayStr, getAccessToken, isAuthLoading, supabase]);
 
   // --- Autosave Helper (via API to bypass RLS) ---
   const saveLogState = async (updates: any) => {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useAccount } from "wagmi";
 import { toast } from "react-hot-toast";
+import { useAuth } from "../../components/AuthProvider";
 
 
 // ============================================
@@ -57,7 +57,7 @@ interface UseNotificationsReturn {
 // ============================================
 
 export function useNotifications(): UseNotificationsReturn {
-  const { address, isConnected } = useAccount();
+  const { getAccessToken, profile, isLoading: isAuthLoading } = useAuth();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -70,26 +70,16 @@ export function useNotifications(): UseNotificationsReturn {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
-   * Get auth token from localStorage
-   */
-  const getAuthToken = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("supabase-auth-token");
-  }, []);
-
-  /**
    * Fetch notifications from API
    */
   const fetchNotifications = useCallback(
     async (params: FetchNotificationsParams = {}) => {
-      if (!isConnected) {
-        setError("Not connected");
+      if (isAuthLoading || !profile?.id) {
         return;
       }
 
-      const token = getAuthToken();
+      const token = await getAccessToken();
       if (!token) {
-        setError("No auth token found");
         return;
       }
 
@@ -136,16 +126,16 @@ export function useNotifications(): UseNotificationsReturn {
         setLoading(false);
       }
     },
-    [isConnected, getAuthToken, notifications]
+    [isAuthLoading, profile?.id, getAccessToken, notifications]
   );
 
   /**
    * Fetch unread notification count
    */
   const fetchUnreadCount = useCallback(async () => {
-    if (!isConnected) return;
+    if (isAuthLoading || !profile?.id) return;
 
-    const token = getAuthToken();
+    const token = await getAccessToken();
     if (!token) return;
 
     try {
@@ -166,7 +156,7 @@ export function useNotifications(): UseNotificationsReturn {
     } catch (err) {
       console.error("Error fetching unread count:", err);
     }
-  }, [isConnected, getAuthToken]);
+  }, [isAuthLoading, profile?.id, getAccessToken]);
 
   /**
    * Create a new notification
@@ -175,7 +165,7 @@ export function useNotifications(): UseNotificationsReturn {
     async (
       payload: Omit<Notification, "id" | "user_id" | "read" | "created_at">
     ) => {
-      const token = getAuthToken();
+      const token = await getAccessToken();
       if (!token) {
         setError("No auth token found");
         return;
@@ -211,7 +201,7 @@ export function useNotifications(): UseNotificationsReturn {
         toast.error(message);
       }
     },
-    [getAuthToken, notifications]
+    [getAccessToken, notifications]
   );
 
   /**
@@ -219,7 +209,7 @@ export function useNotifications(): UseNotificationsReturn {
    */
   const markAsRead = useCallback(
     async (notificationId: string) => {
-      const token = getAuthToken();
+      const token = await getAccessToken();
       if (!token) {
         setError("No auth token found");
         return;
@@ -257,14 +247,14 @@ export function useNotifications(): UseNotificationsReturn {
         console.error("Error marking notification as read:", err);
       }
     },
-    [getAuthToken, notifications, unreadCount]
+    [getAccessToken, notifications, unreadCount]
   );
 
   /**
    * Mark all notifications as read
    */
   const markAllAsRead = useCallback(async () => {
-    const token = getAuthToken();
+    const token = await getAccessToken();
     if (!token) {
       setError("No auth token found");
       return;
@@ -298,14 +288,14 @@ export function useNotifications(): UseNotificationsReturn {
       setError(message);
       console.error("Error marking all as read:", err);
     }
-  }, [getAuthToken, notifications]);
+  }, [getAccessToken, notifications]);
 
   /**
    * Delete a notification
    */
   const deleteNotification = useCallback(
     async (notificationId: string) => {
-      const token = getAuthToken();
+      const token = await getAccessToken();
       if (!token) {
         setError("No auth token found");
         return;
@@ -341,14 +331,14 @@ export function useNotifications(): UseNotificationsReturn {
         console.error("Error deleting notification:", err);
       }
     },
-    [getAuthToken, notifications]
+    [getAccessToken, notifications]
   );
 
   /**
    * Delete all notifications
    */
   const deleteAllNotifications = useCallback(async () => {
-    const token = getAuthToken();
+    const token = await getAccessToken();
     if (!token) {
       setError("No auth token found");
       return;
@@ -384,27 +374,17 @@ export function useNotifications(): UseNotificationsReturn {
       setError(message);
       console.error("Error deleting all notifications:", err);
     }
-  }, [getAuthToken]);
+  }, [getAccessToken]);
 
   /**
    * Subscribe to real-time notifications (polling)
    */
   const subscribe = useCallback(() => {
-    if (!isConnected) return;
+    if (isAuthLoading || !profile?.id) return;
 
-    // Initial fetch
     fetchUnreadCount();
     fetchNotifications();
-
-    // Set up polling interval (check every 10 seconds)
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
-
-    pollingIntervalRef.current = setInterval(() => {
-      fetchUnreadCount();
-    }, 10000);
-  }, [isConnected, fetchNotifications, fetchUnreadCount]);
+  }, [isAuthLoading, profile?.id, fetchNotifications, fetchUnreadCount]);
 
   /**
    * Unsubscribe from notifications
@@ -422,17 +402,37 @@ export function useNotifications(): UseNotificationsReturn {
   }, []);
 
   /**
-   * Auto-subscribe on mount if connected
+   * Auto-fetch on mount when auth is ready, poll unread count on a stable interval
    */
   useEffect(() => {
-    if (isConnected) {
-      subscribe();
-    }
+    if (isAuthLoading || !profile?.id) return;
+
+    // Initial fetch (once)
+    fetchUnreadCount();
+    fetchNotifications();
+
+    // Poll unread count every 30 seconds — stable interval, no cascade
+    pollingIntervalRef.current = setInterval(() => {
+      getAccessToken().then((token) => {
+        if (!token) return;
+        fetch("/api/notifications?count=true", {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        })
+          .then((res) => res.ok ? res.json() : null)
+          .then((data) => { if (data?.success) setUnreadCount(data.unreadCount); })
+          .catch(() => {});
+      });
+    }, 30000);
 
     return () => {
-      unsubscribe();
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     };
-  }, [isConnected, subscribe, unsubscribe]);
+    // Only re-run when auth state truly changes, NOT when callbacks/state update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthLoading, profile?.id]);
 
   return {
     notifications,

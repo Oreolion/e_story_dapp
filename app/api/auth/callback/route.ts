@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
   const next = searchParams.get("next");
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/?auth_error=missing_code`);
+    // PKCE flow always provides a code param. Missing code means the user
+    // navigated here directly or an upstream error occurred — redirect home.
+    return NextResponse.redirect(origin);
   }
 
   try {
@@ -32,7 +34,6 @@ export async function GET(req: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
-      console.error("[AUTH CALLBACK] Code exchange failed:", error.message);
       return NextResponse.redirect(`${origin}/?auth_error=exchange_failed`);
     }
 

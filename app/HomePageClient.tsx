@@ -21,9 +21,7 @@ import {
   ArrowRight,
   Lock,
   ShieldCheck,
-//   Eye,
   EyeOff,
-//   Waves,
   Fingerprint,
   BotOff,
   ServerOff,
@@ -31,6 +29,11 @@ import {
   Mail,
   Check,
   Lightbulb,
+  Sparkles,
+  Crown,
+  ChevronDown,
+  ChevronUp,
+  Zap,
 } from "lucide-react";
 
 // ============================================================
@@ -47,7 +50,7 @@ const features = [
     icon: Brain,
     title: "See your patterns",
     description:
-      "AI finds the themes, emotions, and arcs across your entries. The patterns in your life you couldn't see alone.",
+      "AI finds the themes, emotions, and arcs across your stories. The patterns you couldn't see alone — with advice to grow.",
   },
   {
     icon: Lock,
@@ -76,7 +79,7 @@ const features = [
 ];
 
 // ============================================================
-// "WHY NOW" — the cultural moment that makes eStory necessary
+// "WHY NOW" — the cultural moment that makes eStories necessary
 // ============================================================
 const whyNowCards = [
   {
@@ -89,7 +92,7 @@ const whyNowCards = [
   {
     icon: ServerOff,
     stat: "100%",
-    statLabel: "of journaling apps store your data on their servers",
+    statLabel: "of storytelling apps store your data on their servers",
     description:
       "Your most private thoughts live on infrastructure you don't control. If they get acquired, shut down, or breached — your stories go with them.",
   },
@@ -128,6 +131,39 @@ const steps = [
       "Your stories are encrypted and stored permanently. No platform can delete them. No company can sell them. They're yours.",
   },
 ];
+
+function FAQItem({ question, answer }: { question: string; answer: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="border-b border-gray-200 dark:border-gray-700 last:border-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-5 text-left"
+      >
+        <span className="text-base font-medium text-foreground pr-4">
+          {question}
+        </span>
+        {isOpen ? (
+          <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+        ) : (
+          <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+        )}
+      </button>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          transition={{ duration: 0.2 }}
+          className="pb-5"
+        >
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {answer}
+          </p>
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { user, isConnected } = useApp();
@@ -199,16 +235,17 @@ export default function HomePage() {
             </span>
           </div>
 
-          {/* Main heading — voice-first, ownership second */}
-          <h1 className="heading-display-lg text-4xl md:text-6xl lg:text-7xl leading-[1.1]">
-            <span className="text-foreground">Your voice. Your story.</span>
+          {/* Main heading — speak, see patterns, own legacy */}
+          <h1 className="heading-display-lg text-4xl md:text-5xl lg:text-5xl leading-[1.1]">
+            <span className="text-foreground">Speak your story, see your patterns,</span>
             <br />
-            <span className="text-gradient-cosmic">Actually yours. Forever.</span>
+            <span className="text-gradient-cosmic">own and preserve your legacy.</span>
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            The voice journal that listens, learns your patterns, and belongs to
-            you — not us, not our servers, not any platform. Just talk.
+            Your voice, your meaning, permanently yours. Write about anything:
+            personal stories, history, culture, geopolitics. AI helps you become
+            a better storyteller.
           </p>
         </div>
 
@@ -226,10 +263,10 @@ export default function HomePage() {
           ) : (
             <Button
               size="lg"
-              onClick={() => router.push("/api/auth/callback")}
+              onClick={() => router.push("/record")}
               className="bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))] text-white text-lg px-8 h-12"
             >
-              Start Journaling — Free
+              Start Writing — Free
             </Button>
           )}
 
@@ -369,7 +406,7 @@ export default function HomePage() {
       <section id="how-it-works" className="space-y-12 scroll-mt-20">
         <div className="text-center space-y-4">
           <h2 className="heading-section text-3xl md:text-4xl text-foreground">
-            How <span className="text-gradient-insight">eStory</span> works
+            How <span className="text-gradient-insight">eStories</span> works
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
             Three steps. No typing required.
@@ -416,8 +453,8 @@ export default function HomePage() {
             <span className="text-gradient-memory">think deeply</span>
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            A journaling experience designed for reflection, not engagement
-            metrics.
+            A storytelling experience designed for reflection and craft, not engagement
+            metrics. Write personal stories, history, culture, geopolitics — anything that matters to you.
           </p>
         </div>
 
@@ -495,7 +532,7 @@ export default function HomePage() {
       <section className="space-y-12">
         <div className="text-center space-y-4">
           <h2 className="heading-section text-3xl md:text-4xl text-foreground">
-            The <span className="text-gradient-memory">eStory</span> promise
+            The <span className="text-gradient-memory">eStories</span> promise
           </h2>
         </div>
 
@@ -504,14 +541,15 @@ export default function HomePage() {
           <CardContent className="pt-6 space-y-4">
             <Quote className="w-6 h-6 text-[hsl(var(--memory-500)/0.3)]" />
             <p className="text-muted-foreground italic leading-relaxed text-lg">
-              &ldquo;I built eStory because I needed it — I wanted something
-              with less friction. Other platforms force you to type, which makes
-              journaling harder, and my most important thoughts became trapped
-              on services I didn&apos;t control. Your journal shouldn&apos;t
-              belong to a company — it should belong to you.We are living
-              through one of the most important time in human history, People
-              should write more and care more about their stories and
-              histories and how it is written.&rdquo;
+              &ldquo;I built eStories because I needed it — a tool with less
+              friction that could also help me improve over time. Other platforms
+              force you to type, which makes storytelling and writing harder. My most
+              important thoughts ended up trapped on services I didn&apos;t control.
+              Your stories and your voice shouldn&apos;t belong to a company — they
+              should belong to you. We are living through one of the most important
+              periods in human history. People should write more, care more about
+              their stories, and take ownership of how their histories are
+              written.&rdquo;
             </p>
             <div className="flex items-center gap-3 pt-4 border-t border-[hsl(var(--memory-500)/0.1)]">
               <div className="w-10 h-10 rounded-full bg-[hsl(var(--memory-500)/0.15)] flex items-center justify-center text-[hsl(var(--memory-500))] font-medium text-sm">
@@ -520,7 +558,7 @@ export default function HomePage() {
               <div>
                 <div className="font-medium text-foreground">Remi</div>
                 <div className="text-sm text-muted-foreground">
-                  Founder, eStory
+                  Founder, eStories
                 </div>
               </div>
             </div>
@@ -532,7 +570,7 @@ export default function HomePage() {
           {[
             {
               icon: EyeOff,
-              title: "We don't read your journal",
+              title: "We don't read your stories",
               description:
                 "Your entries are encrypted. We couldn't read them even if we wanted to.",
             },
@@ -546,7 +584,7 @@ export default function HomePage() {
               icon: ShieldCheck,
               title: "You leave, you keep everything",
               description:
-                "If you ever leave eStory, your stories go with you. They're your files.",
+                "If you ever leave eStories, your stories go with you. They're your files.",
             },
           ].map((guarantee) => {
             const Icon = guarantee.icon;
@@ -564,6 +602,215 @@ export default function HomePage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* ============================================================
+          PRICING — Simple, affordable plans
+          ============================================================ */}
+      <section id="pricing" className="space-y-12 scroll-mt-20">
+        <div className="text-center space-y-4">
+          <h2 className="heading-section text-3xl md:text-4xl text-foreground">
+            Simple,{" "}
+            <span className="text-gradient-cosmic">affordable</span> pricing
+          </h2>
+          <p className="text-muted-foreground max-w-lg mx-auto">
+            Start writing for free. Upgrade when you want AI craft feedback,
+            story collections, or creator tools.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {/* Free Plan */}
+          <Card className="card-elevated flex flex-col">
+            <CardHeader className="text-center pb-4">
+              <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--memory-500)/0.1)] rounded-full flex items-center justify-center">
+                <Mic className="w-6 h-6 text-[hsl(var(--memory-500))]" />
+              </div>
+              <CardTitle>Free</CardTitle>
+              <div className="mt-2">
+                <span className="text-4xl font-bold text-foreground">$0</span>
+                <span className="text-muted-foreground ml-1">forever</span>
+              </div>
+              <CardDescription className="mt-2">
+                Start your storytelling journey.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <ul className="space-y-2.5 flex-1 text-sm">
+                {[
+                  "Unlimited story recording & writing",
+                  "AI transcription (voice-to-text)",
+                  "AI text enhancement",
+                  "10 AI story analyses per month",
+                  "Encrypted local vault",
+                  "Public story feed access",
+                  "Basic story insights",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-muted-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="outline"
+                className="w-full mt-6"
+                onClick={() => router.push("/record")}
+              >
+                Get Started Free
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Storyteller Plan */}
+          <Card className="relative flex flex-col border-2 border-[hsl(var(--story-500))] shadow-lg shadow-[hsl(var(--story-500)/0.1)]">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <span className="bg-gradient-to-r from-[hsl(var(--story-500))] to-[hsl(var(--insight-500))] text-white text-xs font-medium px-3 py-1 rounded-full">
+                Most Popular
+              </span>
+            </div>
+            <CardHeader className="text-center pb-4">
+              <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--story-500)/0.1)] rounded-full flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-[hsl(var(--story-500))]" />
+              </div>
+              <CardTitle>Storyteller</CardTitle>
+              <div className="mt-2">
+                <span className="text-4xl font-bold text-foreground">$2.99</span>
+                <span className="text-muted-foreground ml-1">/month</span>
+              </div>
+              <CardDescription className="mt-2">
+                AI-powered craft improvement.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <ul className="space-y-2.5 flex-1 text-sm">
+                {[
+                  "Everything in Free, plus:",
+                  "Unlimited AI story analyses",
+                  "Actionable AI advice per story",
+                  "Story collections & continuations",
+                  "Weekly AI reflections",
+                  "Advanced theme & pattern tracking",
+                  "Storytelling progress reports",
+                  "Priority CRE verification",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-muted-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                className="w-full mt-6 bg-gradient-to-r from-[hsl(var(--story-500))] to-[hsl(var(--insight-500))] hover:from-[hsl(var(--story-600))] hover:to-[hsl(var(--insight-600))] text-white"
+                onClick={() => router.push("/pricing")}
+              >
+                Start Writing Better
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Creator Plan */}
+          <Card className="card-elevated flex flex-col">
+            <CardHeader className="text-center pb-4">
+              <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--insight-500)/0.1)] rounded-full flex items-center justify-center">
+                <Crown className="w-6 h-6 text-[hsl(var(--insight-500))]" />
+              </div>
+              <CardTitle>Creator</CardTitle>
+              <div className="mt-2">
+                <span className="text-4xl font-bold text-foreground">$7.99</span>
+                <span className="text-muted-foreground ml-1">/month</span>
+              </div>
+              <CardDescription className="mt-2">
+                Publish, monetize, build an audience.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <ul className="space-y-2.5 flex-1 text-sm">
+                {[
+                  "Everything in Storyteller, plus:",
+                  "Unlimited public publishing",
+                  "Custom paywall pricing",
+                  "NFT book minting (no extra fee)",
+                  "Creator analytics dashboard",
+                  "Tip collection from readers",
+                  "Custom author profile page",
+                  "Priority support",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-muted-foreground">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="outline"
+                className="w-full mt-6"
+                onClick={() => router.push("/pricing")}
+              >
+                Become a Creator
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* ============================================================
+          FAQ — Common questions answered
+          ============================================================ */}
+      <section id="faq" className="space-y-12 scroll-mt-20">
+        <div className="text-center space-y-4">
+          <h2 className="heading-section text-3xl md:text-4xl text-foreground">
+            Frequently asked{" "}
+            <span className="text-gradient-insight">questions</span>
+          </h2>
+        </div>
+
+        <div className="max-w-3xl mx-auto">
+          <Card className="card-elevated">
+            <CardContent className="py-2">
+              {[
+                {
+                  q: "What can I write about on eStories?",
+                  a: "Anything you're passionate about! Personal journals, historical narratives, geopolitical analysis, cultural stories, creative non-fiction, memoirs, travel writing — the platform is for all forms of storytelling. Private stories stay encrypted; public stories can be shared with the community.",
+                },
+                {
+                  q: "How does the AI help me become a better writer?",
+                  a: "Every story gets analyzed for narrative coherence, emotional depth, thematic consistency, and significance. You get a brief insight and actionable advice on how to improve. Over time, track your progress as your scores improve. It's like a writing coach that learns your patterns.",
+                },
+                {
+                  q: "Is my data private and secure?",
+                  a: "Yes. Private stories are encrypted with AES-256-GCM in your browser before storage — we literally cannot read them. Your encryption key is derived from your PIN and never leaves your device. For public stories, Chainlink CRE provides verifiable AI analysis without exposing raw data on-chain.",
+                },
+                {
+                  q: "Do I need a crypto wallet?",
+                  a: "No! Sign up with Google or email. A crypto wallet is optional — it will unlock future Web3 features like tipping, paywalls, NFT book minting, and on-chain provenance when we launch on mainnet. Add one anytime from your profile.",
+                },
+                {
+                  q: "What are $STORY tokens?",
+                  a: "$STORY is an ERC-20 token on Base (Ethereum L2) being developed for the creator economy — tipping, paywalled stories, and NFT minting. It is currently on testnet and will launch on mainnet once the platform reaches critical adoption. You don't need tokens to use eStories today.",
+                },
+                {
+                  q: "What is CRE-verified quality?",
+                  a: "Chainlink CRE runs AI analysis across multiple independent nodes inside encrypted enclaves. The nodes reach consensus and write a cryptographic proof on-chain. Quality ratings on paywalled stories are verifiable and tamper-proof — readers can trust the score before purchasing.",
+                },
+                {
+                  q: "How do story collections work?",
+                  a: "Group related stories into collections — like a series on history or a year of personal growth. Continue existing stories as linked threads. In the future, collections will be mintable as NFT books on the blockchain.",
+                },
+                {
+                  q: "Can I cancel anytime?",
+                  a: "Yes. Upgrade, downgrade, or cancel at any time. Your stories are always yours — they stay in your encrypted vault regardless of your plan.",
+                },
+                {
+                  q: "What happens if eStories shuts down?",
+                  a: "Your private stories live in your browser's encrypted local vault — on your device, not our servers. Public stories have permanent blockchain provenance. Audio is on IPFS (decentralized). Your content survives independently.",
+                },
+              ].map((faq) => (
+                <FAQItem key={faq.q} question={faq.q} answer={faq.a} />
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </section>
 
@@ -593,11 +840,11 @@ export default function HomePage() {
             ) : (
               <Button
                 size="lg"
-                onClick={() => router.push("/api/auth/callback")}
+                onClick={() => router.push("/record")}
                 className="bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))] text-white px-8 h-12"
               >
                 <ArrowRight className="w-5 h-5 mr-2" />
-                Start Journaling — Free
+                Start Writing — Free
               </Button>
             )}
 

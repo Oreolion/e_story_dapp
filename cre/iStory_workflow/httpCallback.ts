@@ -9,15 +9,14 @@
  * 5. Encode minimal data for on-chain storage
  * 6. Generate a signed CRE report
  * 7. Write the report to the PrivateVerifiedMetrics contract
- * 8. Callback full metrics to eStory API (confidential HTTP)
+ * 8. Callback full metrics to eStory API (HTTP)
  */
 
 import {
   cre,
-  ConfidentialHTTPClient,
   type Runtime,
   type HTTPPayload,
-  type ConfidentialHTTPSendRequester,
+  type HTTPSendRequester,
   getNetwork,
   hexToBase64,
   TxStatus,
@@ -88,9 +87,9 @@ export function onHttpTrigger(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Step 2: AI Analysis via Gemini (Confidential HTTP)
+    // Step 2: AI Analysis via Gemini (HTTP)
     // ─────────────────────────────────────────────────────────────
-    runtime.log("[Step 2] Querying Gemini AI (confidential enclave)...");
+    runtime.log("[Step 2] Querying Gemini AI...");
 
     let metrics;
     try {
@@ -229,13 +228,14 @@ export function onHttpTrigger(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Step 8: Callback full metrics to eStory API (confidential)
+    // Step 8: Callback full metrics to eStory API
     // ─────────────────────────────────────────────────────────────
-    runtime.log("[Step 8] Sending full metrics via confidential callback...");
+    runtime.log("[Step 8] Sending full metrics via callback...");
 
     if (runtime.config.callbackUrl) {
       try {
-        const confClient = new ConfidentialHTTPClient();
+        const callbackSecret = runtime.getSecret({ id: "CRE_CALLBACK_SECRET" }).result().value;
+        const httpClient = new cre.capabilities.HTTPClient();
 
         const callbackPayload = {
           storyId: input.storyId,
@@ -255,10 +255,10 @@ export function onHttpTrigger(
           new TextEncoder().encode(JSON.stringify(callbackPayload))
         ).toString("base64");
 
-        confClient
+        httpClient
           .sendRequest(
             runtime,
-            buildCallbackRequest(callbackBody),
+            buildCallbackRequest(callbackBody, callbackSecret),
             consensusIdenticalAggregation<{ success: boolean }>()
           )(runtime.config)
           .result();
@@ -286,26 +286,21 @@ export function onHttpTrigger(
 }
 
 /**
- * Build the confidential callback request.
- * Full metrics payload stays encrypted in transit via ConfidentialHTTPClient.
+ * Build the callback request via HTTPClient.
+ * For production: switch to ConfidentialHTTPClient + multiHeaders + vaultDonSecrets.
  */
 const buildCallbackRequest =
-  (body: string) =>
-  (sendRequester: ConfidentialHTTPSendRequester, config: Config): { success: boolean } => {
+  (body: string, secret: string) =>
+  (sendRequester: HTTPSendRequester, config: Config): { success: boolean } => {
     sendRequester
       .sendRequest({
-        request: {
-          url: config.callbackUrl,
-          method: "POST" as const,
-          body,
-          multiHeaders: {
-            "Content-Type": { values: ["application/json"] },
-            "X-CRE-Callback-Secret": { values: ["{{.callbackSecret}}"] },
-          },
+        url: config.callbackUrl,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CRE-Callback-Secret": secret,
         },
-        vaultDonSecrets: [
-          { key: "callbackSecret", owner: config.owner },
-        ],
+        body,
       })
       .result();
 

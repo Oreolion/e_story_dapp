@@ -29,6 +29,8 @@ Sentry.init({
     // Wallet connection noise
     "User rejected the request",
     "User denied transaction",
+    // Third-party injected script errors (mobile carrier / WebView wrappers)
+    "Cannot read properties of undefined (reading 'domInteractive')",
   ],
 
   enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,

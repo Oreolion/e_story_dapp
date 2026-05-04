@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Capture your thoughts and experiences with AI-powered voice transcription. Record, enhance, and save your stories permanently on the blockchain.",
   openGraph: {
-    title: "Record Your Story | eStory",
+    title: "Record Your Story | eStories",
     description:
       "Capture your thoughts and experiences with AI-powered voice transcription.",
   },

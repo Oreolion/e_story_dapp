@@ -5,7 +5,7 @@ import Constants from "expo-constants";
 import { getItem, setItem, removeItem } from "./storage";
 
 const API_BASE_URL =
-  Constants.expoConfig?.extra?.API_BASE_URL || "https://e-story-dapp.vercel.app";
+  Constants.expoConfig?.extra?.API_BASE_URL || "https://estories.app";
 
 const TOKEN_KEY = "supabase_access_token";
 

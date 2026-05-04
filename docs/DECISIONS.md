@@ -29,6 +29,12 @@ Dexie provides a Promises-based API and the `dexie-react-hooks` package provides
 ### Why dual-write (cloud-first, vault additive) in RecordPageClient?
 Vault save runs after cloud save succeeds and is explicitly non-blocking (wrapped in its own try/catch). Vault failure never surfaces to the user or blocks the cloud save confirmation. This design avoids a failure mode where a crypto error causes a story to silently disappear — the cloud copy is always the authoritative record. The vault save sets `sync_status: "synced"` since the cloud already has the data.
 
+### Why implicit OAuth flow? (TEMPORARY — migration planned)
+The browser Supabase client (`supabaseClient.ts`) uses `createClient` from `@supabase/supabase-js` with `localStorage`. PKCE requires `@supabase/ssr` with cookie storage on both browser and server. The implicit flow works but is deprecated (RFC 9700) — refresh tokens are exposed in URL hash fragments. Migration to PKCE is a priority security task. Server callback handles missing `?code` gracefully by redirecting home. See memory file `oauth-pkce-migration.md` for full migration plan.
+
+### Why show wallet status in the nav dropdown instead of a separate page?
+Google OAuth users need a visible, low-friction path to optionally connect a wallet. Hiding it on the profile page made it invisible. The nav dropdown always shows wallet state: either a green check with truncated address (linked) or a "Connect Wallet" button that opens the existing AuthModal. This keeps wallet connection optional but discoverable without adding new pages or modals.
+
 ## References
 
 - **Project Vision:** Research document "The Architecture of Digital Immortality"

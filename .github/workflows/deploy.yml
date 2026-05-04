@@ -1,0 +1,81 @@
+name: Deploy & Verify Production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy & Smoke Test
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commit SHA
+        id: git
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # Note: Vercel auto-deploys from git. This job verifies the deployment.
+      # If you use Vercel CLI deploy instead, uncomment the step below and
+      # add VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID to GitHub secrets.
+
+      # - name: Deploy to Vercel
+      #   uses: amondnet/vercel-action@v25
+      #   with:
+      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+      #     vercel-args: '--prod'
+
+      - name: Wait for Vercel Deploy
+        run: sleep 90
+
+      - name: Smoke Test — Homepage
+        run: |
+          curl -sf https://estories.app > /dev/null || (echo "Homepage failed" && exit 1)
+
+      - name: Smoke Test — Health API
+        run: |
+          curl -sf https://estories.app/api/health > /dev/null || (echo "Health API failed" && exit 1)
+
+      - name: Smoke Test — Library Page
+        run: |
+          curl -sf https://estories.app/library > /dev/null || (echo "Library page failed" && exit 1)
+
+      - name: Check Sentry Token
+        id: sentry
+        run: |
+          if [ -n "${{ secrets.SENTRY_AUTH_TOKEN }}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Sentry release — SENTRY_AUTH_TOKEN secret not configured."
+          fi
+
+      - name: Create Sentry Release
+        if: steps.sentry.outputs.has_token == 'true'
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: abami-tech
+          SENTRY_PROJECT: estories
+        with:
+          environment: production
+          version: ${{ steps.git.outputs.sha }}
+          set_commits: auto
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "::error::Production smoke tests failed after deploy. Consider rolling back via GitHub Actions > Rollback Production."

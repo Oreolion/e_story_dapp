@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     if (isAuthError(authResult)) return authResult;
     const authenticatedUserId = authResult;
 
-    const { title, content, mood, tags, hasAudio, audioUrl } = await request.json();
+    const { title, content, mood, tags, hasAudio, audioUrl, parentStoryId } = await request.json();
 
     // Validate input
     if (!content || content.trim().length === 0) {
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         likes: 0,
         comments_count: 0,
         shares: 0,
+        ...(parentStoryId ? { parent_story_id: parentStoryId } : {}),
       })
       .select()
       .single();

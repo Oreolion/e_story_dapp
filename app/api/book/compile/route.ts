@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     const bookMetadata: BookMetadata = {
       name: title || `My Story Collection ${new Date().getFullYear()}`,
       description: description || 'A collection of personal stories and reflections',
-      external_url: process.env.NEXT_PUBLIC_APP_URL || 'https://estory.vercel.app',
+      external_url: process.env.NEXT_PUBLIC_APP_URL || 'https://estories.app',
       attributes: [
         { trait_type: 'Story Count', value: stories.length },
         { trait_type: 'Cover Style', value: coverStyle || 'minimalist' },

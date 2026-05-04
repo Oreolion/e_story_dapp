@@ -1,3 +1,5 @@
+import { parseAbi } from "viem";
+
 // eStories Mobile - Smart Contract Addresses & ABIs
 // Ported from web lib/contracts.ts
 
@@ -18,7 +20,7 @@ export const KEYSTONE_FORWARDER_ADDRESS =
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 // 1. IStoryToken ABI (ERC20 + Burnable)
-export const STORY_TOKEN_ABI = [
+export const STORY_TOKEN_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
@@ -26,30 +28,30 @@ export const STORY_TOKEN_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
-] as const;
+]);
 
 // 2. StoryProtocol ABI (Tipping & Paywalls)
-export const STORY_PROTOCOL_ABI = [
+export const STORY_PROTOCOL_ABI = parseAbi([
   "function tipCreator(address creator, uint256 amount, uint256 storyId)",
   "function payPaywall(address author, uint256 amount, uint256 contentId)",
   "event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId)",
   "event ContentUnlocked(address indexed payer, address indexed author, uint256 amount, uint256 indexed contentId)",
-] as const;
+]);
 
 // 3. StoryNFT ABI (Minting)
-export const STORY_NFT_ABI = [
-  'function mintBook(string memory uri)',
+export const STORY_NFT_ABI = parseAbi([
+  "function mintBook(string memory uri)",
   "function balanceOf(address owner) view returns (uint256)",
   "function tokenURI(uint256 tokenId) view returns (string)",
-  'event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType)',
-] as const;
+  "event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType)",
+]);
 
 // 4. VerifiedMetrics ABI (Chainlink CRE)
-export const VERIFIED_METRICS_ABI = [
+export const VERIFIED_METRICS_ABI = parseAbi([
   "function onReport(bytes calldata metadata, bytes calldata report)",
   "function getMetrics(bytes32 storyId) view returns (uint8 significanceScore, uint8 emotionalDepth, uint8 qualityScore, uint32 wordCount, string[] themes, bytes32 attestationId, uint256 verifiedAt)",
   "function isVerified(bytes32 storyId) view returns (bool)",
   "function getAttestationId(bytes32 storyId) view returns (bytes32)",
   "function supportsInterface(bytes4 interfaceId) view returns (bool)",
   "event MetricsVerified(bytes32 indexed storyId, address indexed author, uint8 significanceScore, uint8 emotionalDepth, uint8 qualityScore, uint32 wordCount, bytes32 attestationId)",
-] as const;
+]);

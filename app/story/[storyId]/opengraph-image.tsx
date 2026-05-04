@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 
 export const runtime = "edge";
-export const alt = "eStory - Story";
+export const alt = "eStories - Story";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -24,7 +24,7 @@ export default async function OGImage({
 }) {
   const { storyId } = await params;
 
-  let title = "Story on eStory";
+  let title = "Story on eStories";
   let authorName = "Anonymous";
   let mood = "neutral";
   let tags: string[] = [];
@@ -34,10 +34,7 @@ export default async function OGImage({
     const supabase = createSupabaseAdminClient();
     const { data: story } = await supabase
       .from("stories")
-      .select(
-        `title, mood, tags, story_date, created_at, is_public,
-        author:users!stories_author_wallet_fkey (name)`
-      )
+      .select(`title, mood, tags, story_date, created_at, is_public, author_id`)
       .eq("id", storyId)
       .maybeSingle();
 
@@ -45,10 +42,14 @@ export default async function OGImage({
       title = story.title || "Untitled Story";
       mood = story.mood || "neutral";
       tags = (story.tags || []).slice(0, 3);
-      const authorData = Array.isArray(story.author)
-        ? story.author[0]
-        : story.author;
-      authorName = authorData?.name || "Anonymous";
+      if (story.author_id) {
+        const { data: authorRow } = await supabase
+          .from("users")
+          .select("name")
+          .eq("id", story.author_id)
+          .single();
+        authorName = authorRow?.name || "Anonymous";
+      }
       const date = new Date(story.story_date || story.created_at);
       dateStr = date.toLocaleDateString("en-US", {
         year: "numeric",
@@ -92,7 +93,7 @@ export default async function OGImage({
               color: "rgba(255,255,255,0.8)",
             }}
           >
-            eStory
+            eStories
           </div>
           {dateStr && (
             <div

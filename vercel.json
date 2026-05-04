@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/distribute-rewards",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/re-engagement",
+      "schedule": "0 10 * * *"
     }
   ]
 }

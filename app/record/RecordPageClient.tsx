@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
 
 // Relative paths (Preserving your working structure)
 import { useApp } from "../../components/Provider";
 import { useAuth } from "../../components/AuthProvider";
-import { supabaseClient } from "../../app/utils/supabase/supabaseClient";
+import { useParentStory } from "@/lib/queries/hooks";
 import { ipfsService } from "../../app/utils/ipfsService";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
+import { STORY_TYPES, type StoryType } from "@/app/types";
 
 // Vault — local encrypted storage (optional, non-blocking)
 import {
@@ -52,11 +54,32 @@ import {
   Lock,   // NEW: For Private icon
   Unlock, // NEW: For Public icon
   Undo2,
+  BookOpen,
+  Landmark,
+  Globe2,
+  Users,
+  Feather,
+  CheckCircle2,
 } from "lucide-react";
+
+const STORY_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  BookOpen, Landmark, Globe2, Users, Feather,
+};
+
+const STORY_TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  memory:  { bg: "bg-[hsl(var(--memory-500)/0.12)]",  border: "border-[hsl(var(--memory-500)/0.4)]",  text: "text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]" },
+  story:   { bg: "bg-[hsl(var(--story-500)/0.12)]",   border: "border-[hsl(var(--story-500)/0.4)]",   text: "text-[hsl(var(--story-600))] dark:text-[hsl(var(--story-400))]" },
+  insight: { bg: "bg-[hsl(var(--insight-500)/0.12)]",  border: "border-[hsl(var(--insight-500)/0.4)]",  text: "text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))]" },
+  growth:  { bg: "bg-[hsl(var(--growth-500)/0.12)]",  border: "border-[hsl(var(--growth-500)/0.4)]",  text: "text-[hsl(var(--growth-600))] dark:text-[hsl(var(--growth-400))]" },
+  rose:    { bg: "bg-rose-500/12",                     border: "border-rose-500/40",                    text: "text-rose-600 dark:text-rose-400" },
+};
 
 export default function RecordPage() {
   const { isConnected } = useApp();
   const { profile: authInfo } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const parentStoryId = searchParams.get("parentId");
 
   // Set background mode for this page
   useBackgroundMode('record');
@@ -65,8 +88,10 @@ export default function RecordPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcribedText, setTranscribedText] = useState("");
   const [entryTitle, setEntryTitle] = useState("");
-  
-  // NEW: Visibility State
+  // Story Type
+  const [storyType, setStoryType] = useState<StoryType>("personal_journal");
+
+  // Visibility State
   const [isPublic, setIsPublic] = useState(false); // Default to Private
 
   // NEW: Date Selection for Backdating (Defaults to Today)
@@ -76,18 +101,63 @@ export default function RecordPage() {
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
   const [preEnhanceText, setPreEnhanceText] = useState<string | null>(null);
+
+  // Derived: anything in-flight blocks the mic button
+  const isBusy = isTranscribing || isEnhancing || isSaving;
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  const supabase = supabaseClient;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Use centralized auth token from AuthProvider
   const { getAccessToken } = useAuth();
+
+  // ─── Draft persistence (survives page reloads) ───────────────────────
+  const DRAFT_KEY = "estories_record_draft";
+
+  // Restore draft on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.transcribedText) setTranscribedText(draft.transcribedText);
+      if (draft.entryTitle) setEntryTitle(draft.entryTitle);
+      if (draft.storyDate) setStoryDate(draft.storyDate);
+      if (draft.isPublic !== undefined) setIsPublic(draft.isPublic);
+      if (draft.storyType) setStoryType(draft.storyType);
+      toast.success("Restored unsaved draft");
+    } catch {
+      // Corrupt draft — ignore
+    }
+  }, []);
+
+  // Auto-save draft whenever content changes (debounced via effect)
+  const saveDraft = useCallback(() => {
+    if (!transcribedText.trim() && !entryTitle.trim()) {
+      sessionStorage.removeItem(DRAFT_KEY);
+      return;
+    }
+    sessionStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ transcribedText, entryTitle, storyDate, isPublic, storyType })
+    );
+  }, [transcribedText, entryTitle, storyDate, isPublic, storyType]);
+
+  useEffect(() => {
+    const timer = setTimeout(saveDraft, 500);
+    return () => clearTimeout(timer);
+  }, [saveDraft]);
+
+  // Fetch parent story title when continuing a story
+  const { data: parentStory } = useParentStory(parentStoryId);
+  const parentStoryTitle = parentStory?.title || null;
 
   // Helper to build auth headers from centralized token
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
@@ -148,23 +218,31 @@ export default function RecordPage() {
 
   // --- 2. AI Transcription ---
   const handleTranscribe = async (blob: Blob) => {
-    setIsProcessing(true);
+    setIsTranscribing(true);
     try {
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders.Authorization) {
+        setIsTranscribing(false);
+        toast.error("Please sign in to transcribe audio.");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", blob);
 
-      const authHeaders = await getAuthHeaders();
       const promise = fetch("/api/ai/transcribe", {
         method: "POST",
         headers: { ...authHeaders },
         body: formData,
       }).then(async (res) => {
+        const data = await res.json().catch(() => ({ error: "Invalid server response" }));
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Transcription failed");
+          throw new Error(data.error || `Transcription failed (${res.status})`);
         }
-        const data = await res.json();
-        return data.text;
+        if (!data.text) {
+          throw new Error("Transcription returned empty text. Please try again.");
+        }
+        return data.text as string;
       });
 
       toast.promise(promise, {
@@ -173,20 +251,20 @@ export default function RecordPage() {
           setTranscribedText((prev) => (prev ? prev + " " + text : text));
           if (!entryTitle) {
             const dateObj = new Date(storyDate);
-            setEntryTitle(`Journal Entry - ${dateObj.toLocaleDateString()}`);
+            setEntryTitle(`Story Entry - ${dateObj.toLocaleDateString()}`);
           }
-          setIsProcessing(false);
+          setIsTranscribing(false);
           return "Transcription complete!";
         },
         error: (err) => {
-          setIsProcessing(false);
-          console.error(err);
-          return "Failed to transcribe audio.";
+          setIsTranscribing(false);
+          console.error("[RECORD] Transcription error:", err);
+          return err?.message || "Failed to transcribe audio.";
         },
       });
     } catch (err) {
-      setIsProcessing(false);
-      console.error("Transcription setup error:", err);
+      setIsTranscribing(false);
+      console.error("[RECORD] Transcription setup error:", err);
       toast.error("Failed to start transcription.");
     }
   };
@@ -194,7 +272,7 @@ export default function RecordPage() {
   // --- 3. AI Enhancement ---
   const enhanceText = async () => {
     if (!transcribedText.trim()) return;
-    setIsProcessing(true);
+    setIsEnhancing(true);
     setPreEnhanceText(transcribedText); // Save original for revert
 
     try {
@@ -216,18 +294,18 @@ export default function RecordPage() {
         loading: "Polishing story...",
         success: (enhanced) => {
           setTranscribedText(enhanced);
-          setIsProcessing(false);
+          setIsEnhancing(false);
           return "Story enhanced! You can revert if you prefer the original.";
         },
         error: (err) => {
           setPreEnhanceText(null);
-          setIsProcessing(false);
+          setIsEnhancing(false);
           return "Failed to enhance text.";
         },
       });
     } catch (err) {
       setPreEnhanceText(null);
-      setIsProcessing(false);
+      setIsEnhancing(false);
       console.error("Enhancement setup error:", err);
       toast.error("Failed to start enhancement.");
     }
@@ -263,7 +341,7 @@ export default function RecordPage() {
     if (!transcribedText.trim() || !entryTitle.trim())
       return toast.error("Story is empty.");
 
-    setIsProcessing(true);
+    setIsSaving(true);
 
     const promiseToSave = async () => {
       let audioUrl = null;
@@ -302,7 +380,8 @@ export default function RecordPage() {
           date: storyDate, // User-selected date
           timestamp: actualCreatedDate, // System upload time
           is_public: isPublic, // Visibility state
-          app: "EStory DApp",
+          story_type: storyType,
+          app: "EStories DApp",
         };
 
         const token = await getAccessToken();
@@ -311,7 +390,7 @@ export default function RecordPage() {
         console.log("Story pinned to IPFS:", ipfsHash);
 
         // C. Save to Supabase via API route (bypasses RLS, works for both wallet & OAuth users)
-        const storyData = {
+        const storyData: Record<string, unknown> = {
           author_id: userId,
           author_wallet: authInfo.wallet_address,
           title: entryTitle,
@@ -324,6 +403,8 @@ export default function RecordPage() {
           is_public: isPublic,
           created_at: actualCreatedDate,
           story_date: backdatedStoryDate,
+          story_type: storyType,
+          ...(parentStoryId ? { parent_story_id: parentStoryId } : {}),
         };
 
         const saveHeaders = await getAuthHeaders();
@@ -369,8 +450,10 @@ export default function RecordPage() {
             };
 
             const db = getVaultDb();
-            await db.stories.put(record);
-            console.log("[VAULT] Story saved locally with encryption");
+            if (db) {
+              await db.stories.put(record);
+              console.log("[VAULT] Story saved locally with encryption");
+            }
           }
         } catch (vaultErr) {
           // Vault failure never blocks cloud save success
@@ -378,7 +461,8 @@ export default function RecordPage() {
         }
 
         // Trigger AI analysis in background (fire-and-forget)
-        if (insertedStory?.id) {
+        // Only analyze stories with enough content (API requires >= 50 chars)
+        if (insertedStory?.id && transcribedText.trim().length >= 50) {
           const analyzeHeaders = await getAuthHeaders();
           fetch("/api/ai/analyze", {
             method: "POST",
@@ -386,12 +470,18 @@ export default function RecordPage() {
             body: JSON.stringify({
               storyId: insertedStory.id,
               storyText: transcribedText,
+              storyType,
             }),
             keepalive: true,
           }).catch((err) => console.warn("Analysis trigger failed:", err));
+        } else if (insertedStory?.id && transcribedText.trim().length < 50) {
+          toast("Story saved! Write more to unlock AI insights.", {
+            icon: "\u{1F4DD}",
+            duration: 4000,
+          });
         }
 
-        return "Story saved & pinned to IPFS!";
+        return { message: "Story saved & pinned to IPFS!", storyId: insertedStory?.id };
       } catch (err: any) {
         throw new Error(err.message || "Save failed");
       }
@@ -399,16 +489,24 @@ export default function RecordPage() {
 
     toast.promise(promiseToSave(), {
       loading: "Saving to Database & IPFS...",
-      success: (msg) => {
-        setIsProcessing(false);
+      success: (result) => {
+        setIsSaving(false);
         setTranscribedText("");
         setEntryTitle("");
         setAudioBlob(null);
         setRecordingDuration(0);
-        return msg;
+        setStoryType("personal_journal");
+        setPreEnhanceText(null);
+        // Clear draft after successful save
+        sessionStorage.removeItem(DRAFT_KEY);
+        // Redirect to the published story page
+        if (result.storyId) {
+          setTimeout(() => router.push(`/story/${result.storyId}`), 800);
+        }
+        return result.message;
       },
       error: (err) => {
-        setIsProcessing(false);
+        setIsSaving(false);
         return err?.message || "Failed to save";
       },
     });
@@ -511,7 +609,7 @@ export default function RecordPage() {
               )}
 
               {/* Idle glow ring */}
-              {!isRecording && !isProcessing && (
+              {!isRecording && !isBusy && (
                 <motion.div
                   className="absolute w-36 h-36 rounded-full"
                   style={{
@@ -526,7 +624,7 @@ export default function RecordPage() {
                 <Button
                   size="lg"
                   onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isProcessing}
+                  disabled={isBusy}
                   className={`relative w-32 h-32 rounded-full text-white shadow-2xl transition-all duration-300 ${
                     isRecording
                       ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/25"
@@ -574,6 +672,18 @@ export default function RecordPage() {
         </CardContent>
       </Card>
 
+      {/* Continuation Banner */}
+      {parentStoryId && parentStoryTitle && (
+        <Card className="border-[hsl(var(--memory-500)/0.3)] bg-[hsl(var(--memory-500)/0.05)] rounded-xl">
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <FileText className="w-4 h-4 text-[hsl(var(--memory-500))] flex-shrink-0" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">
+              Continuing: <strong className="text-gray-900 dark:text-white">{parentStoryTitle}</strong>
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Entry Details (Title & Date) */}
       <Card className="card-elevated rounded-xl">
         <CardHeader>
@@ -594,11 +704,11 @@ export default function RecordPage() {
                 value={entryTitle}
                 onChange={(e) => setEntryTitle(e.target.value)}
                 className="text-lg"
-                disabled={isProcessing}
+                disabled={isBusy}
               />
             </div>
 
-            <div className="w-full md:w-48 space-y-2">
+            <div className="w-full md:w-52 shrink-0 min-w-0 space-y-2">
               <Label
                 htmlFor="date"
                 className="text-sm font-medium text-gray-500"
@@ -606,7 +716,7 @@ export default function RecordPage() {
                 Date of Memory
               </Label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10">
                   <CalendarIcon className="w-4 h-4" />
                 </div>
                 <Input
@@ -614,20 +724,20 @@ export default function RecordPage() {
                   type="date"
                   value={storyDate}
                   onChange={(e) => setStoryDate(e.target.value)}
-                  className="pl-10 font-medium"
-                  disabled={isProcessing}
+                  className="pl-10 font-medium w-full max-w-full [&::-webkit-date-and-time-value]:text-left"
+                  disabled={isBusy}
                 />
               </div>
             </div>
 
             {/* NEW: Visibility Toggle */}
-            <div className="w-full md:w-32 space-y-2">
+            <div className="w-full md:w-32 min-w-0 space-y-2">
               <Label className="text-sm font-medium text-gray-500">
                 Visibility
               </Label>
               <div
                 className={`flex items-center justify-between px-3 py-2 rounded-md border cursor-pointer transition-colors ${isPublic ? 'bg-[hsl(var(--growth-500)/0.1)] border-[hsl(var(--growth-500)/0.3)]' : 'bg-[hsl(var(--void-light))] border-gray-200 dark:border-gray-700'}`}
-                onClick={() => !isProcessing && setIsPublic(!isPublic)}
+                onClick={() => !isBusy && setIsPublic(!isPublic)}
               >
                 <div className="flex items-center gap-2">
                   {isPublic ? (
@@ -643,6 +753,46 @@ export default function RecordPage() {
             </div>
 
           </div>
+
+            {/* Story Type Selector */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-500">
+                Story Type
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {STORY_TYPES.map((type) => {
+                  const Icon = STORY_TYPE_ICONS[type.icon];
+                  const colors = STORY_TYPE_COLORS[type.color] || STORY_TYPE_COLORS.memory;
+                  const isSelected = storyType === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        if (isBusy) return;
+                        setStoryType(type.value);
+                        // Personal journals default to private, all others to public
+                        setIsPublic(type.value !== "personal_journal");
+                      }}
+                      disabled={isBusy}
+                      className={`
+                        inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium
+                        transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                        ${isSelected
+                          ? `${colors.bg} ${colors.border} ${colors.text}`
+                          : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
+                        }
+                      `}
+                    >
+                      {Icon && <Icon className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">{type.label}</span>
+                      <span className="sm:hidden">{type.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
         </CardContent>
 
         <CardHeader>
@@ -660,13 +810,22 @@ export default function RecordPage() {
                   Audio Captured
                 </Badge>
               )}
-              {isProcessing && (
+              {isTranscribing && (
                 <Badge
                   variant="secondary"
                   className="bg-[hsl(var(--memory-500)/0.15)] text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]"
                 >
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  Processing...
+                  Transcribing...
+                </Badge>
+              )}
+              {isEnhancing && (
+                <Badge
+                  variant="secondary"
+                  className="bg-[hsl(var(--insight-500)/0.15)] text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))]"
+                >
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Enhancing...
                 </Badge>
               )}
               <Badge
@@ -680,12 +839,55 @@ export default function RecordPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea
-            placeholder="Your transcribed text will appear here, or you can type directly..."
+            ref={textareaRef}
+            placeholder={STORY_TYPES.find((t) => t.value === storyType)?.placeholder || "Your transcribed text will appear here, or you can type directly..."}
             value={transcribedText}
-            onChange={(e) => setTranscribedText(e.target.value)}
-            className="min-h-[200px] text-base leading-relaxed resize-none"
-            disabled={isProcessing}
+            onChange={(e) => {
+              setTranscribedText(e.target.value);
+              // Auto-grow textarea
+              const el = textareaRef.current;
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 600)}px`;
+              }
+            }}
+            onKeyDown={(e) => {
+              // Ctrl+Enter / Cmd+Enter to save
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                if (transcribedText.trim() && entryTitle.trim() && !isBusy) {
+                  saveEntry();
+                }
+              }
+            }}
+            className="min-h-[200px] max-h-[600px] text-base leading-relaxed resize-none overflow-y-auto"
+            disabled={isBusy}
           />
+
+          {/* Word count + AI threshold indicator */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {(() => {
+              const wordCount = transcribedText.trim() ? transcribedText.trim().split(/\s+/).length : 0;
+              const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+              const aiReady = transcribedText.trim().length >= 50;
+              return (
+                <>
+                  <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
+                  <span className="text-gray-300 dark:text-gray-600">&middot;</span>
+                  <span>{readingTime} min read</span>
+                  <span className="text-gray-300 dark:text-gray-600">&middot;</span>
+                  {aiReady ? (
+                    <span className="flex items-center gap-1 text-[hsl(var(--growth-500))]">
+                      <CheckCircle2 className="w-3 h-3" /> AI Insights Ready
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">Write 50+ characters to unlock AI insights</span>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
           <Separator />
           <div className="flex flex-col sm:flex-row gap-4">
             <Button
@@ -715,7 +917,7 @@ export default function RecordPage() {
             ) : (
               <Button
                 onClick={enhanceText}
-                disabled={!transcribedText.trim() || isProcessing}
+                disabled={!transcribedText.trim() || isBusy}
                 variant="outline"
                 className="flex-1"
               >
@@ -725,11 +927,11 @@ export default function RecordPage() {
             <Button
               onClick={saveEntry}
               disabled={
-                !transcribedText.trim() || !entryTitle.trim() || isProcessing
+                !transcribedText.trim() || !entryTitle.trim() || isBusy
               }
               className="flex-1 bg-gradient-growth hover:opacity-90"
             >
-              {isProcessing ? (
+              {isSaving ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <Save className="w-4 h-4 mr-2" />
@@ -737,6 +939,9 @@ export default function RecordPage() {
               {isPublic ? 'Publish & Save' : 'Save Privately'}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground text-right">
+            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Ctrl+Enter</kbd> to save
+          </p>
         </CardContent>
       </Card>
 

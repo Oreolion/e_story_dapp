@@ -44,6 +44,7 @@ const sampleMetadata: StoryMetadata = {
   places_mentioned: ["Chicago", "the park"],
   time_references: ["last summer", "when I was young"],
   brief_insight: "A story about finding clarity through change.",
+  actionable_advice: "Consider journaling about what specific changes brought you the most clarity.",
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
 };

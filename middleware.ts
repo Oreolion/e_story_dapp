@@ -1,4 +1,4 @@
-﻿import { createServerClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 // ============================================================================
@@ -56,7 +56,7 @@ function getRateLimit(pathname: string): number {
   // AI endpoints: stricter limits (expensive API calls)
   if (pathname.startsWith("/api/ai/")) return 10;
 
-  // Login endpoint: tightest limit (5/min per IP) ΓÇö wallet sig brute-force prevention
+  // Login endpoint: tightest limit (5/min per IP) — wallet sig brute-force prevention
   if (pathname === "/api/auth/login") return 5;
 
   // Auth endpoints: prevent brute force
@@ -112,7 +112,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 
 /**
  * Refresh the Supabase session on every page navigation.
- * Required for PKCE cookie-based auth ΓÇö without this, expired sessions
+ * Required for PKCE cookie-based auth — without this, expired sessions
  * are never refreshed and users appear logged out after ~1 hour.
  *
  * See: https://supabase.com/docs/guides/auth/server-side/nextjs
@@ -158,8 +158,8 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
-  // ΓöÇΓöÇ Step 1: Refresh Supabase session (page navigations only) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-  // Only run session refresh for browser page loads ΓÇö NOT for API routes.
+  // ── Step 1: Refresh Supabase session (page navigations only) ──────
+  // Only run session refresh for browser page loads — NOT for API routes.
   // API routes handle their own auth via validateAuthOrReject/Bearer tokens.
   // Running getUser() on /api/auth/callback interferes with PKCE code exchange.
   // Running getUser() on /api/payment/webhook breaks Blockradar delivery.
@@ -170,12 +170,12 @@ export async function middleware(request: NextRequest) {
       // Access response AFTER getUser() so setAll cookies are captured
       response = sessionHelper.response;
     } catch {
-      // Never let session refresh crash the middleware ΓÇö user will just
+      // Never let session refresh crash the middleware — user will just
       // see a stale session and can re-authenticate on the next load.
     }
   }
 
-  // ΓöÇΓöÇ Step 2: API routes ΓÇö rate limiting + CORS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Step 2: API routes — rate limiting + CORS ─────────────────────
   if (pathname.startsWith("/api/")) {
     const origin = request.headers.get("origin");
 

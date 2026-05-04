@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useApp } from "./Provider";
 import { Button } from "@/components/ui/button";
 import {
   Home,
@@ -12,13 +11,11 @@ import {
   User,
   Moon,
   Sun,
-  Coins,
   TrainTrack,
-  BookOpen,
 } from "lucide-react";
+import { LogoMark } from "./LogoMark";
 import { motion } from "framer-motion";
 import { AuthButton } from "./AuthButton";
-import { useState, useEffect } from "react";
 import { NotificationDropdown } from "./NotificationDropdown";
 
 const navigation = [
@@ -33,16 +30,6 @@ const navigation = [
 export function Navigation() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
-  const { user } = useApp();
-  // const userInfo = useAuth();
-  //   console.log("User in Nav:", user);
-  //   console.log("UserInfo in Nav:", userInfo);
-
-  // FIX: Add client-side mount state
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-lg bg-white/70 dark:bg-gray-900/70 border-b border-gray-200 dark:border-gray-700">
@@ -50,14 +37,11 @@ export function Navigation() {
         <div className="flex items-center justify-between h-16 gap-8">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 shrink-0">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="w-8 h-8 bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] rounded-lg flex items-center justify-center"
-            >
-              <BookOpen className="w-5 h-5 text-white" />
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <LogoMark size={28} />
             </motion.div>
-            <span className="text-xl font-bold text-gradient-memory">
-              eStory
+            <span className="text-3xl font-bold bg-gradient-to-r from-[#d4a04a] via-[#9b7dd4] to-[#6c3dbd] bg-clip-text text-transparent" style={{ fontFamily: "var(--font-brand)", WebkitTextStroke: "0.5px currentColor" }}>
+              eStories
             </span>
           </Link>
 
@@ -83,21 +67,8 @@ export function Navigation() {
             })}
           </div>
 
-          {/* Right Side Actions - Spread out */}
+          {/* Right Side Actions */}
           <div className="flex items-center gap-2 lg:gap-3 shrink-0">
-            {/* Token Balance */}
-            {isClient && user && (
-              <div
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(var(--growth-100))] dark:bg-[hsl(var(--growth-900)/0.3)] rounded-full"
-                suppressHydrationWarning
-              >
-                <Coins className="w-4 h-4 text-[hsl(var(--growth-600))] dark:text-[hsl(var(--growth-400))]" />
-                <span className="text-xs lg:text-sm font-semibold text-[hsl(var(--growth-600))] dark:text-[hsl(var(--growth-400))]">
-                  {user.storyTokens}
-                </span>
-              </div>
-            )}
-
             {/* Notifications */}
             <NotificationDropdown />
 
@@ -106,7 +77,7 @@ export function Navigation() {
               variant="ghost"
               size="sm"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="w-9 h-9 p-0 hidden sm:flex"
+              className="w-9 h-9 p-0"
             >
               <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />

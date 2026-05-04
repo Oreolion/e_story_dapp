@@ -18,10 +18,14 @@ interface WalletTokenPayload extends JWTPayload {
 }
 
 function getSecret(): Uint8Array {
-  const raw =
-    process.env.WALLET_JWT_SECRET ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!raw) throw new Error("No JWT secret configured");
+  const raw = process.env.WALLET_JWT_SECRET;
+  if (!raw) {
+    throw new Error(
+      "WALLET_JWT_SECRET is not configured. " +
+        "Do NOT fall back to SUPABASE_SERVICE_ROLE_KEY — " +
+        "doing so would invalidate all wallet JWTs when the service key is rotated."
+    );
+  }
   return new TextEncoder().encode(raw);
 }
 

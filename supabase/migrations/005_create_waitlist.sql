@@ -17,7 +17,15 @@ CREATE INDEX IF NOT EXISTS idx_waitlist_created ON waitlist(created_at DESC);
 ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do everything (used by API routes via admin client)
-CREATE POLICY "Service role full access" ON waitlist
-  FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'waitlist' AND policyname = 'Service role full access'
+  ) THEN
+    CREATE POLICY "Service role full access" ON waitlist
+      FOR ALL
+      USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
+  END IF;
+END
+$$;

@@ -133,7 +133,7 @@ export default function SocialScreen() {
     try {
       await Share.share({
         title: story.title,
-        message: `"${story.title}" on eStories\n\nhttps://e-story-dapp.vercel.app/story/${story.id}`,
+        message: `"${story.title}" on eStories\n\nhttps://estories.app/story/${story.id}`,
       });
     } catch {}
   };

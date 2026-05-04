@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { validateAuthOrReject, isAuthError } from "@/lib/auth";
 
 // Lazy Supabase Admin Client (avoids build-time initialization)
 function getSupabase() {
@@ -29,7 +30,8 @@ interface NotificationPayload {
     | "tip"
     | "follow"
     | "book_published"
-    | "story_mentioned";
+    | "story_mentioned"
+    | "subscription";
   title: string;
   message: string;
   related_user_id?: string;
@@ -55,33 +57,6 @@ interface Notification {
 // ============================================
 // Helper Functions
 // ============================================
-
-/**
- * Validate user authentication
- */
-async function validateAuth(request: NextRequest): Promise<string | null> {
-  try {
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return null;
-    }
-
-    const token = authHeader.substring(7);
-    const {
-      data: { user },
-      error,
-    } = await supabase().auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
-    return user.id;
-  } catch (error) {
-    console.error("Auth validation error:", error);
-    return null;
-  }
-}
 
 /**
  * Get user from wallet address
@@ -170,6 +145,9 @@ async function getUserNotifications(
       .range(offset, offset + limit - 1);
 
     if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return { notifications: [], total: 0 };
+      }
       console.error("Error fetching notifications:", error);
       return null;
     }
@@ -287,6 +265,9 @@ async function getUnreadCount(userId: string): Promise<number> {
       .eq("read", false);
 
     if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+        return 0;
+      }
       console.error("Error getting unread count:", error);
       return 0;
     }
@@ -308,10 +289,9 @@ async function getUnreadCount(userId: string): Promise<number> {
  */
 export async function GET(request: NextRequest) {
   try {
-    const userId = await validateAuth(request);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await validateAuthOrReject(request);
+    if (isAuthError(authResult)) return authResult;
+    const userId = authResult;
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -368,98 +348,24 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/notifications
- * Create a new notification
- * Body: { type, title, message, related_user_id?, story_id?, link?, metadata?, wallet_address? }
+ * POST /api/notifications — RETIRED
+ *
+ * Previously allowed any authenticated user to create a notification for
+ * any other user (via wallet_address targeting), which is abusable as a
+ * notification-spam vector.
+ *
+ * Notifications are now created server-side only, from the specific
+ * routes that produce them (social/like, social/follow, social/comment,
+ * subscription, cre/callback, etc.) using the admin Supabase client.
  */
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await validateAuth(request);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const {
-      type,
-      title,
-      message,
-      related_user_id,
-      story_id,
-      link,
-      metadata,
-      wallet_address,
-    } = body;
-
-    // Validate required fields
-    if (!type || !title || !message) {
-      return NextResponse.json(
-        { error: "Missing required fields: type, title, message" },
-        { status: 400 }
-      );
-    }
-
-    // Validate notification type
-    const validTypes = [
-      "like",
-      "comment",
-      "tip",
-      "follow",
-      "book_published",
-      "story_mentioned",
-    ];
-    if (!validTypes.includes(type)) {
-      return NextResponse.json(
-        {
-          error: `Invalid notification type. Must be one of: ${validTypes.join(
-            ", "
-          )}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Get user ID from wallet if provided (for notifications from blockchain events)
-    let targetUserId = userId;
-    if (wallet_address) {
-      const walletUserId = await getUserIdFromWallet(wallet_address);
-      if (walletUserId) {
-        targetUserId = walletUserId;
-      }
-    }
-
-    const notification = await createNotification({
-      user_id: targetUserId,
-      type,
-      title,
-      message,
-      related_user_id,
-      story_id,
-      link,
-      metadata,
-    });
-
-    if (!notification) {
-      return NextResponse.json(
-        { error: "Failed to create notification" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: notification,
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("POST /api/notifications error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Creating notifications from the client is no longer allowed. Notifications are produced server-side by the action that generated them.",
+    },
+    { status: 410 }
+  );
 }
 
 /**
@@ -468,10 +374,9 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const userId = await validateAuth(request);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await validateAuthOrReject(request);
+    if (isAuthError(authResult)) return authResult;
+    const userId = authResult;
 
     const body = await request.json();
     const { notificationId, read, markAllAsRead } = body;
@@ -551,10 +456,9 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = await validateAuth(request);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await validateAuthOrReject(request);
+    if (isAuthError(authResult)) return authResult;
+    const userId = authResult;
 
     const body = await request.json();
     const { notificationId, deleteAll } = body;

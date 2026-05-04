@@ -1,0 +1,36 @@
+name: Production Health Check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    name: Check Production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Homepage
+        run: |
+          curl -sf --max-time 15 https://estories.app > /dev/null || (echo "HOMEPAGE_DOWN" && exit 1)
+
+      - name: Check Health API
+        run: |
+          curl -sf --max-time 15 https://estories.app/api/health > /dev/null || (echo "API_DOWN" && exit 1)
+
+      - name: Check Library Page
+        run: |
+          curl -sf --max-time 15 https://estories.app/library > /dev/null || (echo "LIBRARY_DOWN" && exit 1)
+
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Production health check failed — ${new Date().toISOString()}`,
+              body: `Health check detected that the production site may be down or degraded.\n\n- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n- Rollback: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/rollback.yml`,
+              labels: ['incident', 'production']
+            });

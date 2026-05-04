@@ -4,7 +4,8 @@ import * as dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local" });
 
-const config: HardhatUserConfig = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const config: HardhatUserConfig & { etherscan?: any; sourcify?: any } = {
   solidity: {
     version: "0.8.20",
     settings: {

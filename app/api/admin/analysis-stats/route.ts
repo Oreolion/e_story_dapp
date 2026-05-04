@@ -3,21 +3,20 @@ import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { analysisLogger } from "@/app/utils/analysisLogger";
 import { performanceMonitor } from "@/app/utils/performanceMonitor";
 import { safeCompare } from "@/lib/crypto";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 
 /**
  * Admin endpoint for monitoring analysis pipeline health.
- * Protected via ADMIN_SECRET bearer token.
- *
- * GET /api/admin/analysis-stats
- *
- * Returns:
- * - statusCounts: Count of stories by analysis status
- * - performance: Performance statistics for all tracked operations
- * - recentErrors: Most recent error logs
- * - recentLogs: Most recent logs of all levels
- * - summary: Quick health summary
+ * Protected via ADMIN_SECRET bearer token + rate limiting.
  */
 export async function GET(req: NextRequest) {
+  // Rate limit: 60 requests per hour per IP
+  const ip = getClientIp(req);
+  const { allowed } = checkRateLimit(`admin:analysis-stats:${ip}`, 60, 60 * 60_000);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   // Check admin authorization
   const authHeader = req.headers.get("authorization");
   const adminSecret = process.env.ADMIN_SECRET;

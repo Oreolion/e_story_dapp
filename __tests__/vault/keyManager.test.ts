@@ -24,6 +24,7 @@ describe("Vault Key Manager", () => {
     // Re-import db to get fresh instance
     const { getVaultDb } = await import("@/lib/vault/db");
     const db = getVaultDb();
+    if (!db) throw new Error("Vault DB unavailable in test environment");
     await db.vaultKeys.clear();
     await db.stories.clear();
   });

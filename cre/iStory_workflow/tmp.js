@@ -698,8 +698,10 @@ var init_base = __esm(() => {
 var AbiEncodingArrayLengthMismatchError;
 var AbiEncodingBytesSizeMismatchError;
 var AbiEncodingLengthMismatchError;
+var BytesSizeMismatchError;
 var InvalidAbiEncodingTypeError;
 var InvalidArrayError;
+var UnsupportedPackedAbiType;
 var init_abi = __esm(() => {
   init_size();
   init_base();
@@ -728,6 +730,13 @@ var init_abi = __esm(() => {
 `), { name: "AbiEncodingLengthMismatchError" });
     }
   };
+  BytesSizeMismatchError = class BytesSizeMismatchError2 extends BaseError2 {
+    constructor({ expectedSize, givenSize }) {
+      super(`Expected bytes${expectedSize}, got bytes${givenSize}.`, {
+        name: "BytesSizeMismatchError"
+      });
+    }
+  };
   InvalidAbiEncodingTypeError = class InvalidAbiEncodingTypeError2 extends BaseError2 {
     constructor(type, { docsPath }) {
       super([
@@ -742,6 +751,13 @@ var init_abi = __esm(() => {
       super([`Value "${value2}" is not a valid array.`].join(`
 `), {
         name: "InvalidArrayError"
+      });
+    }
+  };
+  UnsupportedPackedAbiType = class UnsupportedPackedAbiType2 extends BaseError2 {
+    constructor(type) {
+      super(`Type "${type}" is not supported for packed encoding.`, {
+        name: "UnsupportedPackedAbiType"
       });
     }
   };
@@ -1438,8 +1454,12 @@ var init_slice = __esm(() => {
   init_data();
   init_size();
 });
+var arrayRegex;
+var bytesRegex2;
 var integerRegex2;
 var init_regex2 = __esm(() => {
+  arrayRegex = /^(.*)\[([0-9]*)\]$/;
+  bytesRegex2 = /^bytes([1-9]|1[0-9]|2[0-9]|3[0-2])?$/;
   integerRegex2 = /^(u?int)(8|16|24|32|40|48|56|64|72|80|88|96|104|112|120|128|136|144|152|160|168|176|184|192|200|208|216|224|232|240|248|256)?$/;
 });
 function encodeAbiParameters(params, values) {
@@ -15877,7 +15897,75 @@ var sendErrorResponse = (error) => {
   hostBindings.sendResponse(payload);
 };
 init_exports();
+init_abi();
+init_address();
+init_isAddress();
+init_pad();
+init_toHex();
+init_regex2();
+function encodePacked(types4, values) {
+  if (types4.length !== values.length)
+    throw new AbiEncodingLengthMismatchError({
+      expectedLength: types4.length,
+      givenLength: values.length
+    });
+  const data = [];
+  for (let i2 = 0;i2 < types4.length; i2++) {
+    const type = types4[i2];
+    const value2 = values[i2];
+    data.push(encode(type, value2));
+  }
+  return concatHex(data);
+}
+function encode(type, value2, isArray = false) {
+  if (type === "address") {
+    const address = value2;
+    if (!isAddress(address))
+      throw new InvalidAddressError({ address });
+    return pad(address.toLowerCase(), {
+      size: isArray ? 32 : null
+    });
+  }
+  if (type === "string")
+    return stringToHex(value2);
+  if (type === "bytes")
+    return value2;
+  if (type === "bool")
+    return pad(boolToHex(value2), { size: isArray ? 32 : 1 });
+  const intMatch = type.match(integerRegex2);
+  if (intMatch) {
+    const [_type, baseType, bits = "256"] = intMatch;
+    const size2 = Number.parseInt(bits) / 8;
+    return numberToHex(value2, {
+      size: isArray ? 32 : size2,
+      signed: baseType === "int"
+    });
+  }
+  const bytesMatch = type.match(bytesRegex2);
+  if (bytesMatch) {
+    const [_type, size2] = bytesMatch;
+    if (Number.parseInt(size2) !== (value2.length - 2) / 2)
+      throw new BytesSizeMismatchError({
+        expectedSize: Number.parseInt(size2),
+        givenSize: (value2.length - 2) / 2
+      });
+    return pad(value2, { dir: "right", size: isArray ? 32 : null });
+  }
+  const arrayMatch = type.match(arrayRegex);
+  if (arrayMatch && Array.isArray(value2)) {
+    const [_type, childType] = arrayMatch;
+    const data = [];
+    for (let i2 = 0;i2 < value2.length; i2++) {
+      data.push(encode(childType, value2[i2], true));
+    }
+    if (data.length === 0)
+      return "0x";
+    return concatHex(data);
+  }
+  throw new UnsupportedPackedAbiType(type);
+}
 init_encodeAbiParameters();
+init_keccak256();
 var SYSTEM_PROMPT = `You are a content quality analyst. Analyze the provided story and return a JSON object with exactly these fields:
 
 - significanceScore: number 0-100 (how meaningful/impactful to the author's personal growth)
@@ -15892,9 +15980,9 @@ STRICT RULES:
 - Return ONLY the JSON object.`;
 function askGemini(runtime2, title, content) {
   runtime2.log("[Gemini] Querying AI for story analysis...");
-  const geminiApiKey = runtime2.getSecret({ id: "GEMINI_API_KEY" }).result();
+  const geminiApiKey = runtime2.getSecret({ id: "GEMINI_API_KEY" }).result().value;
   const httpClient = new cre.capabilities.HTTPClient;
-  const result = httpClient.sendRequest(runtime2, buildGeminiRequest(title, content, geminiApiKey.value), consensusIdenticalAggregation())(runtime2.config).result();
+  const result = httpClient.sendRequest(runtime2, buildGeminiRequest(title, content, geminiApiKey), consensusIdenticalAggregation())(runtime2.config).result();
   runtime2.log(`[Gemini] Analysis complete: significance=${result.metrics.significanceScore}, quality=${result.metrics.qualityScore}`);
   return result.metrics;
 }
@@ -15923,15 +16011,11 @@ ${content}
   const resp = sendRequester.sendRequest({
     url: `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent`,
     method: "POST",
-    body,
     headers: {
       "Content-Type": "application/json",
       "x-goog-api-key": apiKey
     },
-    cacheSettings: {
-      store: true,
-      maxAge: "60s"
-    }
+    body
   }).result();
   const bodyText = new TextDecoder().decode(resp.body);
   if (!ok(resp)) {
@@ -15963,10 +16047,21 @@ function deduplicateThemes(themes) {
   const unique = [...new Set(strings)];
   return unique.slice(0, 5);
 }
-var STORE_METRICS_PARAMS = parseAbiParameters("bytes32 storyId, address author, uint8 significanceScore, uint8 emotionalDepth, uint8 qualityScore, uint32 wordCount, string[] themes, bytes32 attestationId");
+var STORE_METRICS_PARAMS = parseAbiParameters("bytes32 storyId, bytes32 authorCommitment, bool meetsQualityThreshold, uint8 qualityTier, bytes32 metricsHash, bytes32 attestationId");
+function scoreToTier(score) {
+  if (score <= 20)
+    return 1;
+  if (score <= 40)
+    return 2;
+  if (score <= 60)
+    return 3;
+  if (score <= 80)
+    return 4;
+  return 5;
+}
 function onHttpTrigger(runtime2, payload) {
   runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  runtime2.log("CRE Workflow: iStory Story Verification");
+  runtime2.log("CRE Workflow: eStory Privacy-Preserving Verification");
   runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   try {
     if (!payload.input || payload.input.length === 0) {
@@ -15979,7 +16074,7 @@ function onHttpTrigger(runtime2, payload) {
       runtime2.log("[ERROR] Missing required fields");
       return "Error: Missing storyId, content, or authorWallet";
     }
-    runtime2.log("[Step 2] Querying Gemini AI for story analysis...");
+    runtime2.log("[Step 2] Querying Gemini AI...");
     let metrics;
     try {
       metrics = askGemini(runtime2, input.title || "Untitled", input.content);
@@ -15990,6 +16085,23 @@ function onHttpTrigger(runtime2, payload) {
     }
     runtime2.log(`[Step 2] Results: significance=${metrics.significanceScore}, depth=${metrics.emotionalDepth}, quality=${metrics.qualityScore}, words=${metrics.wordCount}`);
     runtime2.log(`[Step 2] Themes: ${metrics.themes.join(", ")}`);
+    runtime2.log("[Step 3] Deriving privacy-preserving fields...");
+    const storyIdBytes32 = `0x${input.storyId.replace(/-/g, "").padEnd(64, "0")}`;
+    const qualityTier = scoreToTier(metrics.qualityScore);
+    const meetsQualityThreshold = metrics.qualityScore >= 70;
+    const salt = keccak256(storyIdBytes32);
+    const metricsHash = keccak256(encodeAbiParameters(parseAbiParameters("uint8 significanceScore, uint8 emotionalDepth, uint8 qualityScore, uint32 wordCount, string[] themes, bytes32 salt"), [
+      metrics.significanceScore,
+      metrics.emotionalDepth,
+      metrics.qualityScore,
+      metrics.wordCount,
+      metrics.themes,
+      salt
+    ]));
+    const authorCommitment = keccak256(encodePacked(["address", "bytes32"], [input.authorWallet, storyIdBytes32]));
+    runtime2.log(`[Step 3] qualityTier=${qualityTier}, meetsThreshold=${meetsQualityThreshold}`);
+    runtime2.log(`[Step 3] metricsHash=${metricsHash.slice(0, 18)}...`);
+    runtime2.log(`[Step 3] authorCommitment=${authorCommitment.slice(0, 18)}...`);
     const evmConfig = runtime2.config.evms[0];
     const network248 = getNetwork({
       chainFamily: "evm",
@@ -15999,29 +16111,26 @@ function onHttpTrigger(runtime2, payload) {
     if (!network248) {
       throw new Error(`Unknown chain: ${evmConfig.chainSelectorName}`);
     }
-    runtime2.log(`[Step 3] Target chain: ${evmConfig.chainSelectorName}`);
-    runtime2.log(`[Step 3] Contract: ${evmConfig.verifiedMetricsAddress}`);
+    runtime2.log(`[Step 4] Target chain: ${evmConfig.chainSelectorName}`);
+    runtime2.log(`[Step 4] Contract: ${evmConfig.verifiedMetricsAddress}`);
     const evmClient = new cre.capabilities.EVMClient(network248.chainSelector.selector);
-    runtime2.log("[Step 4] Encoding metrics data...");
-    const storyIdBytes32 = `0x${input.storyId.replace(/-/g, "").padEnd(64, "0")}`;
+    runtime2.log("[Step 5] Encoding minimal privacy-preserving data...");
     const reportData = encodeAbiParameters(STORE_METRICS_PARAMS, [
       storyIdBytes32,
-      input.authorWallet,
-      metrics.significanceScore,
-      metrics.emotionalDepth,
-      metrics.qualityScore,
-      metrics.wordCount,
-      metrics.themes,
+      authorCommitment,
+      meetsQualityThreshold,
+      qualityTier,
+      metricsHash,
       storyIdBytes32
     ]);
-    runtime2.log("[Step 5] Generating CRE report...");
+    runtime2.log("[Step 6] Generating CRE report...");
     const reportResponse = runtime2.report({
       encodedPayload: hexToBase64(reportData),
       encoderName: "evm",
       signingAlgo: "ecdsa",
       hashingAlgo: "keccak256"
     }).result();
-    runtime2.log(`[Step 6] Writing to contract: ${evmConfig.verifiedMetricsAddress}`);
+    runtime2.log(`[Step 7] Writing to contract: ${evmConfig.verifiedMetricsAddress}`);
     const writeResult = evmClient.writeReport(runtime2, {
       receiver: evmConfig.verifiedMetricsAddress,
       report: reportResponse,
@@ -16029,13 +16138,43 @@ function onHttpTrigger(runtime2, payload) {
         gasLimit: evmConfig.gasLimit
       }
     }).result();
+    let txHash = "0x";
     if (writeResult.txStatus === TxStatus.SUCCESS) {
-      const txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
-      runtime2.log(`[Step 7] Verification successful: ${txHash}`);
-      runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      return txHash;
+      txHash = bytesToHex(writeResult.txHash || new Uint8Array(32));
+      runtime2.log(`[Step 7] On-chain write successful: ${txHash}`);
+    } else {
+      throw new Error(`Transaction failed with status: ${writeResult.txStatus}`);
     }
-    throw new Error(`Transaction failed with status: ${writeResult.txStatus}`);
+    runtime2.log("[Step 8] Sending full metrics via callback...");
+    if (runtime2.config.callbackUrl) {
+      try {
+        const callbackSecret = runtime2.getSecret({ id: "CRE_CALLBACK_SECRET" }).result().value;
+        const httpClient = new cre.capabilities.HTTPClient;
+        const callbackPayload = {
+          storyId: input.storyId,
+          authorWallet: input.authorWallet,
+          metricsHash,
+          txHash,
+          significanceScore: metrics.significanceScore,
+          emotionalDepth: metrics.emotionalDepth,
+          qualityScore: metrics.qualityScore,
+          wordCount: metrics.wordCount,
+          themes: metrics.themes,
+          qualityTier,
+          meetsQualityThreshold
+        };
+        const callbackBody = Buffer.from(new TextEncoder().encode(JSON.stringify(callbackPayload))).toString("base64");
+        httpClient.sendRequest(runtime2, buildCallbackRequest(callbackBody, callbackSecret), consensusIdenticalAggregation())(runtime2.config).result();
+        runtime2.log("[Step 8] Callback sent successfully");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        runtime2.log(`[Step 8] Callback failed (non-critical): ${msg}`);
+      }
+    } else {
+      runtime2.log("[Step 8] No callbackUrl configured, skipping");
+    }
+    runtime2.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    return txHash;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     runtime2.log(`[ERROR] ${msg}`);
@@ -16043,6 +16182,18 @@ function onHttpTrigger(runtime2, payload) {
     throw err;
   }
 }
+var buildCallbackRequest = (body, secret) => (sendRequester, config) => {
+  sendRequester.sendRequest({
+    url: config.callbackUrl,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CRE-Callback-Secret": secret
+    },
+    body
+  }).result();
+  return { success: true };
+};
 var initWorkflow = (config) => {
   const httpCapability = new cre.capabilities.HTTPCapability;
   const httpTrigger = httpCapability.trigger({});

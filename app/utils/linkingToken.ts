@@ -1,6 +1,11 @@
 import crypto from "crypto";
 
-const SECRET = process.env.LINK_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-secret";
+function getSecret(): string {
+  const s = process.env.LINK_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!s) throw new Error("No LINK_TOKEN_SECRET or SUPABASE_SERVICE_ROLE_KEY configured");
+  return s;
+}
+
 const TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
 export interface LinkingTokenPayload {
@@ -23,7 +28,7 @@ export function createLinkingToken(userId: string, walletAddress: string): strin
   const payloadStr = JSON.stringify(payload);
   const payloadB64 = Buffer.from(payloadStr).toString("base64url");
 
-  const hmac = crypto.createHmac("sha256", SECRET);
+  const hmac = crypto.createHmac("sha256", getSecret());
   hmac.update(payloadB64);
   const signature = hmac.digest("base64url");
 
@@ -39,12 +44,14 @@ export function verifyLinkingToken(token: string): LinkingTokenPayload | null {
     const [payloadB64, signature] = token.split(".");
     if (!payloadB64 || !signature) return null;
 
-    // Verify signature
-    const hmac = crypto.createHmac("sha256", SECRET);
+    // Verify signature (timing-safe to prevent HMAC oracle attacks)
+    const hmac = crypto.createHmac("sha256", getSecret());
     hmac.update(payloadB64);
     const expectedSig = hmac.digest("base64url");
 
-    if (signature !== expectedSig) return null;
+    const sigBuf = Buffer.from(signature, "base64url");
+    const expBuf = Buffer.from(expectedSig, "base64url");
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) return null;
 
     // Decode and check expiry
     const payloadStr = Buffer.from(payloadB64, "base64url").toString("utf8");

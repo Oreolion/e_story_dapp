@@ -31,6 +31,7 @@ const dekMap = new Map<string, CryptoKey>();
  */
 export async function setupVault(userId: string, pin: string): Promise<void> {
   const db = getVaultDb();
+  if (!db) throw new Error("Local vault is not supported in this browser");
 
   // Check if vault already exists
   const existing = await db.vaultKeys.get(userId);
@@ -75,6 +76,7 @@ export async function unlockVault(
   pin: string
 ): Promise<boolean> {
   const db = getVaultDb();
+  if (!db) throw new Error("Local vault is not supported in this browser");
 
   const record = await db.vaultKeys.get(userId);
   if (!record) {
@@ -116,8 +118,14 @@ export function lockVault(userId: string): void {
  */
 export async function isVaultSetup(userId: string): Promise<boolean> {
   const db = getVaultDb();
-  const record = await db.vaultKeys.get(userId);
-  return !!record;
+  if (!db) return false;
+  try {
+    const record = await db.vaultKeys.get(userId);
+    return !!record;
+  } catch (err) {
+    console.warn("[vault] isVaultSetup read failed:", err);
+    return false;
+  }
 }
 
 /**
@@ -148,6 +156,7 @@ export async function changePin(
   newPin: string
 ): Promise<void> {
   const db = getVaultDb();
+  if (!db) throw new Error("Local vault is not supported in this browser");
 
   const record = await db.vaultKeys.get(userId);
   if (!record) {
@@ -187,6 +196,7 @@ export async function getWrappedKeyMaterial(
   userId: string
 ): Promise<{ salt: string; wrappedDek: string } | null> {
   const db = getVaultDb();
+  if (!db) return null;
   const record = await db.vaultKeys.get(userId);
   if (!record) return null;
   return {
@@ -210,6 +220,7 @@ export async function importWrappedKeyMaterial(
   );
 
   const db = getVaultDb();
+  if (!db) throw new Error("Local vault is not supported in this browser");
   await db.vaultKeys.put({
     userId,
     salt,

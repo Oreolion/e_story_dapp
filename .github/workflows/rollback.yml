@@ -1,0 +1,65 @@
+name: Rollback Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      method:
+        description: "Rollback method"
+        required: true
+        default: "git-revert"
+        type: choice
+        options:
+          - git-revert
+          - vercel-previous
+      reason:
+        description: "Reason for rollback"
+        required: true
+        default: "Smoke tests failed after deploy"
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Git Revert Last Commit
+        if: ${{ github.event.inputs.method == 'git-revert' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git revert HEAD --no-edit
+          git push origin master
+          echo "Reverted HEAD on master. Vercel will auto-deploy the previous version."
+
+      - name: Promote Previous Vercel Deployment
+        if: ${{ github.event.inputs.method == 'vercel-previous' }}
+        run: |
+          # Requires VERCEL_TOKEN secret. See docs/DEPLOYMENT.md for setup.
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "::error::VERCEL_TOKEN secret is not configured. Cannot use Vercel rollback."
+            exit 1
+          fi
+          npm install -g vercel@latest
+          vercel rollback --yes --token ${{ secrets.VERCEL_TOKEN }} --scope ${{ secrets.VERCEL_ORG_ID || 'abami-tech' }}
+
+      - name: Log Rollback
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Production rollback executed — ${new Date().toISOString()}`,
+              body: `**Method:** ${{ github.event.inputs.method }}\n**Reason:** ${{ github.event.inputs.reason }}\n**Triggered by:** @${{ github.actor }}\n\n[View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
+              labels: ['incident', 'rollback', 'production']
+            });

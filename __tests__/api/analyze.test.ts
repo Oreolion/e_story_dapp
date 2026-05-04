@@ -25,6 +25,10 @@ const mockSupabaseSingle = vi.fn();
 const mockOwnershipSelect = vi.fn();
 const mockOwnershipEq = vi.fn();
 const mockOwnershipSingle = vi.fn();
+// For users table (subscription check)
+const mockUserSelect = vi.fn();
+const mockUserEq = vi.fn();
+const mockUserSingle = vi.fn();
 
 vi.mock("@/app/utils/supabase/supabaseAdmin", () => ({
   createSupabaseAdminClient: () => ({
@@ -65,6 +69,7 @@ function setupSupabaseMock(options: {
   upsertData?: object | null;
   upsertError?: { code?: string; message?: string } | null;
   ownerAuthorId?: string; // defaults to MOCK_USER_ID (passes ownership check)
+  isPaidUser?: boolean; // defaults to true (skips monthly limit check)
 }) {
   // Ownership check: from("stories").select("author_id").eq("id", storyId).single()
   mockOwnershipSingle.mockResolvedValue({
@@ -73,6 +78,17 @@ function setupSupabaseMock(options: {
   });
   mockOwnershipEq.mockReturnValue({ single: mockOwnershipSingle });
   mockOwnershipSelect.mockReturnValue({ eq: mockOwnershipEq });
+
+  // Users table: subscription check — default to paid user to skip monthly limit logic
+  const isPaid = options.isPaidUser ?? true;
+  mockUserSingle.mockResolvedValue({
+    data: isPaid
+      ? { subscription_plan: "storyteller", subscription_expires_at: "2099-12-31T00:00:00Z" }
+      : { subscription_plan: "free", subscription_expires_at: null },
+    error: null,
+  });
+  mockUserEq.mockReturnValue({ single: mockUserSingle });
+  mockUserSelect.mockReturnValue({ eq: mockUserEq });
 
   // Upsert chain: from("story_metadata").upsert(...).select().single()
   mockSupabaseSingle.mockResolvedValue({
@@ -92,6 +108,9 @@ function setupSupabaseMock(options: {
   mockSupabaseFrom.mockImplementation((table: string) => {
     if (table === "stories") {
       return { select: mockOwnershipSelect };
+    }
+    if (table === "users") {
+      return { select: mockUserSelect };
     }
     // story_metadata
     return { upsert: mockSupabaseUpsert };

@@ -16,6 +16,7 @@ export function useStoryProtocol() {
     abi: STORY_TOKEN_ABI,
     functionName: "allowance",
     args: address ? [address, STORY_PROTOCOL_ADDRESS] : undefined,
+    query: { enabled: !!address },
   });
 
   // Cast allowance data to bigint (useReadContract returns {} | undefined)

@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
       badges: user.badges || [],
       auth_provider: user.auth_provider,
       is_onboarded: user.is_onboarded,
+      google_id: user.google_id || null,
+      subscription_plan: user.subscription_plan || "free",
+      subscription_expires_at: user.subscription_expires_at || null,
       followers_count: user.followers_count || 0,
       stats: {
         stories: storyCount || 0,
@@ -50,7 +53,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: profile
+      user: profile,
+      data: profile,
     });
 
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
+import { validateAuthOrReject, isAuthError } from "@/lib/auth";
 
 // ============================================================================
 // Configuration Constants
@@ -144,18 +145,45 @@ function parseAndValidateReflection(
 
 export async function GET(req: NextRequest) {
   try {
+    const authResult = await validateAuthOrReject(req);
+    if (isAuthError(authResult)) return authResult;
+    const authenticatedUserId = authResult;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
+    const userId = searchParams.get("userId") || authenticatedUserId;
     const limit = parseInt(searchParams.get("limit") || "5");
 
-    if (!userId) {
+    // Users can only fetch their own reflections
+    if (userId !== authenticatedUserId) {
       return NextResponse.json(
-        { error: "Missing required parameter: userId" },
-        { status: 400 }
+        { error: "You can only access your own reflections" },
+        { status: 403 }
       );
     }
 
     const supabase = createSupabaseAdminClient();
+
+    // Subscription check — weekly reflections require storyteller+ plan
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("subscription_plan, subscription_expires_at")
+      .eq("id", authenticatedUserId)
+      .single();
+
+    const subPlan = userRow?.subscription_plan ?? "free";
+    const subExpires = userRow?.subscription_expires_at;
+    const isPaid = subPlan !== "free" && subExpires && new Date(subExpires) > new Date();
+
+    if (!isPaid) {
+      return NextResponse.json(
+        {
+          error: "Weekly reflections require a Storyteller or Creator plan.",
+          code: "PLAN_REQUIRED",
+          required_plan: "storyteller",
+        },
+        { status: 403 }
+      );
+    }
 
     const { data, error } = await supabase
       .from("weekly_reflections")
@@ -203,6 +231,33 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await validateAuthOrReject(req);
+    if (isAuthError(authResult)) return authResult;
+    const authenticatedUserId = authResult;
+
+    // Subscription check — weekly reflections require storyteller+ plan
+    const adminClient = createSupabaseAdminClient();
+    const { data: postUserRow } = await adminClient
+      .from("users")
+      .select("subscription_plan, subscription_expires_at")
+      .eq("id", authenticatedUserId)
+      .single();
+
+    const postSubPlan = postUserRow?.subscription_plan ?? "free";
+    const postSubExpires = postUserRow?.subscription_expires_at;
+    const postIsPaid = postSubPlan !== "free" && postSubExpires && new Date(postSubExpires) > new Date();
+
+    if (!postIsPaid) {
+      return NextResponse.json(
+        {
+          error: "Weekly reflections require a Storyteller or Creator plan.",
+          code: "PLAN_REQUIRED",
+          required_plan: "storyteller",
+        },
+        { status: 403 }
+      );
+    }
+
     // Check API key configuration
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) {
@@ -214,16 +269,17 @@ export async function POST(req: NextRequest) {
 
     // Parse request body
     const body = await req.json();
-    const { userId, userWallet } = body;
+    const { userWallet } = body;
+    const userId = authenticatedUserId;
 
-    if (!userId || !userWallet) {
+    if (!userWallet) {
       return NextResponse.json(
-        { error: "Missing required fields: userId and userWallet" },
+        { error: "Missing required field: userWallet" },
         { status: 400 }
       );
     }
 
-    const supabase = createSupabaseAdminClient();
+    const supabase = adminClient; // reuse client from subscription check
     const { weekStart, weekEnd } = getWeekBounds();
 
     // Rate limit check: 1 reflection per week

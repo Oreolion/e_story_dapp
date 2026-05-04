@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = "https://estory.vercel.app";
+  const baseUrl = "https://estories.app";
 
   const staticRoutes: MetadataRoute.Sitemap = [
     {

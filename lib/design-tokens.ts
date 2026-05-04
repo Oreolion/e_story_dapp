@@ -8,58 +8,6 @@
 import type { EmotionalTone, LifeDomain, StoryMetadata } from "@/app/types";
 
 // ============================================
-// SECTION 1: Color Variable Getters
-// ============================================
-
-/**
- * Get a CSS variable reference for a semantic color
- */
-export function getColorVar(
-  color: "memory" | "insight" | "story" | "growth",
-  shade: 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 = 500
-): string {
-  return `hsl(var(--${color}-${shade}))`;
-}
-
-/**
- * Get a CSS variable reference for void/background colors
- */
-export function getVoidVar(
-  level: "deep" | "medium" | "light" | "surface"
-): string {
-  return `hsl(var(--void-${level}))`;
-}
-
-/**
- * Get a CSS variable reference for emotional tone colors
- */
-export function getToneVar(
-  tone: EmotionalTone,
-  variant: "primary" | "subtle" = "primary"
-): string {
-  const suffix = variant === "subtle" ? "-subtle" : "";
-  return `hsl(var(--tone-${tone}${suffix}))`;
-}
-
-/**
- * Get a CSS variable reference for life domain colors
- */
-export function getDomainVar(domain: LifeDomain): string {
-  return `hsl(var(--domain-${domain}))`;
-}
-
-/**
- * Get a glow effect CSS variable
- */
-export function getGlowVar(
-  type: "memory" | "insight" | "story" | "growth" | "canonical",
-  strong: boolean = false
-): string {
-  const suffix = strong ? "-strong" : "";
-  return `var(--glow-${type}${suffix})`;
-}
-
-// ============================================
 // SECTION 2: Emotional Tone Mappings
 // ============================================
 
@@ -242,64 +190,7 @@ export function getCardClass(metadata?: StoryMetadata | null): string {
 }
 
 // ============================================
-// SECTION 6: Gradient Text Classes
-// ============================================
-
-/**
- * Gradient text class constants
- */
-export const gradientText = {
-  memory: "text-gradient-memory",
-  insight: "text-gradient-insight",
-  story: "text-gradient-story",
-  growth: "text-gradient-growth",
-  cosmic: "text-gradient-cosmic",
-} as const;
-
-// ============================================
-// SECTION 7: Background Classes
-// ============================================
-
-/**
- * Background class constants
- */
-export const backgrounds = {
-  voidDeep: "bg-void-deep",
-  voidMedium: "bg-void-medium",
-  voidLight: "bg-void-light",
-  voidSurface: "bg-void-surface",
-  gradientVoid: "bg-gradient-void",
-  gradientMemory: "bg-gradient-memory",
-  gradientInsight: "bg-gradient-insight",
-  gradientStory: "bg-gradient-story",
-  gradientGrowth: "bg-gradient-growth",
-} as const;
-
-// ============================================
-// SECTION 8: Focus & Interaction Classes
-// ============================================
-
-/**
- * Focus ring class constants
- */
-export const focusRings = {
-  memory: "focus-ring-memory",
-  insight: "focus-ring-insight",
-  story: "focus-ring-story",
-} as const;
-
-/**
- * Hover glow class constants
- */
-export const hoverGlows = {
-  memory: "hover-glow-memory",
-  insight: "hover-glow-insight",
-  story: "hover-glow-story",
-  canonical: "hover-glow-canonical",
-} as const;
-
-// ============================================
-// SECTION 9: Helper Functions
+// SECTION 6: Helper Functions
 // ============================================
 
 /**
@@ -358,48 +249,9 @@ export function getStoryCardClasses(metadata?: StoryMetadata | null): string {
 }
 
 // ============================================
-// SECTION 10: Z-Index Values
+// SECTION 7: Type Exports
 // ============================================
 
-/**
- * Z-index layer values for consistent stacking
- */
-export const layers = {
-  base: 0,
-  elevated: 10,
-  dropdown: 100,
-  sticky: 200,
-  modalBackdrop: 300,
-  modal: 400,
-  popover: 500,
-  tooltip: 600,
-  toast: 700,
-  max: 9999,
-} as const;
-
-// ============================================
-// SECTION 11: Duration Values (in ms)
-// ============================================
-
-/**
- * Animation/transition duration values
- */
-export const durations = {
-  fast: 150,
-  normal: 250,
-  slow: 400,
-  slower: 600,
-  slowest: 1000,
-} as const;
-
-// ============================================
-// SECTION 12: Type Exports
-// ============================================
-
-export type SemanticColor = "memory" | "insight" | "story" | "growth";
-export type ColorShade = 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
-export type VoidLevel = "deep" | "medium" | "light" | "surface";
-export type GlowType = "memory" | "insight" | "story" | "growth" | "canonical";
 export type SignificanceLevel = "low" | "medium" | "high";
 export type CardVariant = keyof typeof cardClasses;
 export type AnimationClass = keyof typeof animations;

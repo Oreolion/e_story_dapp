@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/record", "/library", "/profile", "/tracker", "/books/"],
       },
     ],
-    sitemap: "https://estory.vercel.app/sitemap.xml",
+    sitemap: "https://estories.app/sitemap.xml",
   };
 }

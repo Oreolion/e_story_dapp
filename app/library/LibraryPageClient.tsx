@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
@@ -9,6 +10,13 @@ import { useApp } from "../../components/Provider";
 import { useAuth } from "../../components/AuthProvider";
 import { useStoryNFT } from "../hooks/useStoryNFT";
 import { usePatterns } from "../hooks/usePatterns";
+import {
+  useUserStories,
+  useUserBooks,
+  useLibraryCollections,
+  useCreateCollection,
+  useDeleteCollection,
+} from "@/lib/queries/hooks";
 import { supabaseClient } from "../utils/supabase/supabaseClient";
 import { ipfsService } from "../utils/ipfsService";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
@@ -49,13 +57,16 @@ import {
   Star,
   Tags,
   Compass,
+  ChevronDown,
+  FolderOpen,
+  Trash2,
 } from "lucide-react";
-import { moodColors, StoryWithMetadata } from "../types/index";
+import { BrandedLoader } from "@/components/ui/branded-loader";
+import { moodColors, StoryWithMetadata, StoryCollection } from "../types/index";
 
 // Import pattern components
 import { ThemesView } from "@/components/patterns/ThemesView";
 import { DomainsView } from "@/components/patterns/DomainsView";
-import { MonthlySummary } from "@/components/patterns/MonthlySummary";
 
 // --- Types ---
 interface BaseEntry {
@@ -86,14 +97,72 @@ interface BookEntry extends BaseEntry {
 
 type LibraryItem = StoryEntry | BookEntry;
 
+interface MonthGroup {
+  key: string; // "2026-03"
+  label: string; // "March 2026"
+  entries: LibraryItem[];
+  storyCount: number;
+  bookCount: number;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function getEntryDate(entry: LibraryItem): Date {
+  if (entry.type === "entry") return new Date(entry.story_date);
+  return new Date(entry.created_at);
+}
+
+function getMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthLabel(date: Date): string {
+  return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function groupByMonth(entries: LibraryItem[]): MonthGroup[] {
+  const map = new Map<string, LibraryItem[]>();
+  entries.forEach((entry) => {
+    const date = getEntryDate(entry);
+    const key = getMonthKey(date);
+    const arr = map.get(key) || [];
+    arr.push(entry);
+    map.set(key, arr);
+  });
+
+  return Array.from(map.entries())
+    .sort((a, b) => b[0].localeCompare(a[0])) // newest months first
+    .map(([key, items]) => {
+      const date = getEntryDate(items[0]);
+      return {
+        key,
+        label: getMonthLabel(date),
+        entries: items,
+        storyCount: items.filter((e) => e.type === "entry").length,
+        bookCount: items.filter((e) => e.type === "book").length,
+      };
+    });
+}
+
+function isCurrentMonth(key: string): boolean {
+  const now = new Date();
+  return key === getMonthKey(now);
+}
+
+// ─── Main Component ───────────────────────────────────────────────────
+
 export default function LibraryPage() {
   const { isConnected } = useApp();
-  const { profile: authInfo, getAccessToken } = useAuth();
+  const { profile: authInfo, getAccessToken, isLoading: isAuthLoading } = useAuth();
   const supabase = supabaseClient;
   const router = useRouter();
 
-  // Set background mode for this page
-  useBackgroundMode('library');
+  useBackgroundMode("library");
 
   // Blockchain Hook
   const { mintBook, isPending: isMinting } = useStoryNFT();
@@ -104,23 +173,65 @@ export default function LibraryPage() {
     themeGroups,
     domainGroups,
     canonicalStories,
-    monthlySummary,
     isLoading: patternsLoading,
   } = usePatterns();
 
-  // Data State
-  const [entries, setEntries] = useState<LibraryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // React Query data hooks
+  const { data: storiesData, isLoading: isStoriesLoading } = useUserStories();
+  const { data: booksData, isLoading: isBooksLoading } = useUserBooks(authInfo?.id || "");
+  const { data: collectionsData, isLoading: isCollectionsLoading } = useLibraryCollections();
+  const createCollection = useCreateCollection();
+  const deleteCollection = useDeleteCollection();
+  const qc = useQueryClient();
+
+  const isLoading = isStoriesLoading || isBooksLoading || isAuthLoading;
+
+  const entries = useMemo<LibraryItem[]>(() => {
+    const formattedStories: StoryEntry[] = (storiesData?.stories || []).map((s: any) => ({
+      type: "entry",
+      id: s.id,
+      title: s.title || "Untitled Story",
+      content: s.content || "",
+      created_at: s.created_at,
+      story_date: s.story_date || s.created_at,
+      is_public: s.is_public || false,
+      likes: s.likes || 0,
+      views: s.view_count ?? s.views ?? 0,
+      has_audio: s.has_audio,
+      audio_url: s.audio_url,
+      mood: s.mood || "neutral",
+      tags: s.tags || [],
+    }));
+
+    const formattedBooks: BookEntry[] = (booksData || []).map((b: any) => ({
+      type: "book",
+      id: b.id,
+      title: b.title || "Untitled Book",
+      description: b.description || "",
+      created_at: b.created_at,
+      likes: b.likes || 0,
+      views: b.views || 0,
+      story_ids: b.story_ids || [],
+      ipfs_hash: b.ipfs_hash,
+      mood: "excited",
+      tags: ["compilation"],
+    }));
+
+    return [...formattedStories, ...formattedBooks].sort(
+      (a, b) => getEntryDate(b).getTime() - getEntryDate(a).getTime()
+    );
+  }, [storiesData, booksData]);
+
+  const collections = collectionsData?.collections || [];
 
   // UI State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
 
   // Compilation State
   const [isCompiling, setIsCompiling] = useState(false);
-  const [selectedStoryIds, setSelectedStoryIds] = useState<Set<string>>(
-    new Set()
-  );
+  const [selectedStoryIds, setSelectedStoryIds] = useState<Set<string>>(new Set());
   const [isBookDialogOpen, setIsBookDialogOpen] = useState(false);
 
   // New Book Form State
@@ -128,114 +239,67 @@ export default function LibraryPage() {
   const [newBookDesc, setNewBookDesc] = useState("");
   const [isSavingBook, setIsSavingBook] = useState(false);
 
-  // --- 1. Fetch Data ---
-  const fetchData = async () => {
-    if (!authInfo?.id || !supabase) return;
-    setIsLoading(true);
+  // Collections UI State
+  const [isCreateCollectionOpen, setIsCreateCollectionOpen] = useState(false);
+  const [newCollectionTitle, setNewCollectionTitle] = useState("");
+  const [newCollectionDesc, setNewCollectionDesc] = useState("");
 
-    try {
-      // Fetch Stories via auth-protected API route (bypasses RLS via admin client)
-      let storiesData: any[] = [];
-      const token = await getAccessToken();
-
-      if (token) {
-        try {
-          const storiesRes = await fetch("/api/stories", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (storiesRes.ok) {
-            const json = await storiesRes.json();
-            storiesData = json.stories || [];
-          } else {
-            console.error("[LIBRARY] /api/stories returned", storiesRes.status);
-          }
-        } catch (err) {
-          console.error("[LIBRARY] /api/stories fetch error:", err);
-        }
-      } else {
-        console.warn("[LIBRARY] No auth token available — cannot fetch stories via API");
+  const handleCreateCollection = async () => {
+    if (!newCollectionTitle.trim()) return toast.error("Title is required");
+    createCollection.mutate(
+      { title: newCollectionTitle.trim(), description: newCollectionDesc.trim() || null },
+      {
+        onSuccess: () => {
+          toast.success("Collection created!");
+          setIsCreateCollectionOpen(false);
+          setNewCollectionTitle("");
+          setNewCollectionDesc("");
+        },
+        onError: (err: any) => {
+          toast.error(err?.message || "Failed to create collection");
+        },
       }
-
-      // Fallback: direct Supabase query (works if RLS session matches)
-      if (storiesData.length === 0 && supabase) {
-        const { data: directData, error: directErr } = await supabase
-          .from("stories")
-          .select("*")
-          .eq("author_id", authInfo.id)
-          .order("created_at", { ascending: false });
-        if (directErr) {
-          console.error("[LIBRARY] Direct Supabase fallback error:", directErr);
-        }
-        storiesData = directData || [];
-      }
-
-      // Fetch Books (keep direct Supabase — books don't have RLS issues)
-      const { data: booksData, error: booksError } = await supabase
-        .from("books")
-        .select("*")
-        .eq("author_id", authInfo.id)
-        .order("created_at", { ascending: false });
-
-      const formattedStories: StoryEntry[] = (storiesData || []).map((s) => ({
-        type: "entry",
-        id: s.id,
-        title: s.title || "Untitled Story",
-        content: s.content || "",
-        created_at: s.created_at,
-        // Map new fields
-        story_date: s.story_date || s.created_at,
-        is_public: s.is_public || false,
-
-        likes: s.likes || 0,
-        views: s.views || 0,
-        has_audio: s.has_audio,
-        audio_url: s.audio_url,
-        mood: s.mood || "neutral",
-        tags: s.tags || [],
-      }));
-
-      const formattedBooks: BookEntry[] = (booksData || []).map((b) => ({
-        type: "book",
-        id: b.id,
-        title: b.title || "Untitled Book",
-        description: b.description || "",
-        created_at: b.created_at,
-        likes: b.likes || 0,
-        views: b.views || 0,
-        story_ids: b.story_ids || [],
-        ipfs_hash: b.ipfs_hash,
-        mood: "excited",
-        tags: ["compilation"],
-      }));
-
-      // Sort combined list: Prefer story_date for entries, created_at for books
-      const allEntries = [...formattedStories, ...formattedBooks].sort(
-        (a, b) => {
-          const dateA =
-            a.type === "entry" ? (a as StoryEntry).story_date : a.created_at;
-          const dateB =
-            b.type === "entry" ? (b as StoryEntry).story_date : b.created_at;
-          return new Date(dateB).getTime() - new Date(dateA).getTime();
-        }
-      );
-
-      setEntries(allEntries);
-    } catch (err: unknown) {
-      console.error("Library fetch error:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    );
   };
 
-  useEffect(() => {
-    if (authInfo?.id) {
-      fetchData();
-    } else {
-      setIsLoading(false);
-    }
-  }, [authInfo?.id, supabase]);
+  const handleDeleteCollection = async (collectionId: string) => {
+    deleteCollection.mutate(collectionId, {
+      onSuccess: () => toast.success("Collection deleted"),
+      onError: () => toast.error("Failed to delete collection"),
+    });
+  };
 
-  // --- 2. Event Handlers ---
+  // --- 2. Filtering & Grouping ---
+  const filteredEntries = useMemo(
+    () =>
+      entries.filter((entry) => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+          entry.title.toLowerCase().includes(q) ||
+          (entry.type === "entry" && entry.content.toLowerCase().includes(q)) ||
+          entry.tags?.some((tag) => tag.toLowerCase().includes(q))
+        );
+      }),
+    [entries, searchQuery]
+  );
+
+  const monthGroups = useMemo(() => groupByMonth(filteredEntries), [filteredEntries]);
+  const storyMonthGroups = useMemo(
+    () => groupByMonth(filteredEntries.filter((e) => e.type === "entry")),
+    [filteredEntries]
+  );
+
+  const toggleMonth = (key: string) => {
+    setCollapsedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // --- 3. Event Handlers ---
   const toggleSelection = (id: string) => {
     const next = new Set(selectedStoryIds);
     if (next.has(id)) next.delete(id);
@@ -245,9 +309,9 @@ export default function LibraryPage() {
 
   const handleStartCompile = () => {
     setIsCompiling(true);
-    setActiveTab("all"); // Switch to all tab
+    setActiveTab("all");
     setSelectedStoryIds(new Set());
-    toast("Select stories to add to your book", { icon: "📚" });
+    toast("Select stories to add to your book", { icon: "\u{1F4DA}" });
   };
 
   const handleCancelCompile = () => {
@@ -256,9 +320,7 @@ export default function LibraryPage() {
   };
 
   const handleOpenBookDialog = () => {
-    if (selectedStoryIds.size < 2) {
-      return toast.error("Please select at least 2 stories.");
-    }
+    if (selectedStoryIds.size < 2) return toast.error("Please select at least 2 stories.");
     setNewBookTitle("");
     setNewBookDesc("");
     setIsBookDialogOpen(true);
@@ -270,7 +332,6 @@ export default function LibraryPage() {
 
     setIsSavingBook(true);
     try {
-      // 1. Gather Data
       const selectedStories = entries.filter(
         (e) => e.type === "entry" && selectedStoryIds.has(e.id)
       ) as StoryEntry[];
@@ -278,7 +339,7 @@ export default function LibraryPage() {
       const metadata = {
         name: newBookTitle,
         description: newBookDesc,
-        external_url: "https://estory.vercel.app",
+        external_url: "https://estories.app",
         attributes: [
           { trait_type: "Author", value: authInfo.name },
           { trait_type: "Stories", value: selectedStories.length },
@@ -291,53 +352,42 @@ export default function LibraryPage() {
         })),
       };
 
-      // 2. IPFS Upload
       toast.loading("Uploading Metadata...", { id: "book-toast" });
       const ipfsResult = await ipfsService.uploadMetadata(metadata, await getAccessToken());
       if (!ipfsResult?.hash) throw new Error("IPFS upload failed");
       const tokenURI = `ipfs://${ipfsResult.hash}`;
 
-      // 3. Mint NFT
       toast.loading("Minting NFT...", { id: "book-toast" });
       await mintBook(tokenURI);
-
-      // 4. Save DB via secure API
-      const bookData = {
-        author_id: authInfo.id,
-        author_wallet: authInfo.wallet_address,
-        title: newBookTitle,
-        description: newBookDesc,
-        story_ids: Array.from(selectedStoryIds),
-        ipfs_hash: ipfsResult.hash,
-      };
 
       const res = await fetch("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookData),
+        body: JSON.stringify({
+          author_id: authInfo.id,
+          author_wallet: authInfo.wallet_address,
+          title: newBookTitle,
+          description: newBookDesc,
+          story_ids: Array.from(selectedStoryIds),
+          ipfs_hash: ipfsResult.hash,
+        }),
       });
 
       if (!res.ok) {
-        let errorMessage = "Failed to create book";
-        try {
-          const payload = await res.json();
-          if (payload?.error) errorMessage = payload.error;
-        } catch {
-          // ignore JSON parse errors
-        }
-        throw new Error(errorMessage);
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || "Failed to create book");
       }
 
       toast.success("Book Created & Minted!", { id: "book-toast" });
       setIsBookDialogOpen(false);
       setIsCompiling(false);
       setSelectedStoryIds(new Set());
-      fetchData();
+      // Invalidate queries to refresh the library
+      qc.invalidateQueries({ queryKey: ["library", "books"] });
+      qc.invalidateQueries({ queryKey: ["stories", "user"] });
     } catch (err: unknown) {
-      console.error("Create book error:", err);
       const msg = err instanceof Error ? err.message : "Failed to create book";
-      if (msg.includes("User rejected"))
-        toast.error("Minting cancelled", { id: "book-toast" });
+      if (msg.includes("User rejected")) toast.error("Minting cancelled", { id: "book-toast" });
       else toast.error("Failed to create book", { id: "book-toast" });
     } finally {
       setIsSavingBook(false);
@@ -348,26 +398,9 @@ export default function LibraryPage() {
     if (isCompiling && entry.type === "entry") {
       toggleSelection(entry.id);
     } else if (!isCompiling) {
-      if (entry.type === "entry") {
-        router.push(`/story/${entry.id}`);
-      } else if (entry.type === "book") {
-        router.push(`/books/${entry.id}`);
-      }
+      router.push(entry.type === "entry" ? `/story/${entry.id}` : `/books/${entry.id}`);
     }
   };
-
-  // --- 3. Filtering ---
-  const filteredEntries = entries.filter((entry) => {
-    const matchesSearch =
-      entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (entry.type === "entry" &&
-        entry.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      entry.tags?.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-
-    return matchesSearch;
-  });
 
   // --- 4. Render ---
 
@@ -378,9 +411,7 @@ export default function LibraryPage() {
           <Archive className="w-12 h-12 text-[hsl(var(--memory-500))]" />
         </div>
         <div className="space-y-4">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Sign In to View Archive
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sign In to View Archive</h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
             Connect your wallet or sign in with Google to access your personal story archive.
           </p>
@@ -391,6 +422,7 @@ export default function LibraryPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      {/* Header */}
       <div className="text-center space-y-4">
         <motion.div
           initial={{ scale: 0 }}
@@ -403,43 +435,24 @@ export default function LibraryPage() {
           Your <span className="text-gradient-memory">Archive</span>
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-          All your journal entries, patterns, and compiled books
+          All your story entries, patterns, and compiled books
         </p>
       </div>
-
-      {/* Monthly Summary */}
-      <MonthlySummary summary={monthlySummary} isLoading={patternsLoading} />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          {
-            label: "Total Stories",
-            value: entries.filter((e) => e.type === "entry").length,
-            icon: FileText,
-          },
-          {
-            label: "Key Moments",
-            value: canonicalStories.length,
-            icon: Star,
-          },
-          {
-            label: "Books Created",
-            value: entries.filter((e) => e.type === "book").length,
-            icon: BookOpen,
-          },
-          {
-            label: "Themes Found",
-            value: themeGroups.length,
-            icon: Tags,
-          },
+          { label: "Total Stories", value: entries.filter((e) => e.type === "entry").length, icon: FileText },
+          { label: "Key Moments", value: canonicalStories.length, icon: Star },
+          { label: "Books Created", value: entries.filter((e) => e.type === "book").length, icon: BookOpen },
+          { label: "Months Active", value: monthGroups.length, icon: Calendar },
         ].map((stat, index) => {
           const Icon = stat.icon;
           const iconColors = [
-            'text-[hsl(var(--memory-500))]',
-            'text-[hsl(var(--story-500))]',
-            'text-[hsl(var(--insight-500))]',
-            'text-[hsl(var(--growth-500))]',
+            "text-[hsl(var(--memory-500))]",
+            "text-[hsl(var(--story-500))]",
+            "text-[hsl(var(--insight-500))]",
+            "text-[hsl(var(--growth-500))]",
           ];
           return (
             <motion.div
@@ -451,12 +464,8 @@ export default function LibraryPage() {
               <Card className="card-elevated text-center rounded-xl">
                 <CardContent className="pt-6">
                   <Icon className={`w-6 h-6 mx-auto mb-2 ${iconColors[index]}`} />
-                  <div className="text-xl font-bold text-gray-900 dark:text-white">
-                    {stat.value}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {stat.label}
-                  </div>
+                  <div className="text-xl font-bold text-gray-900 dark:text-white">{stat.value}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -481,115 +490,186 @@ export default function LibraryPage() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 mb-6">
+        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 mb-6">
           <TabsTrigger value="all" className="text-xs sm:text-sm">
-            <FileText className="w-4 h-4 mr-1 hidden sm:inline" />
-            All
+            <FileText className="w-4 h-4 mr-1 hidden sm:inline" /> All
           </TabsTrigger>
           <TabsTrigger value="stories" className="text-xs sm:text-sm">
-            <FileText className="w-4 h-4 mr-1 hidden sm:inline" />
-            Stories
+            <Calendar className="w-4 h-4 mr-1 hidden sm:inline" /> Stories
+          </TabsTrigger>
+          <TabsTrigger value="collections" className="text-xs sm:text-sm">
+            <FolderOpen className="w-4 h-4 mr-1 hidden sm:inline" /> Collections
           </TabsTrigger>
           <TabsTrigger value="books" className="text-xs sm:text-sm">
-            <BookOpen className="w-4 h-4 mr-1 hidden sm:inline" />
-            Books
+            <BookOpen className="w-4 h-4 mr-1 hidden sm:inline" /> Books
           </TabsTrigger>
           <TabsTrigger value="key" className="text-xs sm:text-sm">
-            <Star className="w-4 h-4 mr-1 hidden sm:inline" />
-            Key Moments
+            <Star className="w-4 h-4 mr-1 hidden sm:inline" /> Key Moments
           </TabsTrigger>
           <TabsTrigger value="themes" className="text-xs sm:text-sm">
-            <Tags className="w-4 h-4 mr-1 hidden sm:inline" />
-            Themes
+            <Tags className="w-4 h-4 mr-1 hidden sm:inline" /> Themes
           </TabsTrigger>
           <TabsTrigger value="domains" className="text-xs sm:text-sm">
-            <Compass className="w-4 h-4 mr-1 hidden sm:inline" />
-            Life Areas
+            <Compass className="w-4 h-4 mr-1 hidden sm:inline" /> Life Areas
           </TabsTrigger>
         </TabsList>
 
-        {/* All Tab - Shows both stories and books */}
+        {/* All Tab — Month-by-month timeline */}
         <TabsContent value="all">
           {isLoading ? (
-            <div className="flex items-center justify-center min-h-[40vh]">
-              <Loader2 className="w-12 h-12 animate-spin text-[hsl(var(--memory-500))]" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AnimatePresence mode="popLayout">
-                {filteredEntries.map((entry, index) => (
-                  <StoryCard
-                    key={entry.id}
-                    entry={entry}
-                    index={index}
-                    isCompiling={isCompiling}
-                    isSelected={selectedStoryIds.has(entry.id)}
-                    onClick={() => handleCardClick(entry)}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-          {!isLoading && filteredEntries.length === 0 && (
+            <LoadingSpinner />
+          ) : monthGroups.length === 0 ? (
             <EmptyState searchQuery={searchQuery} />
+          ) : (
+            <div className="space-y-8">
+              {monthGroups.map((group) => (
+                <MonthSection
+                  key={group.key}
+                  group={group}
+                  isCollapsed={collapsedMonths.has(group.key)}
+                  onToggle={() => toggleMonth(group.key)}
+                  isCompiling={isCompiling}
+                  selectedStoryIds={selectedStoryIds}
+                  onCardClick={handleCardClick}
+                />
+              ))}
+            </div>
           )}
         </TabsContent>
 
-        {/* Stories Tab - Only stories */}
+        {/* Stories Tab — Month-by-month, stories only */}
         <TabsContent value="stories">
           {isLoading ? (
-            <div className="flex items-center justify-center min-h-[40vh]">
-              <Loader2 className="w-12 h-12 animate-spin text-[hsl(var(--memory-500))]" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AnimatePresence mode="popLayout">
-                {filteredEntries
-                  .filter((e) => e.type === "entry")
-                  .map((entry, index) => (
-                    <StoryCard
-                      key={entry.id}
-                      entry={entry}
-                      index={index}
-                      isCompiling={isCompiling}
-                      isSelected={selectedStoryIds.has(entry.id)}
-                      onClick={() => handleCardClick(entry)}
-                    />
-                  ))}
-              </AnimatePresence>
-            </div>
-          )}
-          {!isLoading && filteredEntries.filter((e) => e.type === "entry").length === 0 && (
+            <LoadingSpinner />
+          ) : storyMonthGroups.length === 0 ? (
             <Card className="card-elevated rounded-xl">
               <CardContent className="py-12 text-center space-y-4">
                 <div className="w-16 h-16 mx-auto bg-[hsl(var(--memory-500)/0.15)] rounded-full flex items-center justify-center">
                   <FileText className="w-8 h-8 text-[hsl(var(--memory-500))]" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    No Stories Yet
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No Stories Yet</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Start journaling to see your stories here.
+                    Start writing to see your stories here.
                   </p>
                 </div>
                 <Button
                   onClick={() => router.push("/record")}
-                  className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))]"
+                  className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
                 >
                   Record Your First Story
                 </Button>
               </CardContent>
             </Card>
+          ) : (
+            <div className="space-y-8">
+              {storyMonthGroups.map((group) => (
+                <MonthSection
+                  key={group.key}
+                  group={group}
+                  isCollapsed={collapsedMonths.has(group.key)}
+                  onToggle={() => toggleMonth(group.key)}
+                  isCompiling={isCompiling}
+                  selectedStoryIds={selectedStoryIds}
+                  onCardClick={handleCardClick}
+                />
+              ))}
+            </div>
           )}
         </TabsContent>
 
-        {/* Books Tab - Only books */}
+        {/* Collections Tab */}
+        <TabsContent value="collections">
+          {isCollectionsLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <div className="space-y-6">
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => setIsCreateCollectionOpen(true)}
+                  className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> New Collection
+                </Button>
+              </div>
+              {collections.length === 0 ? (
+                <Card className="card-elevated rounded-xl">
+                  <CardContent className="py-12 text-center space-y-4">
+                    <div className="w-16 h-16 mx-auto bg-[hsl(var(--memory-500)/0.15)] rounded-full flex items-center justify-center">
+                      <FolderOpen className="w-8 h-8 text-[hsl(var(--memory-500))]" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No Collections Yet</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Group related stories into collections — like a series or thematic anthology.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {collections.map((col, index) => (
+                    <motion.div
+                      key={col.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <Card
+                        className="card-elevated rounded-xl cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all group"
+                        onClick={() => router.push(`/library/collections/${col.id}`)}
+                      >
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-[hsl(var(--memory-500)/0.1)] flex-shrink-0">
+                              <FolderOpen className="w-4 h-4 text-[hsl(var(--memory-500))]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1 group-hover:text-[hsl(var(--memory-500))] transition-colors">
+                                {col.title}
+                              </h3>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                <span>{col.story_count} {col.story_count === 1 ? "story" : "stories"}</span>
+                                <span className="w-1 h-1 rounded-full bg-gray-300" />
+                                <span>{new Date(col.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                                {col.is_public ? (
+                                  <Globe className="w-3 h-3 text-emerald-500" />
+                                ) : (
+                                  <Lock className="w-3 h-3 text-gray-400" />
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCollection(col.id);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
+                          {col.description && (
+                            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">
+                              {col.description}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Books Tab */}
         <TabsContent value="books">
           {isLoading ? (
-            <div className="flex items-center justify-center min-h-[40vh]">
-              <Loader2 className="w-12 h-12 animate-spin text-[hsl(var(--memory-500))]" />
-            </div>
+            <LoadingSpinner />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <AnimatePresence mode="popLayout">
@@ -615,9 +695,7 @@ export default function LibraryPage() {
                   <BookOpen className="w-8 h-8 text-[hsl(var(--insight-500))]" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    No Books Yet
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No Books Yet</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     Compile your stories into beautiful digital books.
                   </p>
@@ -627,8 +705,7 @@ export default function LibraryPage() {
                   variant="outline"
                   className="border-[hsl(var(--insight-500)/0.3)] text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))] hover:bg-[hsl(var(--insight-500)/0.1)]"
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Compile Your First Book
+                  <Sparkles className="w-4 h-4 mr-2" /> Compile Your First Book
                 </Button>
               </CardContent>
             </Card>
@@ -638,9 +715,7 @@ export default function LibraryPage() {
         {/* Key Moments Tab */}
         <TabsContent value="key">
           {patternsLoading ? (
-            <div className="flex items-center justify-center min-h-[40vh]">
-              <Loader2 className="w-12 h-12 animate-spin text-[hsl(var(--memory-500))]" />
-            </div>
+            <LoadingSpinner />
           ) : canonicalStories.length === 0 ? (
             <Card className="card-canonical rounded-xl bg-[hsl(var(--story-500)/0.05)]">
               <CardContent className="py-12 text-center space-y-4">
@@ -648,9 +723,7 @@ export default function LibraryPage() {
                   <Star className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    No Key Moments Yet
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No Key Moments Yet</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     Mark important stories as &quot;Key Moments&quot; to track the most significant events in your life.
                   </p>
@@ -680,13 +753,8 @@ export default function LibraryPage() {
 
         {/* Life Areas Tab */}
         <TabsContent value="domains">
-          <DomainsView
-            domainGroups={domainGroups}
-            isLoading={patternsLoading}
-            totalStories={patternStories.length}
-          />
+          <DomainsView domainGroups={domainGroups} isLoading={patternsLoading} totalStories={patternStories.length} />
         </TabsContent>
-
       </Tabs>
 
       {/* Quick Actions */}
@@ -701,7 +769,6 @@ export default function LibraryPage() {
                 Record new entries or compile existing ones into digital books
               </p>
             </div>
-
             <div className="flex gap-2">
               {isCompiling ? (
                 <>
@@ -714,11 +781,10 @@ export default function LibraryPage() {
                   </Button>
                   <Button
                     onClick={handleOpenBookDialog}
-                    className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))]"
+                    className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
                     disabled={selectedStoryIds.size < 2}
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Create Book ({selectedStoryIds.size})
+                    <Sparkles className="w-4 h-4 mr-2" /> Create Book ({selectedStoryIds.size})
                   </Button>
                 </>
               ) : (
@@ -726,13 +792,12 @@ export default function LibraryPage() {
                   <Button
                     onClick={handleStartCompile}
                     variant="outline"
-                    className="border-[hsl(var(--memory-500)/0.3)] text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))] hover:bg-[hsl(var(--memory-500)/0.1)]"
+                    className="border-[hsl(var(--memory-500)/0.3)] text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]"
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Compile Book
+                    <Sparkles className="w-4 h-4 mr-2" /> Compile Book
                   </Button>
                   <Button
-                    className="bg-gradient-to-r from-[hsl(var(--growth-600))] to-[hsl(var(--growth-500))] hover:from-[hsl(var(--growth-500))] hover:to-[hsl(var(--growth-400))]"
+                    className="bg-gradient-to-r from-[hsl(var(--growth-600))] to-[hsl(var(--growth-500))]"
                     onClick={() => router.push("/record")}
                   >
                     <Plus className="w-4 h-4 mr-2" /> New Entry
@@ -750,8 +815,7 @@ export default function LibraryPage() {
           <DialogHeader>
             <DialogTitle>Compile Digital Book</DialogTitle>
             <DialogDescription>
-              Create a collection from your selected {selectedStoryIds.size}{" "}
-              stories.
+              Create a collection from your selected {selectedStoryIds.size} stories.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -775,16 +839,13 @@ export default function LibraryPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsBookDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setIsBookDialogOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleCreateBook}
               disabled={isSavingBook || isMinting}
-              className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))]"
+              className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
             >
               {isSavingBook || isMinting ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -796,11 +857,157 @@ export default function LibraryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Collection Dialog */}
+      <Dialog open={isCreateCollectionOpen} onOpenChange={setIsCreateCollectionOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>New Collection</DialogTitle>
+            <DialogDescription>
+              Group related stories into a series or thematic collection.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="col-title">Collection Title</Label>
+              <Input
+                id="col-title"
+                placeholder='e.g., "The History of West African Trade Routes"'
+                value={newCollectionTitle}
+                onChange={(e) => setNewCollectionTitle(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="col-desc">Description (optional)</Label>
+              <Textarea
+                id="col-desc"
+                placeholder="What connects these stories?"
+                value={newCollectionDesc}
+                onChange={(e) => setNewCollectionDesc(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateCollectionOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateCollection}
+              disabled={!newCollectionTitle.trim()}
+              className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
+            >
+              <FolderOpen className="w-4 h-4 mr-2" /> Create Collection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// Story Card Component
+// ─── Month Section Component ──────────────────────────────────────────
+
+function MonthSection({
+  group,
+  isCollapsed,
+  onToggle,
+  isCompiling,
+  selectedStoryIds,
+  onCardClick,
+}: {
+  group: MonthGroup;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  isCompiling: boolean;
+  selectedStoryIds: Set<string>;
+  onCardClick: (entry: LibraryItem) => void;
+}) {
+  const isCurrent = isCurrentMonth(group.key);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Month Header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 mb-4 group cursor-pointer"
+      >
+        {/* Timeline dot */}
+        <div
+          className={`w-3 h-3 rounded-full flex-shrink-0 ring-4 ${
+            isCurrent
+              ? "bg-[hsl(var(--memory-500))] ring-[hsl(var(--memory-500)/0.2)]"
+              : "bg-gray-400 dark:bg-gray-500 ring-gray-200 dark:ring-gray-700"
+          }`}
+        />
+        {/* Timeline line */}
+        <div className="flex-1 flex items-center gap-3">
+          <h2
+            className={`text-lg font-bold ${
+              isCurrent
+                ? "text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]"
+                : "text-gray-700 dark:text-gray-300"
+            }`}
+          >
+            {group.label}
+          </h2>
+          <div className="flex items-center gap-2">
+            {group.storyCount > 0 && (
+              <Badge variant="secondary" className="text-xs bg-[hsl(var(--void-surface))]">
+                {group.storyCount} {group.storyCount === 1 ? "story" : "stories"}
+              </Badge>
+            )}
+            {group.bookCount > 0 && (
+              <Badge variant="secondary" className="text-xs bg-[hsl(var(--insight-500)/0.1)] text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))]">
+                {group.bookCount} {group.bookCount === 1 ? "book" : "books"}
+              </Badge>
+            )}
+          </div>
+          <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+          <ChevronDown
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+              isCollapsed ? "-rotate-90" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {/* Month Content */}
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="ml-6 border-l-2 border-gray-200 dark:border-gray-700 pl-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {group.entries.map((entry, index) => (
+                  <StoryCard
+                    key={entry.id}
+                    entry={entry}
+                    index={index}
+                    isCompiling={isCompiling}
+                    isSelected={selectedStoryIds.has(entry.id)}
+                    onClick={() => onCardClick(entry)}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Story Card Component ─────────────────────────────────────────────
+
 function StoryCard({
   entry,
   index,
@@ -814,159 +1021,126 @@ function StoryCard({
   isSelected: boolean;
   onClick: () => void;
 }) {
+  const entryDate = entry.type === "entry" ? entry.story_date : entry.created_at;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ delay: index * 0.05 }}
+      transition={{ delay: index * 0.03, duration: 0.2 }}
       layout
     >
       <Card
-        className={`h-full card-elevated transition-all duration-300 relative overflow-hidden group
+        className={`h-full card-elevated transition-all duration-200 relative overflow-hidden group rounded-xl
           ${
             isCompiling && entry.type === "entry"
               ? "cursor-pointer hover:ring-2 hover:ring-[hsl(var(--memory-500))]"
-              : "cursor-pointer hover-glow-memory"
+              : "cursor-pointer hover:shadow-lg hover:-translate-y-0.5"
           }
-          ${
-            isSelected
-              ? "ring-2 ring-[hsl(var(--memory-600))] bg-[hsl(var(--memory-500)/0.1)]"
-              : ""
-          }
+          ${isSelected ? "ring-2 ring-[hsl(var(--memory-600))] bg-[hsl(var(--memory-500)/0.1)]" : ""}
         `}
         onClick={onClick}
       >
         {/* Selection Indicator */}
         {isCompiling && entry.type === "entry" && (
-          <div className="absolute top-4 right-4 z-10">
+          <div className="absolute top-3 right-3 z-10">
             <div
               className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
               ${
                 isSelected
                   ? "bg-[hsl(var(--memory-600))] border-[hsl(var(--memory-600))]"
                   : "border-gray-300 bg-white/80 dark:bg-gray-800/80"
-              }
-            `}
+              }`}
             >
               {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
             </div>
           </div>
         )}
 
-        <CardHeader>
-          <div className="flex items-start justify-between pr-8">
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                {entry.type === "book" ? (
-                  <BookOpen className="w-5 h-5 text-[hsl(var(--insight-500))]" />
-                ) : (
-                  <FileText className="w-5 h-5 text-[hsl(var(--memory-500))]" />
-                )}
-                {entry.type === "entry" && entry.has_audio && (
-                  <Volume2 className="w-4 h-4 text-[hsl(var(--growth-500))]" />
-                )}
-                {entry.type === "book" && (
-                  <Badge
-                    variant="outline"
-                    className="bg-[hsl(var(--insight-500)/0.1)] text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))] border-[hsl(var(--insight-500)/0.3)]"
-                  >
-                    Collection
-                  </Badge>
-                )}
-              </div>
-              <CardTitle className="text-xl line-clamp-1 group-hover:text-[hsl(var(--memory-500))] transition-colors">
-                {entry.title}
-              </CardTitle>
-            </div>
-
-            <div className="flex gap-1">
-              <Badge
-                variant="secondary"
-                className={moodColors[entry.mood || "neutral"]}
-              >
-                {entry.mood}
-              </Badge>
-              {/* Visibility Badge for Entries */}
-              {entry.type === "entry" && (
-                <Badge
-                  variant="outline"
-                  className={`border-0 ${
-                    entry.is_public
-                      ? "bg-emerald-100 text-emerald-600"
-                      : "bg-gray-200 text-gray-600"
-                  }`}
-                >
-                  {entry.is_public ? <Globe size={12} /> : <Lock size={12} />}
-                </Badge>
+        <CardContent className="p-4 space-y-3">
+          {/* Top row: icon + title + badges */}
+          <div className="flex items-start gap-3">
+            <div
+              className={`p-2 rounded-lg flex-shrink-0 ${
+                entry.type === "book"
+                  ? "bg-[hsl(var(--insight-500)/0.1)]"
+                  : "bg-[hsl(var(--memory-500)/0.1)]"
+              }`}
+            >
+              {entry.type === "book" ? (
+                <BookOpen className="w-4 h-4 text-[hsl(var(--insight-500))]" />
+              ) : (
+                <FileText className="w-4 h-4 text-[hsl(var(--memory-500))]" />
               )}
             </div>
-          </div>
-
-          <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400 mt-2">
-            <div
-              className="flex items-center space-x-1"
-              title={entry.type === "entry" ? "Memory Date" : "Created Date"}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>
-                {new Date(
-                  entry.type === "entry"
-                    ? (entry as StoryEntry).story_date
-                    : entry.created_at
-                ).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
-            {entry.type === "book" && (
-              <div className="flex items-center space-x-1 text-[hsl(var(--insight-500))]">
-                <FileText className="w-4 h-4" />
-                <span>{entry.story_ids.length} Stories</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1 group-hover:text-[hsl(var(--memory-500))] transition-colors">
+                {entry.title}
+              </h3>
+              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <span>
+                  {new Date(entryDate).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                {entry.type === "entry" && entry.has_audio && (
+                  <Volume2 className="w-3 h-3 text-[hsl(var(--growth-500))]" />
+                )}
+                {entry.type === "entry" && (
+                  <>
+                    {entry.is_public ? (
+                      <Globe className="w-3 h-3 text-emerald-500" />
+                    ) : (
+                      <Lock className="w-3 h-3 text-gray-400" />
+                    )}
+                  </>
+                )}
+                {entry.type === "book" && (
+                  <span className="text-[hsl(var(--insight-500))]">
+                    {entry.story_ids.length} stories
+                  </span>
+                )}
               </div>
+            </div>
+            {entry.mood && entry.mood !== "neutral" && (
+              <Badge variant="secondary" className={`text-xs ${moodColors[entry.mood] || ""}`}>
+                {entry.mood}
+              </Badge>
             )}
           </div>
-        </CardHeader>
 
-        <CardContent className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300 line-clamp-3 min-h-18">
+          {/* Content preview */}
+          <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
             {entry.type === "entry" ? entry.content : entry.description}
           </p>
 
-          <div className="flex flex-wrap gap-2">
-            {entry.tags?.slice(0, 3).map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs">
-                #{tag}
-              </Badge>
-            ))}
-          </div>
+          {/* Tags */}
+          {entry.tags && entry.tags.length > 0 && entry.tags[0] !== "compilation" && (
+            <div className="flex flex-wrap gap-1">
+              {entry.tags.slice(0, 3).map((tag) => (
+                <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">
+                  #{tag}
+                </Badge>
+              ))}
+            </div>
+          )}
 
+          {/* Footer stats */}
           {!isCompiling && (
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex space-x-2">
-                <Button size="sm" variant="ghost" className="h-8">
-                  <Eye className="w-4 h-4 mr-1" /> {entry.views}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-8">
-                  <Heart className="w-4 h-4 mr-1" /> {entry.likes}
-                </Button>
-              </div>
-              <div className="flex space-x-2">
-                <Button size="sm" variant="ghost" className="h-8">
-                  <Share2 className="w-4 h-4" />
-                </Button>
-                {entry.type === "book" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-[hsl(var(--insight-500))]"
-                  >
-                    <Download className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
+            <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1">
+                <Eye className="w-3 h-3" /> {entry.views}
+              </span>
+              <span className="flex items-center gap-1">
+                <Heart className="w-3 h-3" /> {entry.likes}
+              </span>
+              <span className="flex-1" />
+              <Share2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              {entry.type === "book" && (
+                <Download className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-[hsl(var(--insight-500))]" />
+              )}
             </div>
           )}
         </CardContent>
@@ -975,7 +1149,8 @@ function StoryCard({
   );
 }
 
-// Canonical Story Card Component
+// ─── Canonical Story Card ─────────────────────────────────────────────
+
 function CanonicalStoryCard({
   story,
   index,
@@ -994,7 +1169,7 @@ function CanonicalStoryCard({
       layout
     >
       <Card
-        className="h-full card-canonical transition-all duration-300 cursor-pointer hover-glow-canonical bg-[hsl(var(--story-500)/0.05)]"
+        className="h-full card-canonical transition-all duration-300 cursor-pointer hover-glow-canonical bg-[hsl(var(--story-500)/0.05)] rounded-xl"
         onClick={onClick}
       >
         <CardHeader>
@@ -1011,7 +1186,6 @@ function CanonicalStoryCard({
               </CardTitle>
             </div>
           </div>
-
           <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400 mt-2">
             <div className="flex items-center space-x-1">
               <Calendar className="w-4 h-4" />
@@ -1030,12 +1204,8 @@ function CanonicalStoryCard({
             )}
           </div>
         </CardHeader>
-
         <CardContent className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300 line-clamp-3 min-h-18">
-            {story.content}
-          </p>
-
+          <p className="text-gray-600 dark:text-gray-300 line-clamp-3 min-h-18">{story.content}</p>
           {story.story_metadata?.themes && story.story_metadata.themes.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {story.story_metadata.themes.slice(0, 3).map((theme) => (
@@ -1049,7 +1219,6 @@ function CanonicalStoryCard({
               ))}
             </div>
           )}
-
           {story.story_metadata?.brief_insight && (
             <div className="p-3 bg-[hsl(var(--void-surface))] rounded-lg">
               <p className="text-sm text-gray-600 dark:text-gray-400 italic">
@@ -1063,7 +1232,18 @@ function CanonicalStoryCard({
   );
 }
 
-// Empty State Component
+// ─── Loading Spinner ──────────────────────────────────────────────────
+
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <BrandedLoader size="md" message="Loading your stories..." />
+    </div>
+  );
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────
+
 function EmptyState({ searchQuery }: { searchQuery: string }) {
   const router = useRouter();
   return (
@@ -1071,18 +1251,14 @@ function EmptyState({ searchQuery }: { searchQuery: string }) {
       <div className="w-24 h-24 mx-auto bg-[hsl(var(--void-light))] rounded-full flex items-center justify-center">
         <Search className="w-12 h-12 text-gray-400" />
       </div>
-      <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-        No stories found
-      </h3>
+      <h3 className="text-xl font-semibold text-gray-900 dark:text-white">No stories found</h3>
       <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-        {searchQuery
-          ? `No matches for "${searchQuery}".`
-          : "Start your journey by recording your first story!"}
+        {searchQuery ? `No matches for "${searchQuery}".` : "Start your journey by recording your first story!"}
       </p>
       {!searchQuery && (
         <Button
           onClick={() => router.push("/record")}
-          className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))]"
+          className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))]"
         >
           Record Your First Story
         </Button>

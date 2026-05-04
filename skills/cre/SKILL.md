@@ -123,7 +123,7 @@ const buildFn = (sendRequester: ConfidentialHTTPSendRequester, config: Config) =
     request: {
       url: "https://api.example.com/endpoint",
       method: "POST",
-      body,  // base64-encoded — encrypted in enclave
+      bodyString: body,  // base64-encoded string — encrypted in enclave (NOT "body" — ConfidentialHTTP uses oneof: bodyString | bodyBytes)
       multiHeaders: {
         "Content-Type": { values: ["application/json"] },
         "x-api-key": { values: ["{{.apiKeySecretName}}"] },  // Vault DON template

@@ -17,14 +17,15 @@ import { Loader2 } from "lucide-react";
 interface OnboardingModalProps {
   isOpen: boolean;
   onComplete: () => void;
+  prefill?: { name?: string; email?: string };
 }
 
-export function OnboardingModal({ isOpen, onComplete }: OnboardingModalProps) {
+export function OnboardingModal({ isOpen, onComplete, prefill }: OnboardingModalProps) {
   const { completeOnboarding } = useAuth();
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(prefill?.name ?? "");
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefill?.email ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -65,7 +66,7 @@ export function OnboardingModal({ isOpen, onComplete }: OnboardingModalProps) {
             Complete Your Profile
           </DialogTitle>
           <DialogDescription className="text-center">
-            Set up your profile to start using eStory
+            Set up your profile to start using eStories
           </DialogDescription>
         </DialogHeader>
 

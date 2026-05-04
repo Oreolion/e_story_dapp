@@ -84,5 +84,5 @@ Notification types: `like`, `comment`, `tip`, `follow`, `book_published`, `story
 | `/api/ipfs/upload` | POST | Bearer | Upload to IPFS via Pinata. Max 50MB. MIME whitelist: image/*, audio/*, application/json. |
 | `/api/email/send` | POST | Bearer | Send email via Resend. Input: `{ type, email, username }` |
 | `/api/sync/verify_tx` | POST | Bearer + wallet ownership | Verify blockchain transaction. Validates wallet matches user. |
-| `/api/cron/distribute-rewards` | POST | CRON_SECRET (timing-safe) | Distribute $STORY tokens. Uses `safeCompare()` for secret. Gas limit: 200K. |
+| `/api/cron/distribute-rewards` | POST | CRON_SECRET (timing-safe) | **Disabled.** Reserved for future token distribution. Cron schedule removed from vercel.json. |
 | `/api/admin/analysis-stats` | GET | ADMIN_SECRET (timing-safe) | Analysis statistics. Uses `safeCompare()` for secret. |

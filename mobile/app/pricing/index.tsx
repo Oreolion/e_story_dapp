@@ -38,7 +38,7 @@ const PLANS: Plan[] = [
       "Unlimited story recording & writing",
       "AI transcription",
       "AI text enhancement",
-      "5 AI story analyses per month",
+      "10 AI story analyses per month",
       "Encrypted local vault",
       "Public feed access",
       "Like & follow",

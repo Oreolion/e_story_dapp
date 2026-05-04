@@ -17,7 +17,7 @@ interface UseReflectionData {
 }
 
 export function useReflection(): UseReflectionData {
-  const { profile: authInfo } = useAuth();
+  const { profile: authInfo, getAccessToken, isLoading: isAuthLoading } = useAuth();
 
   const [reflections, setReflections] = useState<WeeklyReflection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,7 +27,7 @@ export function useReflection(): UseReflectionData {
   const [currentWeekStart, setCurrentWeekStart] = useState<string | null>(null);
 
   const fetchReflections = useCallback(async () => {
-    if (!authInfo?.id) {
+    if (isAuthLoading || !authInfo?.id) {
       setIsLoading(false);
       return;
     }
@@ -36,7 +36,16 @@ export function useReflection(): UseReflectionData {
     setError(null);
 
     try {
-      const response = await fetch(`/api/ai/reflection?userId=${authInfo.id}&limit=10`);
+      const token = await getAccessToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      const response = await fetch(`/api/ai/reflection?userId=${authInfo.id}&limit=10`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -54,7 +63,7 @@ export function useReflection(): UseReflectionData {
     } finally {
       setIsLoading(false);
     }
-  }, [authInfo?.id]);
+  }, [authInfo?.id, isAuthLoading, getAccessToken]);
 
   useEffect(() => {
     fetchReflections();
@@ -75,9 +84,13 @@ export function useReflection(): UseReflectionData {
     setError(null);
 
     try {
+      const token = await getAccessToken();
       const response = await fetch("/api/ai/reflection", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           userId: authInfo.id,
           userWallet: authInfo.wallet_address,
@@ -105,7 +118,7 @@ export function useReflection(): UseReflectionData {
     } finally {
       setIsGenerating(false);
     }
-  }, [authInfo?.id, authInfo?.wallet_address, canGenerate]);
+  }, [authInfo?.id, authInfo?.wallet_address, canGenerate, getAccessToken]);
 
   // Get the latest reflection (most recent)
   const latestReflection = reflections.length > 0 ? reflections[0] : null;

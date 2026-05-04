@@ -25,7 +25,7 @@ contract EStoryToken is ERC20, ERC20Burnable, ERC20Permit, AccessControl, Pausab
         _mint(initialAdmin, 1_000_000 * 10 ** decimals());
     }
 
-    // Called by Backend to reward users for off-chain activity (Likes, Streaks)
+    // Admin-controlled minting for future token distribution programs
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused {
         require(totalSupply() + amount <= MAX_SUPPLY, "Exceeds max supply");
         _mint(to, amount);

@@ -24,6 +24,7 @@ export type { EncryptedPayload } from "./crypto";
 // IndexedDB schema & database
 export {
   getVaultDb,
+  isVaultAvailable,
   resetVaultDb,
 } from "./db";
 export type {

@@ -85,12 +85,58 @@ class VaultDatabase extends Dexie {
 
 // Singleton instance
 let _db: VaultDatabase | null = null;
+let _unavailableReason: string | null = null;
 
-export function getVaultDb(): VaultDatabase {
-  if (!_db) {
-    _db = new VaultDatabase();
+/**
+ * Check if IndexedDB is usable in this environment. iOS Safari private mode,
+ * some in-app browsers, and older devices can throw when touching indexedDB.
+ */
+function isIndexedDBAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return typeof window.indexedDB !== "undefined" && window.indexedDB !== null;
+  } catch {
+    return false;
   }
-  return _db;
+}
+
+/**
+ * Get the vault database. Returns null if IndexedDB is unavailable (iOS Safari
+ * private mode, disabled storage, corrupted state). Callers MUST handle null.
+ */
+export function getVaultDb(): VaultDatabase | null {
+  if (_db) return _db;
+  if (_unavailableReason) return null;
+
+  if (!isIndexedDBAvailable()) {
+    _unavailableReason = "IndexedDB not available";
+    return null;
+  }
+
+  try {
+    const db = new VaultDatabase();
+    // Attach a catch handler so Dexie's lazy auto-open cannot surface as an
+    // unhandled promise rejection on iOS Safari (UnknownError, etc.)
+    db.open().catch((err) => {
+      console.warn("[vault] Failed to open IndexedDB:", err);
+      _unavailableReason = err?.name || "OpenFailed";
+      _db = null;
+    });
+    _db = db;
+    return _db;
+  } catch (err) {
+    console.warn("[vault] Failed to initialize Dexie:", err);
+    _unavailableReason =
+      (err as { name?: string } | null)?.name || "InitFailed";
+    return null;
+  }
+}
+
+/**
+ * Whether the vault is usable in the current environment.
+ */
+export function isVaultAvailable(): boolean {
+  return getVaultDb() !== null;
 }
 
 /**
@@ -101,6 +147,7 @@ export async function resetVaultDb(): Promise<void> {
     _db.close();
     _db = null;
   }
+  _unavailableReason = null;
 }
 
 export type { VaultDatabase };

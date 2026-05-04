@@ -11,7 +11,7 @@
 
 :root {
   /* === Typography === */
-  --font-display: 'Fraunces', Georgia, serif;
+  --font-display: var(--font-brand), 'Love Light', cursive;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   /* === Void Colors (Background Depths) === */

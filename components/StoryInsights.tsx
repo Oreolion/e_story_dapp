@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { getEmotionClass, getDomainClass, domainLabels } from "@/lib/design-tokens";
 import { useAuth } from "@/components/AuthProvider";
+import Link from "next/link";
+import { Crown } from "lucide-react";
 
 interface StoryInsightsProps {
   storyId: string;
@@ -33,7 +35,8 @@ interface StoryInsightsProps {
 }
 
 export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, profile } = useAuth();
+  const isPaidPlan = !!profile && profile.subscription_plan !== "free";
   const [metadata, setMetadata] = useState<StoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -121,6 +124,10 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
 
       if (!res.ok) {
         const error = await res.json();
+        if (error.code === "PLAN_LIMIT_REACHED") {
+          toast.error(`Free plan limit reached (${error.usage?.used}/${error.usage?.limit} this month). Upgrade for unlimited analyses.`);
+          return;
+        }
         throw new Error(error.error || "Analysis failed");
       }
 
@@ -354,6 +361,39 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
                 </p>
               </div>
             </div>
+          )}
+
+          {/* Actionable Advice — paid feature */}
+          {metadata.actionable_advice && isPaidPlan ? (
+            <div className="p-4 bg-[hsl(var(--memory-500)/0.1)] dark:bg-[hsl(var(--memory-500)/0.15)] rounded-lg border border-[hsl(var(--memory-500)/0.2)]">
+              <div className="flex items-start space-x-3">
+                <TrendingUp className="w-5 h-5 text-[hsl(var(--memory-500))] flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))] mb-1">
+                    Suggested Next Step
+                  </p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    {metadata.actionable_advice}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : !isPaidPlan && (
+            <Link href="/pricing">
+              <div className="p-4 bg-gradient-to-r from-[#d4a04a]/10 to-[#9b7dd4]/10 rounded-lg border border-[#d4a04a]/20 cursor-pointer hover:border-[#d4a04a]/40 transition-colors">
+                <div className="flex items-start space-x-3">
+                  <Crown className="w-5 h-5 text-[#d4a04a] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-medium text-[#d4a04a] mb-1">
+                      Actionable Advice — Storyteller Plan
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Upgrade to get personalized writing advice with every analysis.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Link>
           )}
 
           {/* Emotional Tone & Life Domain */}

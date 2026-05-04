@@ -89,7 +89,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
   ],
   extra: {
-    API_BASE_URL: process.env.API_BASE_URL || "https://e-story-dapp.vercel.app",
+    API_BASE_URL: process.env.API_BASE_URL || "https://estories.app",
     SUPABASE_URL: process.env.SUPABASE_URL || "",
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || "",
     WALLETCONNECT_PROJECT_ID: process.env.WALLETCONNECT_PROJECT_ID || "",

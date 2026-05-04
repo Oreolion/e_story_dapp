@@ -2685,4 +2685,4 @@ await Share.share({ title, url });
 ---
 
 *This guide was generated for the iStory project. Last updated: February 2026.*
-*For questions about the web app architecture, see `CLAUDE.md` and `docs/` in the main repository.*
+*For questions about the web app architecture, see `docs/CLAUDE.md` and `docs/` in the main repository.*

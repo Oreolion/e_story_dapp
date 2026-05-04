@@ -29,13 +29,13 @@ export async function generateMetadata({
   params,
 }: BookPageProps): Promise<Metadata> {
   const { bookId } = await params;
-  const baseUrl = "https://estory.vercel.app";
+  const baseUrl = "https://estories.app";
   const book = await getBookData(bookId);
 
   if (!book) {
     return {
       title: "Book Not Found",
-      description: "This book could not be found on eStory.",
+      description: "This book could not be found on eStories.",
     };
   }
 
@@ -46,7 +46,7 @@ export async function generateMetadata({
   const chapterCount = book.story_ids?.length || 0;
   const description =
     book.description ||
-    `A collection of ${chapterCount} stories by ${authorName} on eStory.`;
+    `A collection of ${chapterCount} stories by ${authorName} on eStories.`;
 
   return {
     title: book.title || "Untitled Book",
@@ -56,7 +56,7 @@ export async function generateMetadata({
       title: book.title || "Untitled Book",
       description,
       url: `${baseUrl}/books/${bookId}`,
-      siteName: "eStory",
+      siteName: "eStories",
       authors: [authorName],
     },
     twitter: {
@@ -72,7 +72,7 @@ export async function generateMetadata({
 
 export default async function Page({ params }: BookPageProps) {
   const { bookId } = await params;
-  const baseUrl = "https://estory.vercel.app";
+  const baseUrl = "https://estories.app";
   const book = await getBookData(bookId);
 
   const breadcrumbJsonLd = {

@@ -10,11 +10,12 @@ import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import eStoryTokenABI from "@/lib/abis/iStoryToken.json";
 import { parseEther } from "viem";
 import Image from "next/image";
-import { Heart, MessageCircle, Share2, Calendar, Globe, Lock, Star, Headphones } from "lucide-react";
-import { StoryDataType, EmotionalTone } from "@/app/types";
+import { Heart, MessageCircle, Share2, Calendar, Globe, Lock, Star, Headphones, Eye } from "lucide-react";
+import { StoryDataType, EmotionalTone, getStoryTypeConfig } from "@/app/types";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { VerifiedMetricsCard } from "@/components/VerifiedMetricsCard";
 import { useVerifiedMetrics } from "@/app/hooks/useVerifiedMetrics";
+import { useWalletGuard } from "@/app/hooks/useWalletGuard";
 
 interface StoryCardProps {
   story: StoryDataType;
@@ -58,6 +59,7 @@ export function StoryCard({
   const [isPaying, setIsPaying] = useState(false);
   const [isTipping, setIsTipping] = useState(false);
   const { metrics: verifiedMetrics, proof: verifiedProof, isPending: isVerifyPending, isVerified, isAuthor: isVerifyAuthor } = useVerifiedMetrics(story.id?.toString() || null);
+  const { requireWallet } = useWalletGuard();
   const { writeContract, data: tipHash } = useWriteContract();
   const { writeContract: payContract, data: payHash } = useWriteContract();
 
@@ -76,13 +78,14 @@ export function StoryCard({
   }, [isTxSuccess, payHash, onUnlock, story.id]);
 
   const handleTip = () => {
+    if (!requireWallet("tip authors")) return;
     setIsTipping(true);
     writeContract({
       address: ESTORY_TOKEN_ADDRESS as `0x${string}`,
       abi: eStoryTokenABI.abi,
       functionName: "tipCreator",
       args: [
-        story.author_wallet.username as `0x${string}`,
+        story.author_wallet.wallet_address as `0x${string}`,
         parseEther(tipAmount.toString()),
         BigInt(story.id),
       ],
@@ -90,6 +93,7 @@ export function StoryCard({
   };
 
   const handlePaywall = () => {
+    if (!requireWallet("unlock premium content")) return;
     if (story.paywallAmount === 0) return;
     setIsPaying(true);
     payContract({
@@ -97,7 +101,7 @@ export function StoryCard({
       abi: eStoryTokenABI.abi,
       functionName: "payPaywall",
       args: [
-        story.author_wallet.username as `0x${string}`,
+        story.author_wallet.wallet_address as `0x${string}`,
         parseEther(story.paywallAmount.toString()),
         BigInt(story.id),
       ],
@@ -228,6 +232,12 @@ export function StoryCard({
                   </div>
                 )}
 
+                {(story as any).story_type && (story as any).story_type !== "personal_journal" && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium">
+                    {getStoryTypeConfig((story as any).story_type).shortLabel}
+                  </Badge>
+                )}
+
                 <span className="text-muted-foreground">{story.author_wallet?.followers} followers</span>
               </div>
             </div>
@@ -271,12 +281,12 @@ export function StoryCard({
                 {story.teaser || "Premium content locked behind paywall"}
               </p>
               <Button
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePaywall(); }}
-                disabled={isPaying}
+                disabled
                 size="sm"
-                className="btn-solid-story"
+                className="btn-solid-story opacity-50 cursor-not-allowed"
+                title="Paywall unlocking coming soon with USDC"
               >
-                {isPaying ? "Processing..." : `Unlock for ${story.paywallAmount} $STORY`}
+                Unlock Story (Coming Soon)
               </Button>
             </div>
             {/* Show verified metrics preview for paywalled content */}
@@ -337,29 +347,23 @@ export function StoryCard({
               <Share2 className="w-4 h-4 mr-1" />
               {story.shares}
             </Button>
+            <span className="flex items-center text-xs text-muted-foreground ml-1">
+              <Eye className="w-3.5 h-3.5 mr-1" />
+              {story.views ?? 0}
+            </span>
           </div>
 
-          {/* Tipping */}
+          {/* Tipping — disabled until mainnet */}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="ghost"
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTip(); }}
-              disabled={isTipping}
-              className="text-[hsl(var(--story-500))] hover:text-[hsl(var(--story-400))] hover:bg-[hsl(var(--story-500)/0.1)]"
+              disabled
+              title="Tipping with USDC coming soon"
+              className="text-muted-foreground opacity-50 cursor-not-allowed"
             >
-              {isTipping ? "Tipping..." : `Tip ${tipAmount}`}
+              Tip <span className="text-[10px] ml-1 uppercase tracking-wide">Soon</span>
             </Button>
-            <input
-              title="Tip amount"
-              type="range"
-              min="1"
-              max="50"
-              value={tipAmount}
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              onChange={(e) => { e.stopPropagation(); setTipAmount(Number(e.target.value)); }}
-              className="w-16 h-1.5 bg-[hsl(var(--void-light))] rounded-lg appearance-none cursor-pointer"
-            />
           </div>
         </div>
       </CardContent>

@@ -1,4 +1,4 @@
-# Speak Your Story (eStory): AI-Powered Blockchain Journaling App
+# eStories: AI-Powered Sovereign Storytelling Platform
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
@@ -6,373 +6,346 @@
 ![React](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Supabase](https://img.shields.io/badge/Supabase-DB-orange?logo=supabase)
 ![Wagmi](https://img.shields.io/badge/Wagmi-2.17-green?logo=ethereum)
-![Viem](https://img.shields.io/badge/Viem-2.38-green?logo=viem)
 ![Base](https://img.shields.io/badge/Base-L2-blue?logo=base)
+![Chainlink CRE](https://img.shields.io/badge/Chainlink-CRE-blue?logo=chainlink)
 ![Vitest](https://img.shields.io/badge/Vitest-4-green?logo=vitest)
 ![Playwright](https://img.shields.io/badge/Playwright-E2E-orange?logo=playwright)
 
+**Live:** [estories.app](https://www.estories.app)
+
 ## Overview
 
-eStory is an innovative AI-powered web3 application that empowers users to chronicle their daily lives through voice journaling, immortalize their personal narratives on the blockchain, and monetize their stories in a decentralized ecosystem. Built on Base, a secure and scalable Layer 2 solution on Ethereum, this app ensures low-cost, fast transactions while maintaining Ethereum's security.
+eStories is a privacy-preserving, AI-powered Web3 storytelling platform that transforms narratives into structured, permanent, and verifiable memory infrastructure. Built on Base (Ethereum L2), it combines voice capture, AI transcription, client-side encryption, blockchain permanence, and Chainlink CRE-verified cognitive analysis.
 
-In a world where hestory has often been manipulated by conquerors, victors and dominating empires, eStory reclaims the power of authentic storytelling. Users can broadcast their unfiltered truths forever on the blockchain, ensuring tamper-proof preservation, while earning rewards through community engagement and NFT-based sales.
+Users write about anything they're passionate about -- personal journals, historical narratives, geopolitical analysis, cultural stories, creative non-fiction -- with AI-powered craft feedback that helps them become better storytellers over time. Every story is encrypted on-device, and verification is provable without trusting the platform.
+
+### The Three Crises eStories Solves
+
+1. **The Ancient Crisis -- Memory Extinction.** Human experience vanishes. Oral traditions die with their keepers. Cultural narratives disappear with communities. eStories captures voice -> AI transcription -> encrypted storage -> optional on-chain permanence.
+
+2. **The Present Crisis -- The Unexamined Life at Scale.** We are living through a civilizational inflection point comparable to the Renaissance and Industrial Revolution. Writing declutters the mind and sharpens thinking, but current platforms harvest intimate data. eStories provides sovereign storytelling with client-side encryption (AES-256-GCM) and Chainlink CRE for verifiable analysis.
+
+3. **The Emerging Crisis -- The Meaning Void.** As AI automates work, millions lose identity and purpose. Storytelling fills that void -- and eStories's AI feedback helps users improve as writers. In a world flooded with AI-generated content, authenticity must be provable. On-chain cryptographic proofs create tamper-proof provenance.
+
+**1-line pitch:** Privacy-preserving AI-powered sovereign storytelling platform with verifiable metrics via Chainlink CRE on Base L2.
 
 ## Key Features
 
-### ✨ Core Functionality
+### Core Functionality
 
-- Voice-to-Text Journaling: Record stories using browser-based audio capture with AI-powered transcription (ElevenLabs Scribe)
-- AI Enhancements: Get creative prompts, grammar polishing, and AI-generated suggestions (Google Gemini 2.5 Flash)
-- Blockchain Immortality: Mint stories as NFTs on Base (Ethereum L2) with IPFS storage via Pinata
-- Monetization Suite: Earn $STORY tokens from likes, tips, and paywall sales
+- **Voice-to-Text Storytelling**: Record stories with browser audio capture + AI transcription (ElevenLabs Scribe) -- or type directly
+- **Write About Anything**: Personal journals, history, geopolitics, culture, creative non-fiction, memoirs
+- **AI Enhancement**: Grammar polishing, creative prompts, and AI suggestions (Google Gemini 2.5 Flash)
+- **Storytelling Craft Feedback**: AI analyzes narrative coherence, emotional depth, thematic quality -- improving with every story
+- **Story Collections**: Group stories into series with continuations -- curate chapters of your life
+- **Blockchain Immortality**: Mint stories as NFTs on Base (Ethereum L2) with IPFS storage via Pinata
 
-### 🧠 Cognitive Layer (Phase 1 - NEW)
+### Privacy & Encryption (Local Vault)
 
-- AI Story Analysis: Automatic extraction of themes, emotions, and life domains from stories
-- Emotional Insights: AI-detected emotional tone (hopeful, reflective, joyful, etc.)
-- Entity Extraction: Automatically identifies people, places, and time references mentioned
-- Significance Scoring: AI evaluates intensity and significance of each story
-- Story Insights UI: Beautiful component displaying AI-generated insights for each story
-- Weekly Reflections: AI-generated weekly summaries of journaling patterns (Phase 3 infrastructure ready)
+- **Client-Side Encryption**: AES-256-GCM encryption at rest in IndexedDB via Web Crypto API
+- **PIN-Protected Vault**: PIN -> PBKDF2 (100K iterations) -> KEK -> AES-KW wraps DEK
+- **Zero-Knowledge Design**: DEK held in-memory only while unlocked; cleared on sign-out
+- **Offline Capable**: Stories exist locally even without internet
+- **Dual-Write Architecture**: Cloud save first (authoritative), vault save additive (non-blocking)
 
-### 🔐 Authentication & Security
+### Chainlink CRE Integration (Verified AI Analysis)
 
-- Dual Auth: Sign in via Google OAuth or Web3 wallet
-- Nonce-Based Signing: Server-generated nonces prevent wallet signature replay attacks
-- Account Linking: Link Google and wallet for unified access (Profile > Settings)
-- Signature Verification: Wallet linking uses HMAC-signed tokens + viem message signing
-- Bearer Token Auth: All API routes protected with Supabase JWT verification
-- Rate Limiting: Route-specific rate limits (AI: 10/min, Auth: 20/min, Default: 60/min)
-- Security Headers: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
-- Onboarding Flow: New Google users auto-onboarded, wallet users go through setup
+- **Verifiable AI Metrics**: Story analysis runs inside Chainlink DON enclaves via ConfidentialHTTPClient
+- **Privacy-Preserving Proofs**: On-chain stores only quality tier, threshold boolean, and keccak256 hashes
+- **Full Metrics Author-Only**: Complete scores, themes, and analysis stored in Supabase (visible only to the author)
+- **Dual-Write Pipeline**: DON consensus -> KeystoneForwarder (on-chain proofs) + HTTP callback (Supabase full metrics)
+- **PrivateVerifiedMetrics Contract**: `0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c` (Base Sepolia)
 
-### 💬 Social Features
+### Cognitive Layer (AI Analysis)
 
-- Community Social Feed: Discover and engage with other stories
-- Like System: Earn rewards for community engagement ($STORY tokens)
-- Tip System: Support creators directly with custom $STORY token amounts
-- Comment System: Leave thoughts and build community discussions
-- Follow System: Build your storytelling community
-- Story Sharing: Share stories across social platforms
+- **Automatic Story Analysis**: Themes, emotions, life domains extracted from every story
+- **Emotional Insights**: AI-detected emotional tone (hopeful, reflective, joyful, etc.)
+- **Entity Extraction**: People, places, and time references identified automatically
+- **Significance Scoring**: AI evaluates intensity and significance of each story
+- **Actionable Craft Advice**: Specific feedback on how to improve each story
+- **Weekly Reflections**: AI-generated summaries of writing patterns and growth
+- **Pattern Discovery**: Theme tracking, domain grouping, and canonical story curation across your archive
 
-### 💰 Monetization
+### Authentication & Security
 
-- Paywall System: Set custom prices for exclusive stories
-- $STORY Token Rewards: Earn from likes and community engagement
-- NFT Minting: Compile stories into digital books and mint as NFTs
-- Tip Jar: Accept voluntary tips from supporters
+- **Dual Auth**: Google OAuth or Web3 wallet -- both work independently
+- **Custom Wallet JWT**: Wallet users get custom JWT (jose, HS256, 7-day expiry) stored in localStorage
+- **Google OAuth**: Standard Supabase auth session with implicit flow
+- **Account Linking**: Link Google and wallet for unified access (nav dropdown)
+- **Nav Dropdown Wallet Status**: Always shows wallet state -- green check with address (linked) or "Connect Wallet" button
+- **Nonce-Based Signing**: Server-generated UUID nonces with 5-minute expiry prevent replay attacks
+- **Bearer Token Auth**: All API routes protected via `lib/auth.ts` (tries Supabase token first, then wallet JWT)
+- **Rate Limiting**: Route-specific (AI: 10/min, Auth: 20/min, CRE Callback: 5/min, Default: 60/min)
+- **Security Headers**: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, HSTS
+- **Onboarding Flow**: Multi-step onboarding for all new users (username, optional vault setup, optional wallet)
 
-### 📚 Library & Curation
+### Social Features
 
-- Personal Library: Organize all your stories and books
-- Book Compilation: Combine multiple stories into digital books
-- Story Filtering: Search, filter, and organize by mood, date, and tags
-- Audio Storage: All recordings stored securely with public URLs
+- **Community Feed**: Discover and engage with public stories
+- **Like System**: Social appreciation (no token rewards -- purely social)
+- **Tip System**: Support creators with direct payments
+- **Comment System**: Build discussions on stories
+- **Follow System**: Build your storytelling community
 
-### 👤 User Profiles
+### Monetization
 
-- Profile Customization: Build your creator profile with bio and avatar
-- Streaks & Achievements: Track daily writing streaks and earn badges
-- Statistics Dashboard: View your impact and community engagement metrics
-- Writing Goals: Set and track monthly story targets
+- **USDC Subscriptions**: Monthly plans via Blockradar ($2.99 Storyteller / $7.99 Creator)
+- **Paywall System**: Set custom prices for exclusive stories
+- **Tip Jar**: Accept voluntary tips from supporters
+- **NFT Minting**: Compile stories into digital books and mint as NFTs
+- **$STORY Token**: ERC20 token (testnet only -- mainnet at 100+ users)
 
-**Tagline:** Speak Your Story, Mint Your Legacy
+### Library & Curation
+
+- **Personal Library**: All stories with month-by-month archive grouping
+- **Story Collections**: Create curated series with add/remove stories
+- **Story Continuations**: Continue an existing story as a new entry
+- **Themes & Domains**: AI-powered grouping by theme and life domain
+- **Canonical Stories**: Mark key moments for special curation
+- **Book Compilation**: Combine stories into digital books
+
+### User Profiles
+
+- **Profile Customization**: Name, bio, avatar, location, website
+- **Contribution Heatmap**: GitHub-style activity visualization (365 days)
+- **Writing Streaks & Achievements**: Track consistency and earn badges
+- **Statistics Dashboard**: Stories, likes, followers, impact metrics
+- **Vault Settings**: Setup, unlock, lock, change PIN from profile
+- **Linked Accounts**: See and manage Google + wallet connections
 
 ## How It Works
 
-Follow these simple steps to start your storytelling journey:
+### Step 1: Record or Write
 
-### Step 1: Record Your Story 🎙️
+Use AI Speech-to-Text to record by voice, or type directly. Write about whatever moves you -- reflections, history, culture, geopolitics, creative non-fiction.
 
-Use our AI Speech-to-Text feature to easily record your thoughts and experiences. Just hit record and speak naturally—no need to write!
+### Step 2: Enhance & Analyze
 
-### Step 2: Enhance & Polish ✨
+AI polishes grammar and style. Automatic cognitive analysis extracts themes, emotions, and provides craft feedback. Optionally trigger CRE verification for on-chain proof.
 
-Leveraging Gemini Flash AI, get grammar corrections, creative suggestions, and writing enhancements to make your story shine.
+### Step 3: Encrypt & Store
 
-### Step 3: Secure Your Entries 🔐
+Stories are encrypted on-device (AES-256-GCM) in the local vault. Cloud backup is separate and authoritative. Your PIN never leaves the device.
 
-Store your stories as NFTs on the blockchain for secure and permanent ownership. Your stories are immutable and truly yours forever.
+### Step 4: Share & Earn
 
-### Step 4: Share & Earn 💰
-
-Engage with the community, share your stories, and earn $STORY tokens based on interactions. Build your audience and monetize your creativity!
-
-## Why eStory?
-
-Hestory is written by the victors, but your story deserves to be heard unedited. eStory counters narrative manipulation by giving individuals the tools to create, own, and profit from their personal histories on an immutable blockchain. Whether it's a daily reflection, a life milestone, or a cultural tale, your voice becomes part of an unbreakable digital archive—all powered by the efficiency of Base Layer 2.
+Publish stories to the community feed. Earn from tips and paywall sales. Build your audience as a creator.
 
 ## Tech Stack
 
 ### Frontend
-
-- Framework: Next.js 15.5.9 (App Router) with React 19 and TypeScript for performant, SEO-friendly experiences
-- Styling: Tailwind CSS 4 for responsive, modern UI with full dark/light mode support
-- Animations: Framer Motion for smooth, professional animations and transitions
-- UI Components: shadcn/ui for accessible, customizable components
-- Icons: Lucide React for consistent iconography
+- **Framework**: Next.js 15.5.9 (App Router), React 19, TypeScript
+- **Styling**: Tailwind CSS 4 with dark/light mode
+- **Animations**: Framer Motion
+- **UI Components**: shadcn/ui + Radix primitives
+- **Icons**: Lucide React
 
 ### Blockchain & Web3
-
-- Wallet Integration: Wagmi + RainbowKit for seamless wallet connections
-- Smart Contracts: Solidity contracts deployed on Base (Ethereum L2)
-- Contract Interaction: Viem for efficient blockchain interactions
-- Contracts Included:
-  - eStoryToken.sol - ERC20 token ($STORY) with 100M max supply cap, pausable, role-based minting
-  - StoryProtocol.sol - Smart contract for tips and paywall payments
-  - StoryNFT.sol - ERC721 NFT contract for minting story books with mint fee (0.001 ETH) and ERC2981 royalties
+- **Wallet Integration**: Wagmi 2.17 + RainbowKit 2.2
+- **Smart Contracts**: Solidity on Base (Ethereum L2) via Hardhat
+- **Contract Interaction**: Viem 2.38
+- **Verification**: Chainlink CRE (Compute Runtime Environment)
 
 ### Backend & Database
+- **Database**: Supabase (PostgreSQL + Auth + Storage)
+- **API**: Next.js API Routes (serverless)
+- **IPFS**: Pinata for decentralized file storage
+- **Email**: Resend (transactional emails, domain-verified)
+- **Payments**: Blockradar (USDC subscriptions on Base)
 
-- Database: Supabase (PostgreSQL) for real-time data and authentication
-- Storage: Supabase Storage for audio files and media
-- API: Next.js API Routes for serverless functions
+### AI Services
+- **Speech-to-Text**: ElevenLabs Scribe
+- **Text Enhancement + Analysis**: Google Gemini 2.5 Flash
+- **Thinking Agent**: Claude SDK (complex reasoning tasks)
+- **CRE AI**: Gemini via Chainlink ConfidentialHTTPClient (encrypted DON enclave)
 
-### AI & External Services
+### Client-Side Security
+- **Encryption**: Web Crypto API (AES-256-GCM, PBKDF2, AES-KW)
+- **Local Storage**: Dexie.js (IndexedDB with reactive queries via useLiveQuery)
+- **Key Management**: PIN -> KEK -> DEK architecture, in-memory only while unlocked
 
-- Speech-to-Text: ElevenLabs Scribe for accurate voice transcription
-- Text Enhancement: Google Gemini 2.5 Flash for AI-powered writing suggestions
-- Story Analysis: Google Gemini 2.5 Flash for cognitive metadata extraction
-- Text-to-Speech: Browser Speech Synthesis API for audio playback
-- IPFS Storage: Pinata for decentralized file storage
-- Email: Resend for transactional emails
+### Testing
+- **Unit**: Vitest + React Testing Library (96+ tests)
+- **E2E**: Playwright (Chrome, Firefox, Safari)
+- **Vault**: 27 dedicated encryption/key lifecycle tests
 
-### Testing Infrastructure
+### Deployment
+- **Hosting**: Vercel
+- **Domain**: estories.app (Cloudflare DNS, HSTS enabled)
+- **Contracts**: Base Sepolia (testnet)
 
-- Unit Testing: Vitest with React Testing Library
-- E2E Testing: Playwright (Chrome, Firefox, Safari)
-- Coverage: @vitest/coverage-v8 for code coverage reports
-- Mocking: vi.mock for dependency mocking
+## Architecture
 
-### Development & Deployment
 
-- Package Manager: npm (Node.js 19+)
-- Linting: ESLint with TypeScript support
-- Smart Contracts: Hardhat for Solidity development
-- Deployment: Vercel (recommended) or any Node.js hosting
+### Smart Contracts (Base Sepolia)
 
-## Pages & Features
-
-### 🏠 Home Page (/)
-
-- Hero section showcasing app features and benefits
-- Key statistics (stories created, active users, tokens earned, books minted)
-- Feature cards with gradient backgrounds
-- Call-to-action buttons
-- Beautiful gradient animations and glassmorphism design
-
-### 🎙️ Record Page (/record)
-
-- Audio Recording: Mic input with duration tracking
-- Real-time Transcription: AI-powered speech-to-text using Gemini Flash
-- AI Enhancement: Polish and improve written content
-- Text-to-Speech: Preview stories with native browser audio
-- Media Management: Save audio files to Supabase Storage
-- Story Metadata: Add title, mood, tags, and paywall settings
-- Database Save: Store stories with author wallet and audio URLs
-
-### 📚 Library Page (/library)
-
-- Personal Collection: View all your recorded stories and compiled books
-- Advanced Filtering: Search by title, date, mood, and tags
-- Story Statistics: Track likes, views, and engagement per story
-- Book Compilation: Select multiple stories to compile into PDFs
-- Audio Playback: Listen to recorded stories
-- Mood Badges: Visual mood indicators for each story
-
-### 🌐 Social Page (/social)
-
-- Community Feed: Discover stories from other users
-- Featured Writers: Showcase top storytellers
-- Trending Topics: View popular hashtags and themes
-- Story Cards: Rich story previews with author info, likes, and engagement
-- Multiple Views: Feed, Trending, and Following tabs
-- Community Stats: Display active users and engagement metrics
-
-### 👥 Profile Page (/profile)
-
-- User Profile: Customize name, bio, location, website, and avatar
-- Writing Streaks: Track daily writing consistency with visual progress
-- Achievements: Earn and display badges (First Story, Community Star, etc.)
-- Statistics: View total stories, likes earned, followers, and impact metrics
-- Writing Goals: Set and track monthly story targets
-- Settings: User account and preference management
-- Linked Accounts: Link Google OAuth and Web3 wallet from Settings tab
-
-### 📖 Story Detail Page (/story/[storyId])
-
-- Full Story Display: Read complete story content with rich formatting
-- Author Profile: View author info, badges, and follower count
-- Engagement Metrics: See likes, shares, and view counts
-- Like System: Blockchain-integrated like button with $STORY rewards
-- Tip System: Send custom $STORY token amounts to support creators
-- Paywall Support: Unlock exclusive stories with token payment
-- Audio Player: Listen to story recordings if available
-- Comment Section: Post and read comments from community
-- Share Functionality: Share stories to social media or copy link
-- Save/Bookmark: Save stories for later reading
-- Edit Option: Author can edit their own stories
-- Enhanced UI: Mood-based gradient headers and smooth animations
+| Contract | Address | Purpose |
+|----------|---------|---------|
+| eStoryToken | `0xf9eDD76B...` | ERC20 $STORY token, MAX_SUPPLY 100M |
+| StoryProtocol | `0xA51a4cA0...` | Tips & paywall payments |
+| StoryNFT | `0x6D37ebc5...` | ERC721 story books, mintFee 0.001 ETH |
+| PrivateVerifiedMetrics | `0x158e08BC...` | Privacy-preserving CRE metrics |
+| VerifiedMetrics (legacy) | `0x052B52A4...` | Old CRE contract (backward compat) |
 
 ## Project Structure
 
-```markdown
-i_story_dapp/
-├── app/
-│   ├── api/                          # API Routes
-│   │   ├── ai/
-│   │   │   ├── analyze/              # Story analysis endpoint (Phase 1)
-│   │   │   ├── enhance/              # Text enhancement endpoint
-│   │   │   └── transcribe/           # Speech-to-text endpoint
-│   │   ├── auth/
-│   │   │   ├── callback/             # OAuth callback handler (redirect whitelist)
-│   │   │   ├── initiate-link/        # Start account linking (HMAC token)
-│   │   │   ├── link-account/         # Account linking (wallet ↔ Google)
-│   │   │   ├── link-google/          # Link Google to wallet account
-│   │   │   ├── login/                # Wallet auth (nonce-verified)
-│   │   │   ├── nonce/                # Server-side nonce generation
-│   │   │   └── onboarding/           # New user onboarding
-│   │   ├── book/
-│   │   │   └── compile/              # Book compilation
-│   │   ├── journal/
-│   │   │   └── save/                 # Save journal entries
-│   │   ├── notifications/            # Notification system
-│   │   ├── social/
-│   │   │   ├── follow/               # Follow system
-│   │   │   └── like/                 # Like functionality (real DB)
-│   │   ├── tip/                      # Tipping system
-│   │   ├── paywall/                  # Paywall payments
-│   │   └── user/
-│   │       └── profile/              # User profile API (real DB)
-│   ├── hooks/
-│   │   ├── useBrowserSupabase.ts     # Supabase singleton hook
-│   │   ├── useEStoryToken.ts         # Token contract interactions
-│   │   ├── useStoryProtocol.ts       # Protocol contract (tips/paywall)
-│   │   ├── useStoryNFT.ts            # NFT contract interactions
-│   │   ├── useNotifications.ts       # Notification system hook
-│   │   ├── usePatterns.ts            # Pattern aggregation hook
-│   │   └── useReflection.ts          # Weekly reflection hook
-│   ├── robots.ts                     # SEO: Crawler directives
-│   ├── sitemap.ts                    # SEO: Dynamic sitemap (public stories)
-│   ├── opengraph-image.tsx           # SEO: Default branded OG image
-│   ├── story/
-│   │   └── [storyId]/
-│   │       ├── page.tsx              # Server component (metadata + JSON-LD)
-│   │       ├── StoryPageClient.tsx   # Client component (UI)
-│   │       └── opengraph-image.tsx   # Dynamic per-story OG image
-│   ├── books/
-│   │   └── [bookId]/
-│   │       ├── page.tsx              # Server component (metadata + JSON-LD)
-│   │       └── BookPageClient.tsx    # Client component (UI)
-│   ├── library/
-│   │   ├── page.tsx                  # Server component (metadata)
-│   │   └── LibraryPageClient.tsx     # Client component (UI)
-│   ├── profile/
-│   │   ├── page.tsx                  # Server component (metadata)
-│   │   └── ProfilePageClient.tsx     # Client component (UI)
-│   ├── record/
-│   │   ├── page.tsx                  # Server component (metadata)
-│   │   └── RecordPageClient.tsx      # Client component (UI)
-│   ├── social/
-│   │   ├── page.tsx                  # Server component (metadata)
-│   │   └── SocialPageClient.tsx      # Client component (UI)
-│   ├── types/
-│   │   └── index.ts                  # TypeScript interfaces (includes StoryMetadata)
-│   ├── utils/
-│   │   ├── supabase/                 # Supabase clients (browser, server, admin)
-│   │   ├── ipfsService.ts            # IPFS/Pinata service
-│   │   └── emailService.ts           # Resend email service
-│   ├── layout.tsx                    # Root layout (metadata, JSON-LD, Footer)
-│   ├── page.tsx                      # Home page (server wrapper)
-│   ├── HomePageClient.tsx            # Home page (client UI)
-│   └── globals.css                   # Global styles
-├── __tests__/                        # Unit tests (Vitest)
-│   ├── api/
-│   │   └── analyze.test.ts           # Analyze endpoint tests (38 tests)
-│   ├── components/
-│   │   └── StoryInsights.test.tsx    # StoryInsights tests (41 tests)
-│   ├── RecordPage.test.tsx           # Record page tests
-│   └── setup.ts                      # Test setup & mocks
-├── e2e/                              # E2E tests (Playwright)
-│   └── navigation.spec.ts
-├── components/
-│   ├── Footer.tsx                    # Footer component
-│   ├── Navigation.tsx                # Top navigation bar
-│   ├── Provider.tsx                  # Web3 & Theme providers
-│   ├── StoryCard.tsx                 # Story card component
-│   ├── StoryInsights.tsx             # AI insights display (Phase 1)
-│   ├── AuthProvider.tsx              # Auth context
-│   ├── AuthButton.tsx                # Auth action button
-│   ├── AuthModal.tsx                 # Auth modal dialog
-│   ├── OnboardingModal.tsx           # New user onboarding modal
-│   └── ui/                           # shadcn/ui components
-├── contracts/                        # Solidity smart contracts
-│   ├── eStoryToken.sol               # ERC20 $STORY token
-│   ├── StoryProtocol.sol             # Tips & paywall payments
-│   └── StoryNFT.sol                  # ERC721 book NFTs
-├── middleware.ts                      # API rate limiting (route-specific)
-├── scripts/                          # Utility scripts
-│   ├── deploy.ts                     # Contract deployment
-│   ├── verify.ts                     # Contract verification
-│   ├── verify-deployment.ts          # Post-deploy ABI verification
-│   ├── think.ts                      # Claude thinking agent (Phase 1.5)
-│   └── backfill-metadata.ts          # Metadata backfill script
-├── lib/
-│   ├── auth.ts                       # Shared auth middleware (Bearer token validation)
-│   ├── crypto.ts                     # Crypto utilities (timing-safe comparison)
-│   ├── contracts.ts                  # Contract addresses & ABIs
-│   ├── wagmi.config.ts               # Wagmi configuration
-│   ├── wagmi.config.server.ts        # Server-side Wagmi config
-│   ├── viemClient.ts                 # Viem client setup
-│   └── abis/                         # Contract ABI JSON files
-├── supabase/
-│   └── migrations/                   # Database migrations
-│       ├── 001_create_weekly_reflections.sql
-│       ├── 002_enable_rls_policies.sql
-│       └── 003_add_oauth_fields.sql
-├── public/                           # Static assets + manifest.json (PWA)
-├── vitest.config.ts                  # Vitest configuration
-├── playwright.config.ts              # Playwright configuration
-├── hardhat.config.ts                 # Hardhat configuration
-├── components.json                   # shadcn/ui config
-├── next.config.mjs                   # Next.js configuration
-├── tailwind.config.ts                # Tailwind configuration
-├── tsconfig.json                     # TypeScript configuration
-└── package.json                      # Dependencies
 ```
+i_story_dapp/
+├── app/                          # Next.js App Router
+│   ├── api/                      # API routes (all require Bearer token auth)
+│   │   ├── admin/                # Admin endpoints (ADMIN_SECRET, timing-safe)
+│   │   ├── ai/                   # AI endpoints (analyze, enhance, transcribe, reflection)
+│   │   ├── auth/                 # Auth (callback, login, nonce, onboarding, link-*)
+│   │   ├── book/                 # Book compilation
+│   │   ├── cre/                  # Chainlink CRE (trigger, callback, check)
+│   │   ├── journal/              # Story saving (triggers AI analysis)
+│   │   ├── notifications/        # Notification CRUD
+│   │   ├── paywall/              # Paywall payments
+│   │   ├── social/               # Like, follow
+│   │   ├── stories/collections/  # Story collections CRUD
+│   │   ├── sync/                 # Blockchain tx verification
+│   │   ├── tip/                  # Tipping
+│   │   ├── user/                 # User profile
+│   │   └── waitlist/             # Waitlist signup
+│   ├── hooks/                    # React hooks
+│   │   ├── useVault.ts           # Vault lifecycle (setup/unlock/lock/changePin)
+│   │   ├── useLocalStories.ts    # Encrypted CRUD via IndexedDB (reactive)
+│   │   ├── useVerifiedMetrics.ts # CRE metrics + proof polling
+│   │   ├── usePatterns.ts        # Theme/domain grouping
+│   │   ├── useReflection.ts      # Weekly AI reflections
+│   │   ├── useEStoryToken.ts     # Token contract interactions
+│   │   ├── useStoryProtocol.ts   # Tips/paywall contract
+│   │   ├── useStoryNFT.ts        # NFT minting
+│   │   └── useNotifications.ts   # Notification system
+│   ├── types/                    # TypeScript definitions
+│   ├── utils/                    # Supabase clients, services
+│   └── [pages]/                  # Each: server page.tsx + *PageClient.tsx
+├── components/
+│   ├── ui/                       # shadcn/ui components
+│   ├── vault/                    # VaultGuard, PinEntryModal, VaultSettings
+│   ├── emails/                   # Email templates (Welcome, Waitlist)
+│   ├── patterns/                 # ThemesView, DomainsView, MonthlySummary
+│   ├── AuthProvider.tsx          # Auth context (dual auth, token management)
+│   ├── AuthButton.tsx            # Nav auth button with wallet status dropdown
+│   ├── AuthModal.tsx             # Sign-in modal (Google + Wallet)
+│   ├── Navigation.tsx            # Top nav bar
+│   ├── StoryCard.tsx             # Story card component
+│   ├── VerifiedBadge.tsx         # CRE verification badge
+│   └── VerifiedMetricsCard.tsx   # CRE metrics display
+├── contracts/                    # Solidity smart contracts
+│   ├── eStoriesToken.sol         # ERC20 $STORY token
+│   ├── StoryProtocol.sol         # Tips & paywall
+│   ├── StoryNFT.sol              # ERC721 book NFTs
+│   ├── PrivateVerifiedMetrics.sol # Privacy-preserving CRE receiver
+│   ├── legacy/                   # Old contracts (backward compat)
+│   └── interfaces/               # IERC165, IReceiver, ReceiverTemplate
+├── cre/                          # Chainlink CRE workflows
+│   └── iStory_workflow/          # main.ts, gemini.ts, httpCallback.ts
+├── lib/
+│   ├── auth.ts                   # Shared auth middleware
+│   ├── jwt.ts                    # Custom wallet JWT (jose, HS256)
+│   ├── crypto.ts                 # Timing-safe comparison
+│   ├── contracts.ts              # Contract addresses & ABIs
+│   └── vault/                    # Client-side encryption
+│       ├── crypto.ts             # AES-256-GCM + PBKDF2 + AES-KW
+│       ├── db.ts                 # Dexie.js IndexedDB schema
+│       ├── keyManager.ts         # DEK lifecycle
+│       └── index.ts              # Barrel export
+├── middleware.ts                 # API rate limiting
+├── __tests__/                    # Unit tests (Vitest, 96+ tests)
+├── e2e/                          # E2E tests (Playwright)
+├── scripts/                      # Deployment & utility scripts
+├── docs/                         # Detailed reference docs
+└── supabase/migrations/          # Database migrations
+```
+
+## API Endpoints
+
+All API routes require Bearer token authentication unless noted. Rate limits apply globally via `middleware.ts`.
+
+### AI Endpoints (Auth Required)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/ai/transcribe` | Convert audio to text (max 25MB) |
+| POST | `/api/ai/enhance` | Enhance story text with AI (max 50K chars) |
+| POST | `/api/ai/analyze` | Extract cognitive metadata (verifies ownership) |
+| GET/POST | `/api/ai/reflection` | Weekly AI reflection (1 per week limit) |
+
+### Chainlink CRE Endpoints (Auth Required)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/cre/trigger` | Trigger CRE verification for a story |
+| POST | `/api/cre/callback` | DON callback receiver (secret-authenticated) |
+| GET | `/api/cre/check` | Read metrics (author: full, public: proof only) |
+
+### Auth Endpoints
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/auth/nonce` | Generate nonce for wallet signing (no auth) |
+| POST | `/api/auth/login` | Wallet auth (verifies nonce + signature) |
+| GET | `/api/auth/callback` | OAuth callback (redirect whitelist) |
+| POST | `/api/auth/onboarding` | Complete new user onboarding |
+| POST | `/api/auth/initiate-link` | Start account linking (HMAC token) |
+| POST | `/api/auth/link-account` | Link wallet to Google account |
+| POST | `/api/auth/link-google` | Link Google to wallet account |
+
+### Story & Social Endpoints (Auth Required)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/journal/save` | Save story (triggers AI analysis) |
+| GET/POST/DELETE | `/api/stories/collections` | Story collections CRUD |
+| POST | `/api/social/like` | Like/unlike (atomic toggle) |
+| POST | `/api/social/follow` | Follow/unfollow user |
+| POST | `/api/tip` | Send tip to creator |
+| POST | `/api/paywall` | Unlock paywalled content |
+
+### User & Notification Endpoints (Auth Required)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET/PUT | `/api/user/profile` | Fetch/update user profile |
+| GET/POST/PUT/DELETE | `/api/notifications` | Notification CRUD |
+| GET/POST/PUT/DELETE | `/api/habits` | Habit tracking |
+
+### Infrastructure Endpoints
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/ipfs/upload` | Upload to IPFS (max 50MB, MIME whitelist) |
+| POST | `/api/email/send` | Send email via Resend |
+| POST | `/api/waitlist` | Join waitlist (mobile app) |
+| GET | `/api/admin/analysis-stats` | Admin stats (ADMIN_SECRET) |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ with npm, yarn, or pnpm
-- Supabase account with project setup (PostgreSQL database + auth)
-- MetaMask or compatible Web3 wallet configured for Base network
+- Node.js 18+ with npm
+- Supabase account with project setup
+- Web3 wallet (MetaMask or compatible) for blockchain features
 - Base Sepolia testnet access for development
-- Google API key or similar for Gemini Flash AI services
+- Google Gemini API key
+- ElevenLabs API key
 
 ### Installation
 
-Clone the repository:
-
 ```bash
+git clone <repo-url>
+cd i_story_dapp
 npm install
-# or: yarn install / pnpm install
 ```
 
-Set up environment variables: Create a `.env.local` file in the root directory:
+Create `.env.local` from `.env.example`:
 
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 # AI Services
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_key
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key
 ELEVENLABS_API_KEY=your_elevenlabs_key
 
-# Web3 & Blockchain
+# Web3
 NEXT_PUBLIC_PROJECT_ID=your_walletconnect_project_id
 
 # Smart Contracts (Base Sepolia)
@@ -380,321 +353,155 @@ NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS=0x...
 NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0x...
 NEXT_PUBLIC_STORY_NFT_ADDRESS=0x...
 
+# Email & Payments
+RESEND_API_KEY=your_resend_key
+BLOCKRADAR_API_KEY=your_blockradar_key
+
 # Security
 CRON_SECRET=your_cron_secret
+JWT_SECRET=your_jwt_secret
 ```
 
-Set up Supabase:
-
-- Create tables: users, stories, comments, saved_stories, likes, story_metadata, weekly_reflections
-- Enable Row Level Security (RLS) for data privacy
-- Create storage bucket story-audio for audio files
-- Configure authentication with OAuth or email/password
-
-Deploy Smart Contracts (optional for testing):
+### Development
 
 ```bash
-# Install Hardhat
-npm install --save-dev hardhat
+npm run dev          # Start Next.js dev server (localhost:3000)
+npm run build        # Production build
+npm run lint         # ESLint
+npx vitest run       # Unit tests
+npx playwright test  # E2E tests
+```
 
-# Compile contracts
+### Smart Contract Deployment
+
+```bash
 npx hardhat compile
-
-# Deploy to Base Sepolia
-npx hardhat run scripts/deploy.js --network baseSepolia
+npx hardhat run scripts/deploy.ts --network baseSepolia
+npx hardhat run scripts/verify-deployment.ts --network baseSepolia
 ```
 
-Run development server:
+### CRE Workflow (from cre/ directory)
 
 ```bash
-npm run dev
+cre workflow simulate iStory_workflow              # Local test
+cre workflow simulate iStory_workflow --broadcast  # Test with on-chain write
+cre workflow deploy iStory_workflow                # Deploy (early access)
 ```
 
-Open <http://localhost:3000> in your browser
+## Monetization Architecture
 
-Quick Start Guide
+Two independent payment systems:
 
-- Connect Wallet: Click "Connect Wallet" using MetaMask (switch to Base network)
-- Create Profile: Navigate to /profile and set up your author information
-- Record Story: Go to /record, hit record button, and speak your story
-- Enhance: Use AI enhancement to polish your text
-- Save: Click save to store your story with audio on blockchain
-- Share: Go to /social and like/tip other stories to earn $STORY tokens
-- Compile: Visit /library to compile stories into a book
+| System | Currency | Status | Purpose |
+|--------|----------|--------|---------|
+| Subscriptions | USDC via Blockradar | Live (mainnet) | Monthly plans ($2.99/$7.99) |
+| Token Economy | $STORY (ERC-20) | Testnet (UI disabled) | Tips, paywalls, NFT minting |
 
-## Development Scripts
-
-| Command | Description |
-| --------- | ------------- |
-| `npm run dev` | Start development server on <http://localhost:3000> |
-| `npm run build` | Build for production |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint checks |
-
-### Testing Commands
-
-| Command | Description |
-| --------- | ------------- |
-| `npx vitest` | Run unit tests (watch mode) |
-| `npx vitest run` | Run unit tests once |
-| `npx vitest run --coverage` | Run tests with coverage report |
-| `npx playwright test` | Run E2E tests |
-| `npx playwright test --ui` | Run E2E tests with interactive UI |
-
-### Smart Contract Commands
-
-| Command | Description |
-| --------- | ------------- |
-| `npx hardhat compile` | Compile Solidity contracts |
-| `npx hardhat run scripts/deploy.ts --network baseSepolia` | Deploy to Base Sepolia |
-| `npx hardhat run scripts/verify.ts --network baseSepolia` | Verify on Basescan |
-| `npx hardhat run scripts/verify-deployment.ts --network baseSepolia` | Verify deployed ABIs match expected interfaces |
-
-### Utility Scripts
-
-| Command                                       | Description                                    |
-|-----------------------------------------------|------------------------------------------------|
-| `npx ts-node scripts/think.ts "problem"`| Run Claude thinking agent for complex problems |
-| `npx ts-node scripts/backfill-metadata.ts` | Backfill metadata for existing stories |
-
-## API Endpoints
-
-All API routes require Bearer token authentication unless noted. Rate limits apply globally (middleware.ts).
-
-### AI Endpoints (Auth Required)
-
-- POST /api/ai/transcribe - Convert audio to text (max 25MB, audio/* only)
-- POST /api/ai/enhance - Enhance story text with AI (max 50K chars)
-- POST /api/ai/analyze - Extract cognitive metadata (verifies story ownership)
-- POST /api/ai/reflection - Generate weekly AI reflection (1 per week limit)
-
-### Auth Endpoints
-
-- GET /api/auth/nonce - Generate server-side nonce for wallet signing (no auth)
-- POST /api/auth/login - Authenticate with wallet signature (verifies nonce)
-- GET /api/auth/callback - OAuth callback handler (validates redirect URL)
-- POST /api/auth/onboarding - Complete new user onboarding (auth required)
-- POST /api/auth/initiate-link - Start account linking (auth + wallet signature)
-- POST /api/auth/link-account - Link wallet to Google account (auth + signature)
-- POST /api/auth/link-google - Link Google OAuth to wallet account (linking token)
-
-### Story Endpoints (Auth Required)
-
-- POST /api/journal/save - Save story to database (triggers AI analysis)
-- GET /api/stories/[storyId]/metadata - Get story metadata/insights
-- POST /api/book/compile - Compile stories into a book (verifies author ownership)
-
-### Social Endpoints (Auth Required)
-
-- POST /api/social/like - Like/unlike a story (atomic toggle, real DB)
-- POST /api/social/follow - Follow/unfollow user (verifies wallet ownership)
-- POST /api/tip - Send $STORY tokens to creators
-- POST /api/paywall - Unlock paywalled content
-
-### Notification Endpoints (Auth Required)
-
-- GET /api/notifications - Fetch user notifications (with pagination)
-- POST /api/notifications - Create notification
-- PUT /api/notifications - Mark as read
-- DELETE /api/notifications - Delete notification(s)
-
-### User Endpoints (Auth Required)
-
-- GET /api/user/profile - Fetch authenticated user's real profile
-- PUT /api/user/profile - Update profile (name, bio, avatar only)
-- GET/POST/PUT/DELETE /api/habits - Habit tracking (verifies user ownership)
-
-### Infrastructure Endpoints
-
-- POST /api/ipfs/upload - Upload to IPFS (auth required, max 50MB, MIME whitelist)
-- POST /api/email/send - Send email via Resend (auth required)
-- POST /api/sync/verify_tx - Verify blockchain tx (auth + wallet ownership)
-- POST /api/cron/distribute-rewards - Distribute tokens (CRON_SECRET, timing-safe)
-- GET /api/admin/analysis-stats - Analysis stats (ADMIN_SECRET, timing-safe)
-
-## How to Contribute
-
-We welcome contributions from the community! Here's how to contribute:
-
-Fork the repository and create a feature branch:
-
-```bash
-git checkout -b feature/your-amazing-feature
-```
-
-Make your changes with clear, descriptive commits:
-
-```bash
-git commit -m 'Add amazing feature: description'
-```
-
-Push to your branch:
-
-```bash
-git push origin feature/your-amazing-feature
-```
-
-Open a Pull Request with:
-
-- Clear description of changes
-- Why this change is needed
-- Any related issues or tickets
-
-### Guidelines
-
-- Follow the existing code style and patterns
-- Ensure TypeScript types are properly defined
-- Test changes locally before submitting PR
-- Update documentation if needed
-- Be respectful and inclusive in all interactions
+Subscriptions process real USDC on Base. Token features are visible but disabled ("Coming soon") until 100+ users and 4+ weeks of stable subscriptions.
 
 ## Security
 
 ### Security Architecture
 
-eStory implements a comprehensive, layered security model addressing 34 audit findings across API routes, smart contracts, and infrastructure.
+eStories implements a comprehensive, layered security model addressing 34 audit findings.
 
 **API Security:**
-- Bearer Token Authentication: All API routes validate Supabase JWTs via shared `lib/auth.ts` middleware
-- Ownership Verification: Users can only modify their own resources (stories, habits, profiles)
-- Rate Limiting: In-memory middleware with route-specific limits (AI: 10/min, Auth: 20/min, Default: 60/min)
-- Input Validation: File size limits (25MB audio, 50MB IPFS), MIME type whitelists, text length caps
-- Error Sanitization: No internal error details leaked to clients — generic messages only
+- Bearer Token Auth on all API routes via shared `lib/auth.ts`
+- Ownership verification: users can only modify their own resources
+- Rate limiting: route-specific limits in middleware
+- Input validation: file size, MIME type, text length limits
+- Error sanitization: no internal details leaked to clients
 
 **Authentication Security:**
-- Nonce-Based Wallet Signing: Server-generated UUID nonces with 5-minute expiry prevent signature replay attacks
-- HMAC-Signed Linking Tokens: Account linking requires cryptographically signed tokens proving wallet ownership
-- OAuth Redirect Whitelisting: Only approved redirect paths accepted after OAuth callback
-- Timing-Safe Secret Comparison: Cron and admin endpoints use constant-time comparison to prevent timing attacks
+- Nonce-based wallet signing: UUID nonces with 5-minute expiry
+- HMAC-signed linking tokens for account linking
+- OAuth redirect whitelisting
+- Timing-safe secret comparison (constant-time)
+- Custom wallet JWT with expiry validation
+
+**Client-Side Security:**
+- AES-256-GCM encryption at rest (Web Crypto API)
+- PBKDF2 key derivation (100K iterations)
+- DEK in-memory only while unlocked
+- `clearAllKeys()` on sign-out
 
 **Infrastructure Security:**
-- Security Headers: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy
-- Database Security: Supabase Row Level Security (RLS) policies enforce access control
-- Smart Contract Security: OpenZeppelin AccessControl, MAX_SUPPLY caps, mint fees, Pausable patterns
+- CSP, X-Frame-Options DENY, HSTS, nosniff headers
+- Supabase RLS policies
+- OpenZeppelin AccessControl on all contracts
 
 ### Smart Contract Security
 
 | Contract | Security Features |
 |----------|-------------------|
-| eStoryToken | MAX_SUPPLY cap (100M tokens), Pausable, AccessControl (MINTER_ROLE, PAUSER_ROLE) |
+| eStoryToken | MAX_SUPPLY 100M, Pausable, AccessControl (MINTER/PAUSER roles) |
 | StoryProtocol | Pausable, AccessControl |
-| StoryNFT | Mint fee (0.001 ETH) prevents spam, AccessControl, ERC2981 royalties, secure withdrawal pattern |
+| StoryNFT | Mint fee (0.001 ETH), AccessControl, ERC2981 royalties |
+| PrivateVerifiedMetrics | KeystoneForwarder-only write access, minimal on-chain data |
 
 ### Reporting Vulnerabilities
 
-Found a security issue? Please report it privately to the team rather than opening a public issue:
-
-- Email: <remyoreo11@gmail.com>
-- Include detailed information about the vulnerability
-- Allow time for us to respond and patch
-
-Do not disclose the vulnerability publicly until a patch is available.
+Found a security issue? Report privately:
+- Email: remyoreo11@gmail.com
+- Do not disclose publicly until a patch is available
 
 ## Deployment
 
-### Frontend Deployment
+- **Frontend**: Vercel (production at estories.app)
+- **Domain**: Cloudflare DNS with HSTS
+- **Email**: Resend (domain-verified estories.app)
+- **Payments**: Blockradar (Base mainnet USDC)
+- **Contracts**: Base Sepolia (testnet)
 
-Vercel (Recommended):
+## Roadmap
 
-```bash
-npm install -g vercel
-vercel --prod
-```
+### Completed
+- Phase 1: Story metadata + AI analysis
+- Phase 1.5: 96+ tests, 34 security findings fixed
+- Phase 1.6: Chainlink CRE integration (verified simulation)
+- Phase 1.6.1: Privacy-preserving CRE rewrite
+- Phase 2.0: Auth overhaul (custom wallet JWT, no fake emails)
+- Phase 2.2: Local Vault (AES-256-GCM encrypted IndexedDB)
+- Phase 2.4: Record page UX, archive grouping, performance audit
+- Phase 2.6: Story collections, pricing page, auth hardening
+- Phase 2.7: Blockradar USDC subscriptions, Cloudflare domain
+- Phase 2.8: Monetization cleanup (likes social-only)
+- Phase 2.9: Nav dropdown wallet status, OAuth redirect fixes
 
-Other Hosting:
-
-- Build: `npm run build`
-- Start: `npm run start`
-- Works on any Node.js 18+ hosting
-
-### Smart Contract Deployment
-
-- Configure network in hardhat.config.ts
-- Set private key in .env.local
-- Deploy: `npx hardhat run scripts/deploy.ts --network baseSepolia`
-- Verify ABI: `npx hardhat run scripts/verify-deployment.ts --network baseSepolia`
-- Copy contract addresses to lib/contracts.ts and .env.local
-
-### IPFS Pinning
-
-Use Pinata or similar for file permanence:
-
-```bash
-npm install --save-dev @pinata/sdk
-```
-
-## License
-
-This project is licensed under the MIT License - see LICENSE file for details.
-
-MIT © 2024-2026 eStory Team
-
-### Q2 2026
-
-- Mobile app (React Native)
-- Story marketplace (buy/sell books)
-- Community challenges (#MyLifeStoryChallenge)
-- Video story support
-- Cross-chain support (Optimism, Arbitrum)
+### Next Up
+- PKCE OAuth migration (implicit -> PKCE for security hardening)
+- Error response audit + CSP tightening
+- Vault -> Cloud sync (encrypted upload to Supabase storage)
+- Topic-driven story discovery (History, Culture, Geopolitics categories)
+- Storytelling progression tracking (quality improvement over time)
 
 ### Future
-
+- Mobile app (React Native + Expo -- scaffolding complete)
 - Graph-based memory (theme relationships)
-- AI-generated audiobook narration
-- Multi-language support with AI translation
 - Memory API for external AI agents
-- ERC-8004 agent identity integration
+- Multi-language support with AI translation
+- $STORY token mainnet deployment (at 100+ users)
+- Cross-chain support (Optimism, Arbitrum)
 
-## Feedback & Support
+## Use Cases
 
-### Get Help
-
-- Discord: Join our community
-- Twitter/X: @eStoryApp
-- Email: <support@estory.app>
-
-### Discussions
-
-- GitHub Discussions
-- Discord Server
-- Reddit Community
+- **Personal Journals**: Daily voice journaling with AI transcription
+- **Historical Writing**: Essays on events, eras, and figures with tamper-proof provenance
+- **Geopolitical Analysis**: Commentary on world events and international relations
+- **Cultural Storytelling**: Preserving oral histories, traditions, and indigenous knowledge
+- **Creative Non-Fiction**: Memoirs, essays, travel writing, longform storytelling
+- **Craft Development**: Improving writing skills through AI feedback on coherence, depth, and quality
+- **Book Compilation**: Curate stories into published collections and NFTs
+- **Mind Decluttering**: Self-reflection, theme discovery, and pattern tracking
 
 ## Team & Contact
 
-### Project Lead
-
-- Name: Remi Adedeji
+**Project Lead:** Remi Adedeji
 - Twitter: @remyOreo_
-- Email: <remyoreo11@gmail.com>
+- Email: remyoreo11@gmail.com
 
-Contributing
+**Support:** support@estories.app
 
-Special thanks to all contributors who help make eStory better! 🙏
+---
 
-### Use Cases
-
-- Daily voice journaling with AI transcription
-- Compiling life stories into published books
-- Mind decluttering, self reflection, themes, insights, patterns acrross stories
-- Building personal brand as a creator
-- Earning passive income from story engagement
-- Creating permanent, tamper-proof records
-- Building engaged communities around storytelling
-
-### Market Size
-
-- Total Addressable Market (TAM): ~10-20M users in journaling + NFT creator markets
-- Early Adopters: Crypto holders with MetaMask (5M+ in Web3 space)
-- Growth Potential: Emerging economies with strong Web3 adoption
-
-The target customer for Speak Your Story is a diverse group of individuals who value personal expression, digital ownership, and financial empowerment through storytelling. Here's a breakdown:
-
-Primary Demographics: Ages 18-45, with a focus on millennials and Gen Z who are tech-savvy and active on social media. Balanced gender split, appealing to both men and women interested in self-reflection, creativity, or activism. Global users, particularly in regions with high blockchain adoption (e.g., North America, Europe, Asia) and those facing narrative suppression or censorship.
-
-Key Personas: Aspiring Storytellers and Journalers: Everyday people who want an easy way to document their lives via voice, without the hassle of writing. They seek AI tools to enhance their entries and compile them into books for personal growth or sharing. Blockchain and Crypto Enthusiasts: Web3 users who appreciate NFTs, tokens, and decentralization for owning and monetizing content. They value the app's use of Base (Ethereum L2) for low fees and tamper-proof storage. Content Creators and Influencers: Writers, podcasters, or social media users looking to broadcast authentic stories, build communities, and earn through likes, tips, paywalls, or NFT sales. They use viral features like streaks and leaderboards to grow their audience. Hestory and Truth Advocates: Individuals concerned about manipulated narratives (e.g., activists, historians, or those from marginalized communities) who want to preserve unfiltered truths on an immutable blockchain. Monetization Seekers: Freelancers or side-hustlers aiming to turn personal stories into revenue streams, such as selling digital books or earning $STORY tokens from engagement.
-
-Pain Points Addressed: Traditional journaling apps lack permanence and monetization; Speak Your Story counters this with blockchain immortality and rewards. Users frustrated by centralized platforms' censorship or data ownership issues find solace in decentralized, user-owned content.
-
-Acquisition Channels: Crypto communities (e.g., X/Twitter, Discord, Reddit's r/cryptocurrency or r/web3). Storytelling forums (e.g., Wattpad, Medium users migrating to Web3). Viral marketing via #MyLifeStoryChallenge on social media. Partnerships with AI/blockchain influencers.
-
-#### *Preserve your truth. Mint your legacy. Speak Your Story. Made with ❤️ by the eStory Team*
+*Preserve your truth. Master your craft. Mint your legacy. Made with love by the eStories Team.*

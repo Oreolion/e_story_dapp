@@ -1,1 +1,1 @@
-{"storyId":"550e8400","title":"Test","content":"Test story.","authorWallet":"0x50F9c0C82C49B0E4c43ca97016C29dfd3F4A18c7"}
+{"storyId":"550e8400","title":"Test","content":"This is a short demo story used to exercise the Chainlink CRE workflow. It contains innocuous text for testing the pipeline, on-chain write, and callback behavior.","authorWallet":"0x50F9c0C82C49B0E4c43ca97016C29dfd3F4A18c7"}

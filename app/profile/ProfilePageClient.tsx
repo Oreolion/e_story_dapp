@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries/keys";
+import {
+  useProfileData,
+  useUserStories,
+  useUserBooksCount,
+} from "@/lib/queries/hooks";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { toast } from "react-hot-toast";
@@ -9,6 +16,7 @@ import { useApp } from "../../components/Provider";
 import { useAuth } from "../../components/AuthProvider";
 import { emailService } from "../utils/emailService";
 import { useStoryNFT } from "../hooks/useStoryNFT";
+import { useWalletGuard } from "../hooks/useWalletGuard";
 import { supabaseClient } from "../utils/supabase/supabaseClient";
 import { ipfsService } from "../utils/ipfsService";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
@@ -52,10 +60,22 @@ import {
   Loader2,
   Edit3,
   Sparkles,
+  AlertTriangle,
+  Trash2,
 } from "lucide-react";
+import { BrandedLoader } from "@/components/ui/branded-loader";
 
 import { WeeklyReflectionSection } from "@/components/WeeklyReflection";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 // --- Types ---
 interface UserProfileData {
@@ -68,6 +88,12 @@ interface UserProfileData {
   website: string | null;
   avatar: string | null;
   created_at?: string;
+  notification_preferences?: {
+    email_notifications?: boolean;
+    public_profile?: boolean;
+    ai_enhancement?: boolean;
+    re_engagement_emails?: boolean;
+  } | null;
 }
 
 type ProfileFormData = {
@@ -97,7 +123,7 @@ const getHeatmapColor = (count: number) => {
 export default function ProfilePage() {
   const { user: wagmiUser, isConnected } = useApp();
   const { address } = useAccount();
-  const { profile: authInfo, signInWithGoogle, refreshProfile, getAccessToken } = useAuth();
+  const { profile: authInfo, signInWithGoogle, refreshProfile, getAccessToken, isLoading: isAuthLoading } = useAuth();
   const supabase = supabaseClient;
   const { signMessageAsync } = useSignMessage();
   const { openConnectModal } = useConnectModal();
@@ -106,9 +132,179 @@ export default function ProfilePage() {
   useBackgroundMode('profile');
 
   const { mintBook, isPending: isMinting } = useStoryNFT();
+  const { requireWallet } = useWalletGuard();
 
-  // Data State
-  const [profileData, setProfileData] = useState<UserProfileData | null>(null);
+  const queryClient = useQueryClient();
+
+  // React Query hooks
+  const {
+    data: profileQueryData,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+  } = useProfileData(authInfo?.id || "");
+  const {
+    data: storiesData,
+    isLoading: isStoriesLoading,
+    isError: isStoriesError,
+  } = useUserStories();
+  const {
+    data: booksCount,
+    isLoading: isBooksCountLoading,
+    isError: isBooksError,
+  } = useUserBooksCount(authInfo?.id || "");
+
+  const profileData = profileQueryData as UserProfileData | null;
+  const stories = useMemo(() => storiesData?.stories || [], [storiesData]);
+
+  // Derived stats & activity
+  const {
+    stats,
+    activityData,
+    heatmapData,
+    achievements,
+    todaysStories,
+  } = useMemo(() => {
+    const now = new Date();
+    const totalLikes = stories.reduce((sum, s) => sum + (s.likes || 0), 0);
+
+    const activityMap = new Map<string, number>();
+    stories.forEach((s) => {
+      const date = new Date(s.created_at).toISOString().split("T")[0];
+      activityMap.set(date, (activityMap.get(date) || 0) + 1);
+    });
+
+    // Monthly Stories
+    const monthlyStories = stories.filter((s) => {
+      const d = new Date(s.created_at);
+      return (
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    }).length;
+
+    // Streak Logic
+    let currentStreak = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      if (activityMap.has(dateStr)) {
+        currentStreak++;
+      } else if (
+        i > 0 &&
+        activityMap.has(new Date().toISOString().split("T")[0]) === false
+      ) {
+        if (i > 1) break;
+      } else {
+        break;
+      }
+    }
+
+    const computedStats = {
+      stories: stories.length,
+      books: booksCount || 0,
+      likes: totalLikes,
+      views: stories.reduce((sum, s) => sum + ((s as any).view_count || 0), 0),
+      monthlyStories,
+      streak: currentStreak,
+    };
+
+    // Activity List Data (Last 14 Days)
+    const last14Days = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      return d.toISOString().split("T")[0];
+    });
+
+    const listData = last14Days
+      .map((date) => {
+        const dayStories = stories.filter((s) =>
+          s.created_at.startsWith(date)
+        );
+        const likes = dayStories.reduce(
+          (acc, s) => acc + (s.likes || 0),
+          0
+        );
+        const entries = dayStories.length;
+        const views = dayStories.reduce(
+          (acc, s) => acc + ((s as any).view_count || 0),
+          0
+        );
+        return { date, entries, likes, views };
+      })
+      .filter((d) => d.entries > 0);
+
+    // Heatmap Data (Last ~52 weeks)
+    const heatmap = [];
+    for (let i = 371; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      heatmap.push({
+        date: dateStr,
+        count: activityMap.get(dateStr) || 0,
+      });
+    }
+
+    // Achievements
+    const computedAchievements = [
+      {
+        id: 1,
+        name: "First Story",
+        description: "Recorded your first journal entry",
+        earned: stories.length > 0,
+        date: stories[stories.length - 1]?.created_at,
+      },
+      {
+        id: 2,
+        name: "Prolific Writer",
+        description: "Recorded 10+ stories",
+        earned: stories.length >= 10,
+        date: null,
+      },
+      {
+        id: 3,
+        name: "Community Star",
+        description: "Received 50+ total likes",
+        earned: totalLikes >= 50,
+        date: null,
+      },
+      {
+        id: 4,
+        name: "Book Author",
+        description: "Compiled your first digital book",
+        earned: (booksCount || 0) > 0,
+        date: null,
+      },
+      {
+        id: 5,
+        name: "Daily Grinder",
+        description: "Wrote 3 stories in one day",
+        earned: Math.max(...Array.from(activityMap.values()), 0) >= 3,
+        date: null,
+      },
+      {
+        id: 6,
+        name: "Vocalist",
+        description: "Recorded a story with audio",
+        earned: stories.some((s) => s.audio_url),
+        date: null,
+      },
+    ];
+
+    // Today's Stories
+    const todayStr = now.toISOString().split("T")[0];
+    const todays = stories.filter((s) => s.created_at.startsWith(todayStr));
+
+    return {
+      stats: computedStats,
+      activityData: listData,
+      heatmapData: heatmap,
+      achievements: computedAchievements,
+      todaysStories: todays,
+    };
+  }, [stories, booksCount]);
+
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
     username: "",
@@ -118,26 +314,25 @@ export default function ProfilePage() {
     avatar: "",
     email: "",
   });
-  
-  // Stats & Activity State
-  const [stats, setStats] = useState({ stories: 0, books: 0, likes: 0, views: 0, monthlyStories: 0, streak: 0 });
-  const [activityData, setActivityData] = useState<any[]>([]);
-  const [heatmapData, setHeatmapData] = useState<{date: string, count: number}[]>([]);
-  const [achievements, setAchievements] = useState<any[]>([]);
-  const [todaysStories, setTodaysStories] = useState<any[]>([]);
-  
+
   // Preferences State (Local UI state for now)
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
     publicProfile: true,
-    aiEnhancement: true
+    aiEnhancement: true,
+    reEngagementEmails: true,
   });
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
   const [isLinkingGoogle, setIsLinkingGoogle] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState("overview");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const isLoading = isAuthLoading || isProfileLoading || isStoriesLoading || isBooksCountLoading;
+  const isDataError = isProfileError || isStoriesError || isBooksError;
 
   // Track intent to link wallet — when user clicks "Connect Wallet" and
   // the RainbowKit modal opens, we need to auto-continue after they connect
@@ -147,7 +342,7 @@ export default function ProfilePage() {
     if (!authInfo?.id || !address) return;
     setIsLinkingWallet(true);
     try {
-      const message = `Link wallet ${address.toLowerCase()} to eStory account ${authInfo.id}`;
+      const message = `Link wallet ${address.toLowerCase()} to eStories account ${authInfo.id}`;
       const signature = await signMessageAsync({ message });
       const token = await getAccessToken();
       const res = await fetch("/api/auth/link-account", {
@@ -206,7 +401,7 @@ export default function ProfilePage() {
     setIsLinkingGoogle(true);
     try {
       // Step 1: Sign message to prove wallet ownership
-      const message = `Link Google account to eStory wallet ${address.toLowerCase()}\n\nTimestamp: ${Date.now()}`;
+      const message = `Link Google account to eStories wallet ${address.toLowerCase()}\n\nTimestamp: ${Date.now()}`;
       const signature = await signMessageAsync({ message });
 
       // Step 2: Get secure linking token from server
@@ -245,143 +440,7 @@ export default function ProfilePage() {
     }
   };
 
-  // --- 1. Fetch All Data ---
-  useEffect(() => {
-    if (!supabase || !authInfo?.id) {
-        setIsLoading(false);
-        return;
-    }
-
-    const loadProfileData = async () => {
-      setIsLoading(true);
-      try {
-        // A. Fetch Profile
-        const { data: profile, error: profileError } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", authInfo.id)
-          .single();
-
-        if (profileError) throw profileError;
-        setProfileData(profile);
-
-        // B. Fetch Stories
-        const { data: stories, error: storyError } = await supabase
-          .from("stories")
-          .select("id, created_at, title, content, likes, audio_url")
-          .eq("author_id", authInfo.id)
-          .order("created_at", { ascending: false });
-
-        if (storyError) throw storyError;
-
-        // C. Fetch Books
-        const { count: booksCount } = await supabase
-          .from("books")
-          .select("*", { count: 'exact', head: true })
-          .eq("author_id", authInfo.id);
-
-        // --- Calculations ---
-        const totalLikes = stories?.reduce((sum, s) => sum + (s.likes || 0), 0) || 0;
-        const now = new Date();
-        
-        // Monthly Stories
-        const monthlyStories = stories?.filter(s => {
-            const d = new Date(s.created_at);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        }).length || 0;
-
-        // Streak Logic
-        let currentStreak = 0;
-        const activityMap = new Map<string, number>();
-        
-        // Map all stories to dates
-        stories?.forEach(s => {
-            const date = new Date(s.created_at).toISOString().split('T')[0];
-            activityMap.set(date, (activityMap.get(date) || 0) + 1);
-        });
-
-        // Calculate Streak (Check previous days consecutively)
-        for (let i = 0; i < 365; i++) {
-             const d = new Date();
-             d.setDate(now.getDate() - i);
-             const dateStr = d.toISOString().split('T')[0];
-             if (activityMap.has(dateStr)) {
-                 currentStreak++;
-             } else if (i > 0 && activityMap.has(new Date().toISOString().split('T')[0]) === false) {
-                 // Allow streak to continue if today just started and we haven't posted YET, 
-                 // but stop if we missed yesterday.
-                 if(i > 1) break; 
-             } else {
-                 break;
-             }
-        }
-
-        setStats({
-            stories: stories?.length || 0,
-            books: booksCount || 0,
-            likes: totalLikes,
-            views: totalLikes * 3 + (stories?.length || 0) * 5,
-            monthlyStories,
-            streak: currentStreak
-        });
-
-        // --- Activity List Data (Last 14 Days) ---
-        const last14Days = Array.from({ length: 14 }, (_, i) => {
-            const d = new Date();
-            d.setDate(now.getDate() - i);
-            return d.toISOString().split('T')[0];
-        });
-
-        const listData = last14Days.map(date => {
-             // Find specific stories for this date to sum likes
-             const dayStories = stories?.filter(s => s.created_at.startsWith(date));
-             const likes = dayStories?.reduce((acc, s) => acc + (s.likes || 0), 0) || 0;
-             const entries = dayStories?.length || 0;
-             return { date, entries, likes, views: likes * 4 };
-        }).filter(d => d.entries > 0); // Only show days with activity
-        
-        setActivityData(listData);
-
-        // --- Heatmap Data (Last 6 Months) ---
-        const heatmap = [];
-        // Create a grid of roughly 24 weeks (approx 6 months)
-        for (let i = 168; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(now.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-            heatmap.push({
-                date: dateStr,
-                count: activityMap.get(dateStr) || 0
-            });
-        }
-        setHeatmapData(heatmap);
-
-        // --- Achievements ---
-        const newAchievements = [
-            { id: 1, name: "First Story", description: "Recorded your first journal entry", earned: (stories?.length || 0) > 0, date: stories?.[stories.length - 1]?.created_at },
-            { id: 2, name: "Prolific Writer", description: "Recorded 10+ stories", earned: (stories?.length || 0) >= 10, date: null },
-            { id: 3, name: "Community Star", description: "Received 50+ total likes", earned: totalLikes >= 50, date: null },
-            { id: 4, name: "Book Author", description: "Compiled your first digital book", earned: (booksCount || 0) > 0, date: null },
-            { id: 5, name: "Daily Grinder", description: "Wrote 3 stories in one day", earned: Math.max(...Array.from(activityMap.values()), 0) >= 3, date: null },
-            { id: 6, name: "Vocalist", description: "Recorded a story with audio", earned: stories?.some(s => s.audio_url), date: null },
-        ];
-        setAchievements(newAchievements);
-
-        // --- Identify Today's Stories (For Daily Journal) ---
-        const todayStr = now.toISOString().split('T')[0];
-        setTodaysStories(stories?.filter(s => s.created_at.startsWith(todayStr)) || []);
-
-      } catch (error) {
-        console.error("Profile load error:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadProfileData();
-  }, [supabase, authInfo?.id]);
-
-  // --- Sync Form ---
+  // --- Sync Form + Preferences ---
   useEffect(() => {
     if (profileData) {
       setFormData({
@@ -393,6 +452,16 @@ export default function ProfilePage() {
         avatar: profileData.avatar || "",
         email: profileData.email || "",
       });
+      // Load notification preferences from DB (with fallbacks)
+      const dbPrefs = profileData.notification_preferences;
+      if (dbPrefs && typeof dbPrefs === "object") {
+        setPreferences({
+          emailNotifications: dbPrefs.email_notifications ?? true,
+          publicProfile: dbPrefs.public_profile ?? true,
+          aiEnhancement: dbPrefs.ai_enhancement ?? true,
+          reEngagementEmails: dbPrefs.re_engagement_emails ?? true,
+        });
+      }
     }
   }, [profileData]);
 
@@ -427,7 +496,7 @@ export default function ProfilePage() {
     }
     // ---------------------------------------------------
 
-    setProfileData(prev => prev ? ({...prev, ...formData}) : null);
+    queryClient.invalidateQueries({ queryKey: queryKeys.user.profile(authInfo.id) });
     setCurrentTab("overview");
   } catch (err: any) {
     toast.error(`Save failed: ${err.message}`);
@@ -436,12 +505,67 @@ export default function ProfilePage() {
   }
 };
 
-  const togglePreference = (key: keyof typeof preferences) => {
-      setPreferences(prev => ({ ...prev, [key]: !prev[key] }));
-      toast.success("Preference updated");
+  const togglePreference = async (key: keyof typeof preferences) => {
+    const newPrefs = { ...preferences, [key]: !preferences[key] };
+    setPreferences(newPrefs);
+
+    // Persist to database
+    if (supabase && authInfo?.id) {
+      const dbPrefs = {
+        email_notifications: newPrefs.emailNotifications,
+        public_profile: newPrefs.publicProfile,
+        ai_enhancement: newPrefs.aiEnhancement,
+        re_engagement_emails: newPrefs.reEngagementEmails,
+      };
+      const { error } = await supabase
+        .from("users")
+        .update({ notification_preferences: dbPrefs })
+        .eq("id", authInfo.id);
+
+      if (error) {
+        console.error("[PROFILE] Preference save error:", error);
+        // Revert on failure
+        setPreferences(preferences);
+        toast.error("Failed to save preference");
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.user.profile(authInfo.id) });
+    }
+    toast.success("Preference updated");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+    setIsDeleting(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        toast.error("Not authenticated");
+        return;
+      }
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete account");
+        return;
+      }
+      toast.success("Account deleted successfully");
+      setDeleteConfirmOpen(false);
+      // Sign out and redirect
+      window.localStorage.clear();
+      window.location.href = "/";
+    } catch {
+      toast.error("Failed to delete account");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleCompileDailyJournal = async () => {
+    if (!requireWallet("mint a Daily Journal NFT")) return;
     if (todaysStories.length < 2) return toast.error("Need at least 2 stories today to compile.");
     if (!authInfo?.id || !supabase) return;
 
@@ -453,7 +577,7 @@ export default function ProfilePage() {
        const metadata = {
            name: `Daily Journal - ${dateStr}`,
            description: `A collection of ${todaysStories.length} moments captured on ${dateStr}.`,
-           external_url: "https://estory.vercel.app",
+           external_url: "https://estories.app",
            attributes: [
                { trait_type: "Author", value: authInfo.name },
                { trait_type: "Date", value: dateStr },
@@ -483,9 +607,9 @@ export default function ProfilePage() {
        if (error) throw error;
 
        toast.success("Daily Journal Minted!", { id: toastId });
-       
+
        // Refresh stats
-       setStats(prev => ({ ...prev, books: prev.books + 1 }));
+       queryClient.invalidateQueries({ queryKey: queryKeys.library.books(authInfo.id) });
 
     } catch (err: any) {
         console.error(err);
@@ -515,9 +639,23 @@ export default function ProfilePage() {
 
   if (isLoading) {
     return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <BrandedLoader size="md" message="Loading your profile..." />
+      </div>
+    );
+  }
+
+  if (isDataError) {
+    return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-        <Loader2 className="w-12 h-12 animate-spin text-[hsl(var(--memory-500))]" />
-        <h2 className="text-2xl font-semibold">Loading Profile Data...</h2>
+        <AlertTriangle className="w-12 h-12 text-amber-500" />
+        <h2 className="text-2xl font-semibold">Failed to Load Profile</h2>
+        <p className="text-gray-600 dark:text-gray-400 max-w-md">
+          We couldn&apos;t load your profile data. This may be due to a session issue. Try refreshing the page or signing in again.
+        </p>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Refresh Page
+        </Button>
       </div>
     );
   }
@@ -675,13 +813,13 @@ export default function ProfilePage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button 
-                            onClick={handleCompileDailyJournal} 
-                            disabled={isMinting}
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                        <Button
+                            disabled
+                            className="w-full bg-purple-600/50 text-white cursor-not-allowed"
+                            title="NFT minting coming to mainnet"
                         >
-                            {isMinting ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <BookOpen className="w-4 h-4 mr-2"/>}
-                            {isMinting ? "Minting..." : `Compile Daily Journal (${new Date().toLocaleDateString()})`}
+                            <BookOpen className="w-4 h-4 mr-2"/>
+                            Compile Daily Journal (Coming to Mainnet)
                         </Button>
                     </CardContent>
                  </Card>
@@ -776,25 +914,41 @@ export default function ProfilePage() {
                 <CardContent>
                   {/* Heatmap Grid - GitHub Style */}
                   <div className="flex flex-col space-y-2 mb-8">
-                    {/* Month Labels (Approximate distribution) */}
+                    {/* Dynamic Month Labels */}
                     <div className="flex justify-between px-8 text-xs text-gray-400 select-none">
-                      <span>Jan</span><span>Mar</span><span>May</span><span>Jul</span><span>Sep</span><span>Nov</span>
+                      {(() => {
+                        const today = new Date();
+                        const labels = [];
+                        // Show 12 months spanning the grid range
+                        for (let i = 11; i >= 0; i--) {
+                          const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                          const label = d.toLocaleDateString('en-US', { month: 'short' });
+                          // Show year on Jan or first label
+                          const showYear = d.getMonth() === 0 || i === 11;
+                          labels.push(
+                            <span key={i} className="text-center">
+                              {label}{showYear ? ` '${String(d.getFullYear()).slice(2)}` : ''}
+                            </span>
+                          );
+                        }
+                        return labels;
+                      })()}
                     </div>
 
-                    <div className="flex gap-2 items-start overflow-x-auto pb-2">
+                    <div className="flex gap-1 sm:gap-2 items-start overflow-x-auto pb-2">
                       {/* Weekday Labels */}
-                      <div className="grid grid-rows-7 gap-1 text-[10px] text-gray-400 leading-2.5 pt-0.5 select-none">
-                        <span className="h-2.5"></span> 
-                        <span className="h-2.5">Mon</span>
-                        <span className="h-2.5"></span> 
-                        <span className="h-2.5">Wed</span>
-                        <span className="h-2.5"></span> 
-                        <span className="h-2.5">Fri</span>
-                        <span className="h-2.5"></span> 
+                      <div className="grid grid-rows-7 gap-[3px] sm:gap-1 text-[10px] text-gray-400 leading-2.5 pt-0.5 select-none shrink-0">
+                        <span className="h-2 sm:h-2.5"></span>
+                        <span className="h-2 sm:h-2.5">Mon</span>
+                        <span className="h-2 sm:h-2.5"></span>
+                        <span className="h-2 sm:h-2.5">Wed</span>
+                        <span className="h-2 sm:h-2.5"></span>
+                        <span className="h-2 sm:h-2.5">Fri</span>
+                        <span className="h-2 sm:h-2.5"></span>
                       </div>
 
                       {/* Grid Container */}
-                      <div className="grid grid-rows-7 grid-flow-col gap-1">
+                      <div className="grid grid-rows-7 grid-flow-col gap-[3px] sm:gap-1">
                         {(() => {
                           // 1. Generate a calendar for the last ~365 days aligned to Sunday
                           const today = new Date();
@@ -831,7 +985,7 @@ export default function ProfilePage() {
                               <div
                                 key={i}
                                 title={`${date.toDateString()}: ${count} stories`}
-                                className={`w-3 h-3 rounded-[6px] ${getHeatmapColor(count)}`}
+                                className={`w-2 h-2 sm:w-3 sm:h-3 rounded-[4px] sm:rounded-[6px] ${getHeatmapColor(count)}`}
                               />
                             );
                           });
@@ -1034,7 +1188,7 @@ export default function ProfilePage() {
                   {/* Preferences Section */}
                   <div className="space-y-4 border-t pt-6 dark:border-gray-700">
                       <h3 className="text-lg font-semibold">Preferences</h3>
-                      
+
                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                           <div className="space-y-0.5">
                               <Label className="text-base">Email Notifications</Label>
@@ -1066,6 +1220,85 @@ export default function ProfilePage() {
                              {preferences.aiEnhancement ? "On" : "Off"}
                           </Button>
                       </div>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="space-y-4 border-t border-red-200 dark:border-red-900/50 pt-6">
+                    <h3 className="text-lg font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5" />
+                      Danger Zone
+                    </h3>
+                    <div className="p-4 border border-red-200 dark:border-red-900/50 rounded-lg bg-red-50/50 dark:bg-red-950/20">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">Delete Account</p>
+                          <p className="text-xs text-muted-foreground">
+                            Permanently delete your account and all associated data.
+                            On-chain data (NFTs, transactions) will persist on the blockchain.
+                          </p>
+                        </div>
+                        <Dialog open={deleteConfirmOpen} onOpenChange={(open) => {
+                          setDeleteConfirmOpen(open);
+                          if (!open) setDeleteConfirmText("");
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Account
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-red-600">
+                                <AlertTriangle className="w-5 h-5" />
+                                Delete Account
+                              </DialogTitle>
+                              <DialogDescription>
+                                This action cannot be undone. This will permanently delete your
+                                account, stories, collections, and all associated data.
+                                On-chain data (NFTs, transactions, verified metrics) will persist
+                                on the blockchain.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-2 py-4">
+                              <Label htmlFor="delete-confirm" className="text-sm">
+                                Type <strong>DELETE</strong> to confirm:
+                              </Label>
+                              <Input
+                                id="delete-confirm"
+                                value={deleteConfirmText}
+                                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                placeholder="DELETE"
+                                className="font-mono"
+                              />
+                            </div>
+                            <DialogFooter>
+                              <Button
+                                variant="outline"
+                                onClick={() => setDeleteConfirmOpen(false)}
+                                disabled={isDeleting}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                onClick={handleDeleteAccount}
+                                disabled={deleteConfirmText !== "DELETE" || isDeleting}
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  "Permanently Delete"
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

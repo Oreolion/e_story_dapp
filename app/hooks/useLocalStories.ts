@@ -62,11 +62,17 @@ export function useLocalStories(): UseLocalStoriesResult {
     async () => {
       if (!userId) return [];
       const db = getVaultDb();
-      return db.stories
-        .where("userId")
-        .equals(userId)
-        .reverse()
-        .sortBy("updated_at");
+      if (!db) return [];
+      try {
+        return await db.stories
+          .where("userId")
+          .equals(userId)
+          .reverse()
+          .sortBy("updated_at");
+      } catch (err) {
+        console.warn("[useLocalStories] Live query failed:", err);
+        return [];
+      }
     },
     [userId],
     []
@@ -198,6 +204,7 @@ export function useLocalStories(): UseLocalStoriesResult {
       };
 
       const db = getVaultDb();
+      if (!db) throw new Error("Local vault is not supported in this browser");
       await db.stories.put(record);
 
       return localId;
@@ -210,6 +217,7 @@ export function useLocalStories(): UseLocalStoriesResult {
       if (!userId || !isVaultUnlocked(userId)) return null;
 
       const db = getVaultDb();
+      if (!db) return null;
       const record = await db.stories.get(localId);
       if (!record || record.userId !== userId) return null;
 
@@ -243,6 +251,7 @@ export function useLocalStories(): UseLocalStoriesResult {
     async (localId: string) => {
       if (!userId) throw new Error("Not signed in");
       const db = getVaultDb();
+      if (!db) return;
       await db.stories.delete(localId);
     },
     [userId]
@@ -252,6 +261,7 @@ export function useLocalStories(): UseLocalStoriesResult {
     async (localId: string, status: SyncStatus, cloudId?: string) => {
       if (!userId) throw new Error("Not signed in");
       const db = getVaultDb();
+      if (!db) return;
       const update: Partial<LocalStoryRecord> = {
         sync_status: status,
         updated_at: new Date().toISOString(),

@@ -40,11 +40,11 @@ const networks: [AppKitNetwork, ...AppKitNetwork[]] = [baseSepolia];
 const metadata = {
   name: "eStories",
   description: "AI-powered sovereign storytelling platform",
-  url: "https://e-story-dapp.vercel.app",
-  icons: ["https://e-story-dapp.vercel.app/icon-192.png"],
+  url: "https://estories.app",
+  icons: ["https://estories.app/icon-192.png"],
   redirect: {
     native: "estory://",
-    universal: "https://e-story-dapp.vercel.app",
+    universal: "https://estories.app",
   },
 };
 

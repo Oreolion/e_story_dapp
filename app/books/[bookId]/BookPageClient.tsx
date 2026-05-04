@@ -1,14 +1,11 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { use } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useAccount } from "wagmi";
 
-// FIX: Explicit root-relative paths
-// [bookId] -> book -> app -> root -> app -> utils
-import { supabaseClient } from "../../../app/utils/supabase/supabaseClient";
+import { useBook, useBookChapters } from "@/lib/queries/hooks";
 
 import {
   Card,
@@ -19,7 +16,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   BookOpen,
   Calendar,
@@ -27,23 +23,9 @@ import {
   User,
   Share2,
   ExternalLink,
-  Loader2,
   Layers
 } from "lucide-react";
-
-interface BookData {
-  id: string;
-  title: string;
-  description: string;
-  created_at: string;
-  ipfs_hash: string;
-  story_ids: string[];
-  author: {
-    name: string;
-    wallet_address: string;
-    avatar: string;
-  };
-}
+import { BrandedLoader } from "@/components/ui/branded-loader";
 
 interface StoryChapter {
   id: string;
@@ -59,52 +41,15 @@ export default function BookPage({
 }) {
   const { bookId } = use(params);
   const router = useRouter();
-  const [book, setBook] = useState<BookData | null>(null);
-  const [chapters, setChapters] = useState<StoryChapter[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const supabase = supabaseClient;
 
-  useEffect(() => {
-    const fetchBook = async () => {
-      if (!supabase) return;
-      try {
-        setIsLoading(true);
-        
-        // 1. Fetch Book Metadata
-        const { data: bookData, error: bookError } = await supabase
-          .from("books")
-          .select(`
-            *,
-            author:users!books_author_id_fkey (name, wallet_address, avatar)
-          `)
-          .eq("id", bookId)
-          .single();
+  const { data: book, isLoading: isBookLoading, error: bookError } = useBook(bookId);
+  const storyIds = book?.story_ids || [];
+  const { data: chapters = [], isLoading: isChaptersLoading } = useBookChapters(storyIds);
 
-        if (bookError) throw bookError;
-        setBook(bookData);
+  const isLoading = isBookLoading || (storyIds.length > 0 && isChaptersLoading);
 
-        // 2. Fetch Stories included in this book
-        if (bookData.story_ids && bookData.story_ids.length > 0) {
-            const { data: storiesData } = await supabase
-                .from("stories")
-                .select("id, title, content, created_at")
-                .in("id", bookData.story_ids)
-                .order("created_at", { ascending: true });
-            
-            setChapters(storiesData || []);
-        }
-
-      } catch (err) {
-        console.error("Error fetching book:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchBook();
-  }, [bookId, supabase]);
-
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-purple-600"/></div>;
-  if (!book) return <div className="min-h-screen flex items-center justify-center">Book Not Found</div>;
+  if (isLoading) return <BrandedLoader fullScreen message="Loading book..." />;
+  if (bookError || !book) return <div className="min-h-screen flex items-center justify-center">Book Not Found</div>;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
