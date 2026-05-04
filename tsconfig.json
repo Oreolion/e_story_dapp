@@ -1,4 +1,4 @@
-{
+﻿{
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -24,7 +24,7 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "next.config.mjs"],
-  "exclude": ["node_modules", "skills", "cre", "mobile"],
+  "exclude": ["node_modules", "skills", "cre", "mobile", "scripts", "typechain-types", "hardhat.config.ts"],
  "ts-node": {
     "compilerOptions": {
       "module": "commonjs",
