@@ -90,10 +90,10 @@ export function AuthButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild>
-          <a href="/profile" className="flex items-center gap-2">
+          <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
             <User className="w-4 h-4" />
             Profile
-          </a>
+          </Link>
         </DropdownMenuItem>
         {!profile.wallet_address && (
           <DropdownMenuItem onClick={() => setShowAuthModal(true)}>
