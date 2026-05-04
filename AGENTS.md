@@ -79,7 +79,7 @@ Key clusters for this project:
 
 ### All 35+ MCP Servers (Installed Across All Tools)
 
-**Full reference**: `MCP_SERVERS.md` in project root
+**Full reference**: `docs/MCP_SERVERS.md`
 
 | Category | Servers | Status |
 |----------|---------|--------|

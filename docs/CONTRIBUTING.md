@@ -105,12 +105,12 @@ If you discover a security vulnerability, please do not open a public issue. Ins
 ## Communication
 
 - For questions and community discussion: join the project's Discord or GitHub Discussions (see `README.md` for links).
-- Keep interactions respectful and follow the `CODE_OF_CONDUCT.md` included in the repository.
+- Keep interactions respectful and follow the `docs/CODE_OF_CONDUCT.md`.
 
 ## References
 
 - `README.md` — project overview, setup, and architecture
-- `CODE_OF_CONDUCT.md` — contributor behavior expectations
+- `docs/CODE_OF_CONDUCT.md` — contributor behavior expectations
 - LICENSE — project license (MIT)
 
 Thank you for making eStory better! 🎙️📚
