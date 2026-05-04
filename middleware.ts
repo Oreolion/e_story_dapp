@@ -1,3 +1,4 @@
+﻿import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 // ============================================================================
@@ -55,6 +56,9 @@ function getRateLimit(pathname: string): number {
   // AI endpoints: stricter limits (expensive API calls)
   if (pathname.startsWith("/api/ai/")) return 10;
 
+  // Login endpoint: tightest limit (5/min per IP) ΓÇö wallet sig brute-force prevention
+  if (pathname === "/api/auth/login") return 5;
+
   // Auth endpoints: prevent brute force
   if (pathname.startsWith("/api/auth/")) return 20;
 
@@ -63,6 +67,9 @@ function getRateLimit(pathname: string): number {
 
   // Email endpoint: prevent spam
   if (pathname === "/api/email/send") return 5;
+
+  // Payment endpoints: prevent abuse
+  if (pathname.startsWith("/api/payment/")) return 10;
 
   // Default for all other API routes
   if (pathname.startsWith("/api/")) return 60;
@@ -80,8 +87,9 @@ const ALLOWED_ORIGINS = [
   "http://localhost:8081",  // Expo web dev server
   "http://localhost:19006", // Expo web (alternate port)
   "http://localhost:3000",  // Next.js dev server
-  "https://e-story-dapp.vercel.app",
-  "https://istory.vercel.app",
+  "https://estories.app",
+  "https://www.estories.app",
+  "https://e-story-dapp.vercel.app", // Legacy Vercel deployment
 ];
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
@@ -99,74 +107,131 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 }
 
 // ============================================================================
+// Supabase Session Refresh
+// ============================================================================
+
+/**
+ * Refresh the Supabase session on every page navigation.
+ * Required for PKCE cookie-based auth ΓÇö without this, expired sessions
+ * are never refreshed and users appear logged out after ~1 hour.
+ *
+ * See: https://supabase.com/docs/guides/auth/server-side/nextjs
+ */
+function refreshSupabaseSession(request: NextRequest, response: NextResponse): {
+  supabase: ReturnType<typeof createServerClient>;
+  response: NextResponse;
+} {
+  let currentResponse = response;
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          // Update request cookies (for downstream middleware/routes)
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          // Create a new response that includes the updated cookies
+          currentResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            currentResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  return { supabase, get response() { return currentResponse; } };
+}
+
+// ============================================================================
 // Middleware
 // ============================================================================
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only handle API routes
+  let response = NextResponse.next({ request });
+
+  // ΓöÇΓöÇ Step 1: Refresh Supabase session (page navigations only) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Only run session refresh for browser page loads ΓÇö NOT for API routes.
+  // API routes handle their own auth via validateAuthOrReject/Bearer tokens.
+  // Running getUser() on /api/auth/callback interferes with PKCE code exchange.
+  // Running getUser() on /api/payment/webhook breaks Blockradar delivery.
   if (!pathname.startsWith("/api/")) {
-    return NextResponse.next();
+    try {
+      const sessionHelper = refreshSupabaseSession(request, response);
+      await sessionHelper.supabase.auth.getUser();
+      // Access response AFTER getUser() so setAll cookies are captured
+      response = sessionHelper.response;
+    } catch {
+      // Never let session refresh crash the middleware ΓÇö user will just
+      // see a stale session and can re-authenticate on the next load.
+    }
   }
 
-  const origin = request.headers.get("origin");
+  // ΓöÇΓöÇ Step 2: API routes ΓÇö rate limiting + CORS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  if (pathname.startsWith("/api/")) {
+    const origin = request.headers.get("origin");
 
-  // Handle CORS preflight (OPTIONS) requests
-  if (request.method === "OPTIONS") {
-    return new NextResponse(null, {
-      status: 204,
-      headers: getCorsHeaders(origin),
-    });
-  }
+    // Handle CORS preflight (OPTIONS) requests
+    if (request.method === "OPTIONS") {
+      return new NextResponse(null, {
+        status: 204,
+        headers: getCorsHeaders(origin),
+      });
+    }
 
-  const maxRequests = getRateLimit(pathname);
-  if (maxRequests === 0) {
-    const response = NextResponse.next();
+    const maxRequests = getRateLimit(pathname);
+    if (maxRequests > 0) {
+      // Use IP + path prefix as rate limit key
+      const ip =
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        request.headers.get("x-real-ip") ||
+        "unknown";
+
+      // Group by path prefix (e.g., /api/ai/* all share the same bucket)
+      const pathPrefix = pathname.split("/").slice(0, 4).join("/");
+      const rateLimitKey = `${ip}:${pathPrefix}`;
+
+      const { allowed, remaining } = checkRateLimit(rateLimitKey, maxRequests);
+
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "Too many requests. Please try again later." },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": "60",
+              "X-RateLimit-Limit": String(maxRequests),
+              "X-RateLimit-Remaining": "0",
+              ...getCorsHeaders(origin),
+            },
+          }
+        );
+      }
+
+      response.headers.set("X-RateLimit-Limit", String(maxRequests));
+      response.headers.set("X-RateLimit-Remaining", String(remaining));
+    }
+
+    // Add CORS headers to API responses
     for (const [key, value] of Object.entries(getCorsHeaders(origin))) {
       response.headers.set(key, value);
     }
-    return response;
-  }
-
-  // Use IP + path prefix as rate limit key
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
-
-  // Group by path prefix (e.g., /api/ai/* all share the same bucket)
-  const pathPrefix = pathname.split("/").slice(0, 4).join("/");
-  const rateLimitKey = `${ip}:${pathPrefix}`;
-
-  const { allowed, remaining } = checkRateLimit(rateLimitKey, maxRequests);
-
-  if (!allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": "60",
-          "X-RateLimit-Limit": String(maxRequests),
-          "X-RateLimit-Remaining": "0",
-          ...getCorsHeaders(origin),
-        },
-      }
-    );
-  }
-
-  // Continue with rate limit + CORS headers
-  const response = NextResponse.next();
-  response.headers.set("X-RateLimit-Limit", String(maxRequests));
-  response.headers.set("X-RateLimit-Remaining", String(remaining));
-  for (const [key, value] of Object.entries(getCorsHeaders(origin))) {
-    response.headers.set(key, value);
   }
 
   return response;
 }
 
 export const config = {
-  matcher: "/api/:path*",
+  matcher: [
+    // Match all routes EXCEPT static files and images
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
 };
