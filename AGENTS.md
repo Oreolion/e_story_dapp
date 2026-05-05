@@ -15,6 +15,30 @@ When multiple `AGENTS.md` files apply, deeper directories take precedence over p
 - **Security**: pause to flag concerns before proceeding
 - **No over-engineering**: only implement what's requested
 - **Mobile**: Expo React Native app in `/mobile` directory
+- **Branching**: `master` is source of truth. Short-lived `feature/*` branches. No long-lived feature branches.
+
+---
+
+## Git Workflow (Post-PR #8)
+
+PR #8 merged `mobile-app` into `master` on 2026-05-04. The monorepo now uses **GitHub Flow**:
+
+| Branch | Purpose |
+|--------|---------|
+| `master` | Production-ready. Contains web + mobile code. |
+| `feature/<name>` | Short-lived branches off master. Merge via PR. |
+
+### Conflict Prevention
+This is a monorepo — root config files are conflict magnets:
+- **High risk**: `package.json`, `tsconfig.json`, `next.config.mjs`
+- **Medium risk**: `middleware.ts`, `eslint.config.mjs`, `.github/workflows/*`
+- **Safe zones**: `mobile/*`, `app/books/*`, `components/three/*`, `contracts/*`
+
+**Rules**:
+1. Add dependencies on `master` first, then merge to feature branches
+2. Keep mobile changes isolated to `/mobile/`
+3. Sync `origin/master` into your branch daily while working
+4. Full guide: `docs/WORKFLOWS.md`
 
 ---
 
@@ -384,4 +408,4 @@ See `docs/AUTH_BUG_ANALYSIS.md` for full root-cause analysis, failed fixes, and 
 ---
 
 *Last synced from: `.claude/settings.json` (global) + `.claude/settings.local.json` (project) + `.cursor/mcp.json` + `.codex/config.toml`*
-*Sync date: 2026-04-21*
+*Sync date: 2026-05-04*
