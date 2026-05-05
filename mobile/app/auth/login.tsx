@@ -48,7 +48,7 @@ export default function LoginScreen() {
     const result = loginSchema.safeParse({ email, password });
     if (!result.success) {
       const errors: Record<string, string> = {};
-      result.error.errors.forEach((err) => {
+      result.error.issues.forEach((err) => {
         if (err.path[0]) errors[err.path[0] as string] = err.message;
       });
       setFieldErrors(errors);

@@ -85,13 +85,13 @@ export async function api<T = unknown>(
     const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
     const isNetworkError = err instanceof TypeError || (err as Error)?.message?.includes("Network");
 
-    if (isMutation && isNetworkError && body && !(body instanceof FormData)) {
+    if (isMutation && isNetworkError && options.body && !(options.body instanceof FormData)) {
       const online = await isOnline();
       if (!online) {
         await enqueue({
           path,
           method: method as "POST" | "PUT" | "PATCH" | "DELETE",
-          body: body as Record<string, unknown>,
+          body: options.body as Record<string, unknown>,
           headers: options.headers as Record<string, string>,
         });
         return {
