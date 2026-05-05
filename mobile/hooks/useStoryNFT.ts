@@ -14,7 +14,7 @@ export function useStoryNFT() {
         abi: STORY_NFT_ABI,
         functionName: "mintBook",
         args: [tokenURI],
-        value: BigInt(1000000000000000), // 0.001 ETH mintFee
+        value: BigInt(1000000000000000) as unknown as undefined, // 0.001 ETH mintFee
       });
       Toast.show({ type: "success", text1: "Book NFT minted!" });
       return hash;

@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <GradientButton
             title="Try Again"
             onPress={this.handleRetry}
-            className="w-full"
+            fullWidth
           />
 
           <TouchableOpacity
