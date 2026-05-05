@@ -10,10 +10,12 @@ import {
   User,
 } from "lucide-react-native";
 import { AnimatedTabBar } from "../../components/ui";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 
 export default function TabLayout() {
   return (
-    <Tabs
+    <ErrorBoundary>
+      <Tabs
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <AnimatedTabBar {...props} />}
     >
@@ -71,6 +73,7 @@ export default function TabLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </ErrorBoundary>
   );
 }

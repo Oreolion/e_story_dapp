@@ -9,3 +9,4 @@ export { Badge } from "./Badge";
 export { StatCard } from "./StatCard";
 export { Avatar } from "./Avatar";
 export { SectionHeader } from "./SectionHeader";
+export { EmptyState } from "./EmptyState";

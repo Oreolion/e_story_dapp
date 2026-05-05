@@ -46,6 +46,8 @@ import {
   Badge,
   StatCard,
   SectionHeader,
+  SkeletonLoader,
+  EmptyState,
   GRADIENTS,
   GLASS,
 } from "../../components/ui";
@@ -652,10 +654,18 @@ export default function LibraryScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           ListEmptyComponent={
-            <View style={{ alignItems: "center", paddingVertical: 48 }}>
-              <Text style={{ color: "#94a3b8" }}>
-                {isLoading ? "Loading..." : "No stories yet. Start recording!"}
-              </Text>
+            <View style={{ paddingVertical: 48 }}>
+              {isLoading ? (
+                <SkeletonLoader variant="card" count={3} />
+              ) : (
+                <EmptyState
+                  icon={<BookOpen size={48} color="#64748b" />}
+                  title="No stories yet"
+                  subtitle="Your archive is empty. Record your first story to start building your personal history."
+                  actionLabel="Record Your First Story"
+                  onAction={() => router.push("/(tabs)/record")}
+                />
+              )}
             </View>
           }
         />

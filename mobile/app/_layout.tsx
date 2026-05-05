@@ -18,6 +18,12 @@ import Toast from "react-native-toast-message";
 import { wagmiAdapter, appKit } from "../lib/wagmi.config";
 import { useAuthStore } from "../stores/authStore";
 import { useNotifications } from "../hooks/useNotifications";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { initSentry } from "../lib/sentry";
+import { useOfflineSync } from "../hooks/useOfflineSync";
+
+// Initialize Sentry as early as possible
+initSentry();
 
 // AppKit only works on native (iOS/Android), not web
 let AppKitModal: React.ComponentType | null = null;
@@ -73,18 +79,25 @@ function NotificationInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SyncInitializer({ children }: { children: React.ReactNode }) {
+  useOfflineSync();
+  return <>{children}</>;
+}
+
 export default function RootLayout() {
   const content = (
     <WagmiProvider config={wagmiAdapter.wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <AuthInitializer>
-          <NotificationInitializer>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: "#0f172a" },
-              }}
-            >
+          <SyncInitializer>
+            <NotificationInitializer>
+            <ErrorBoundary>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: "#0f172a" },
+                }}
+              >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen
                 name="story/[storyId]"
@@ -114,12 +127,14 @@ export default function RootLayout() {
                 name="pricing/index"
                 options={{ headerShown: false, presentation: "modal" }}
               />
-            </Stack>
+              </Stack>
+            </ErrorBoundary>
             {AppKitModal && <AppKitModal />}
             <Toast />
             <StatusBar style="light" />
           </NotificationInitializer>
-        </AuthInitializer>
+        </SyncInitializer>
+      </AuthInitializer>
       </QueryClientProvider>
     </WagmiProvider>
   );
