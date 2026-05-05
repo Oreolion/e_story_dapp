@@ -46,6 +46,7 @@ import Toast from "react-native-toast-message";
 import { router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 import { api, apiUpload } from "../../lib/api";
+import { storySchema } from "../../lib/validation";
 import {
   GlassCard,
   GradientButton,
@@ -106,6 +107,7 @@ export default function RecordScreen() {
   const [duration, setDuration] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [parentStoryId, setParentStoryId] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isBusy = step === "transcribing" || step === "enhancing" || step === "saving";
@@ -371,9 +373,23 @@ export default function RecordScreen() {
   };
 
   const saveStory = async () => {
+    setFieldErrors({});
     const content = enhancedText || transcript;
-    if (!content || !title) {
-      Toast.show({ type: "error", text1: "Title and content are required" });
+    const result = storySchema.safeParse({
+      title,
+      content,
+      mood: selectedMood,
+      tags,
+      isPublic,
+      storyDate,
+    });
+    if (!result.success) {
+      const errors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) errors[err.path[0] as string] = err.message;
+      });
+      setFieldErrors(errors);
+      Toast.show({ type: "error", text1: "Please fix the errors before saving" });
       return;
     }
     setStep("saving");
@@ -826,16 +842,23 @@ export default function RecordScreen() {
               <Text style={{ fontSize: 15, fontWeight: "600", color: "#e2e8f0" }}>Entry Details</Text>
 
               {/* Title */}
-              <GlassCard intensity="light" style={{ padding: 0 }}>
-                <TextInput
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="Story title"
-                  style={{ padding: 16, fontSize: 15, color: "#fff" }}
-                  placeholderTextColor="#4a5568"
-                  editable={!isBusy}
-                />
-              </GlassCard>
+              <View>
+                <GlassCard intensity="light" style={{ padding: 0 }}>
+                  <TextInput
+                    value={title}
+                    onChangeText={(text) => { setTitle(text); setFieldErrors((prev) => ({ ...prev, title: "" })); }}
+                    placeholder="Story title"
+                    style={{ padding: 16, fontSize: 15, color: "#fff" }}
+                    placeholderTextColor="#4a5568"
+                    editable={!isBusy}
+                  />
+                </GlassCard>
+                {fieldErrors.title && (
+                  <Text style={{ marginTop: 4, marginLeft: 4, fontSize: 12, color: "#f87171" }}>
+                    {fieldErrors.title}
+                  </Text>
+                )}
+              </View>
 
               {/* Date of Memory */}
               <TouchableOpacity activeOpacity={0.8}>

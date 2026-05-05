@@ -1,8 +1,10 @@
 // eStories Mobile - API Client
 // Wraps all fetch calls with API_BASE_URL prefix and Bearer token from SecureStore
+// Includes offline queue support for mutations (POST/PUT/PATCH/DELETE)
 
 import Constants from "expo-constants";
 import { getItem, setItem, removeItem } from "./storage";
+import { enqueue, isOnline } from "./offline";
 
 const API_BASE_URL =
   Constants.expoConfig?.extra?.API_BASE_URL || "https://estories.app";
@@ -77,6 +79,29 @@ export async function api<T = unknown>(
     };
   } catch (err) {
     console.error(`[API] ${options.method || "GET"} ${path} failed:`, err);
+
+    // Queue mutations for retry when offline
+    const method = options.method || "GET";
+    const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    const isNetworkError = err instanceof TypeError || (err as Error)?.message?.includes("Network");
+
+    if (isMutation && isNetworkError && body && !(body instanceof FormData)) {
+      const online = await isOnline();
+      if (!online) {
+        await enqueue({
+          path,
+          method: method as "POST" | "PUT" | "PATCH" | "DELETE",
+          body: body as Record<string, unknown>,
+          headers: options.headers as Record<string, string>,
+        });
+        return {
+          status: 0,
+          ok: false,
+          error: "Offline — change saved and will sync when you're back online.",
+        };
+      }
+    }
+
     return {
       status: 0,
       ok: false,

@@ -16,7 +16,7 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Search, Heart, MessageCircle, Share2, Lock, UserPlus, UserCheck } from "lucide-react-native";
+import { Search, Heart, MessageCircle, Share2, Lock, UserPlus, UserCheck, BookOpen } from "lucide-react-native";
 import { Share } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useAuthStore } from "../../stores/authStore";
@@ -29,6 +29,7 @@ import {
   Badge,
   Avatar,
   SkeletonLoader,
+  EmptyState,
   GRADIENTS,
   ANIMATION,
 } from "../../components/ui";
@@ -286,11 +287,17 @@ export default function SocialScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
-          <View style={{ alignItems: "center", paddingVertical: 48 }}>
+          <View style={{ paddingVertical: 48 }}>
             {loading ? (
               <SkeletonLoader variant="card" count={3} />
             ) : (
-              <Text style={{ color: "#94a3b8" }}>No stories yet</Text>
+              <EmptyState
+                icon={<BookOpen size={48} color="#64748b" />}
+                title="No stories yet"
+                subtitle="Be the first to share a story with the community, or follow other storytellers to see their posts here."
+                actionLabel="Record a Story"
+                onAction={() => router.push("/(tabs)/record")}
+              />
             )}
           </View>
         }

@@ -20,6 +20,7 @@ import { useAccount, useSignMessage } from "wagmi";
 import { useAppKit } from "@reown/appkit-react-native";
 import { useAuthStore } from "../../stores/authStore";
 import { signInWithGoogleNative } from "../../lib/googleAuth";
+import { loginSchema } from "../../lib/validation";
 import {
   GlassCard,
   GradientButton,
@@ -40,9 +41,17 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [walletLoading, setWalletLoading] = useState(false);
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const handleEmailLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Toast.show({ type: "error", text1: "Email and password are required" });
+    setFieldErrors({});
+    const result = loginSchema.safeParse({ email, password });
+    if (!result.success) {
+      const errors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) errors[err.path[0] as string] = err.message;
+      });
+      setFieldErrors(errors);
       return;
     }
 
@@ -189,39 +198,53 @@ export default function LoginScreen() {
             {/* Email & Password */}
             <View style={{ gap: 12, marginTop: 8 }}>
               <AnimatedListItem index={2}>
-                <GlassCard
-                  intensity="light"
-                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
-                >
-                  <Mail size={20} color="#a78bfa" />
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="Email"
-                    style={{ flex: 1, fontSize: 15, color: "#fff" }}
-                    placeholderTextColor="#64748b"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </GlassCard>
+                <View>
+                  <GlassCard
+                    intensity="light"
+                    style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
+                  >
+                    <Mail size={20} color="#a78bfa" />
+                    <TextInput
+                      value={email}
+                      onChangeText={(text) => { setEmail(text); setFieldErrors((prev) => ({ ...prev, email: "" })); }}
+                      placeholder="Email"
+                      style={{ flex: 1, fontSize: 15, color: "#fff" }}
+                      placeholderTextColor="#64748b"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </GlassCard>
+                  {fieldErrors.email && (
+                    <Text style={{ marginTop: 4, marginLeft: 4, fontSize: 12, color: "#f87171" }}>
+                      {fieldErrors.email}
+                    </Text>
+                  )}
+                </View>
               </AnimatedListItem>
 
               <AnimatedListItem index={3}>
-                <GlassCard
-                  intensity="light"
-                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
-                >
-                  <Lock size={20} color="#a78bfa" />
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Password"
-                    style={{ flex: 1, fontSize: 15, color: "#fff" }}
-                    placeholderTextColor="#64748b"
-                    secureTextEntry
-                  />
-                </GlassCard>
+                <View>
+                  <GlassCard
+                    intensity="light"
+                    style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
+                  >
+                    <Lock size={20} color="#a78bfa" />
+                    <TextInput
+                      value={password}
+                      onChangeText={(text) => { setPassword(text); setFieldErrors((prev) => ({ ...prev, password: "" })); }}
+                      placeholder="Password"
+                      style={{ flex: 1, fontSize: 15, color: "#fff" }}
+                      placeholderTextColor="#64748b"
+                      secureTextEntry
+                    />
+                  </GlassCard>
+                  {fieldErrors.password && (
+                    <Text style={{ marginTop: 4, marginLeft: 4, fontSize: 12, color: "#f87171" }}>
+                      {fieldErrors.password}
+                    </Text>
+                  )}
+                </View>
               </AnimatedListItem>
 
               {/* Sign In button */}

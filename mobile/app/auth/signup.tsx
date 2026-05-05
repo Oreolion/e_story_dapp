@@ -16,6 +16,7 @@ import { User, AtSign, Mail, Lock, ArrowLeft } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { useAuthStore } from "../../stores/authStore";
 import { signInWithGoogleNative } from "../../lib/googleAuth";
+import { signupSchema } from "../../lib/validation";
 import {
   GlassCard,
   GradientButton,
@@ -36,27 +37,17 @@ export default function SignupScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    if (!name.trim()) newErrors.name = "Name is required";
-    if (!username.trim()) newErrors.username = "Username is required";
-    if (!email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Invalid email format";
-    }
-    if (password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
-    if (password !== confirmPassword) {
-      newErrors.confirmPassword = "Passwords don't match";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleSignup = async () => {
-    if (!validate()) return;
+    setErrors({});
+    const result = signupSchema.safeParse({ name, username, email, password, confirmPassword });
+    if (!result.success) {
+      const newErrors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) newErrors[err.path[0] as string] = err.message;
+      });
+      setErrors(newErrors);
+      return;
+    }
     setLoading(true);
     try {
       await signupWithEmail({
