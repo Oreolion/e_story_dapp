@@ -1,9 +1,19 @@
 name: Playwright Tests
 on:
   push:
-    branches: [master, mobile-app]
+    branches: [master]
+    paths-ignore:
+      - "mobile/**"
+      - "mobile/docs/**"
+      - ".github/workflows/claude*.yml"
+      - "**.md"
   pull_request:
-    branches: [master, mobile-app]
+    branches: [master]
+    paths-ignore:
+      - "mobile/**"
+      - "mobile/docs/**"
+      - ".github/workflows/claude*.yml"
+      - "**.md"
 
 env:
   # Placeholder env vars for Next.js build (safe to expose - not real credentials)
