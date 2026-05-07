@@ -12,5 +12,9 @@
     "**/*.ts",
     "**/*.tsx",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "__tests__/components",
+    "__tests__/jest-setup.ts"
   ]
 }

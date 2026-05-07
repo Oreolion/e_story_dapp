@@ -6,6 +6,6 @@ export default defineConfig({
     globals: true,
     setupFiles: "./__tests__/setup.ts",
     testTimeout: 10000,
-    exclude: ["node_modules", "e2e/**/*", ".expo", "dist"],
+    exclude: ["node_modules", "e2e/**/*", ".expo", "dist", "__tests__/components/**/*"],
   },
 });
