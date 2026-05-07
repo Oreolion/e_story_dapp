@@ -159,3 +159,103 @@ task, run its verification before moving to the next. If verification fails, fix
 it before proceeding. Commit working changes incrementally so progress isn't lost
 if we hit limits.
 ```
+
+
+---
+
+## CI/CD Workflow & Merge Rules
+
+> **Effective**: 2026-05-05  
+> **Applies to**: All branches, all contributors, all AI agents
+
+### Branch Protection (Enforced on `master`)
+
+| Rule | Setting | Why |
+|------|---------|-----|
+| Require PR | ✅ Mandatory | All changes must go through pull request |
+| Required reviews | 1 approving review | Prevents unilateral changes |
+| Dismiss stale reviews | ✅ Enabled | Forces re-review after new commits |
+| Strict status checks | ✅ Enabled | PR branch must be up-to-date with `master` |
+| Block force pushes | ✅ Enabled | Prevents `git push --force` |
+| Block deletions | ✅ Enabled | Prevents accidental branch deletion |
+
+### Required Status Checks
+
+These **must pass** before a PR can merge:
+
+| Check | Source | Scope |
+|-------|--------|-------|
+| **Lint** | `ci.yml` | Web/shared files only (`paths-ignore: mobile/**`) |
+| **Type Check** | `ci.yml` | Web/shared files only |
+| **Unit & Integration Tests** | `ci.yml` | Web/shared files only |
+| **Build** | `ci.yml` | Web/shared files only (depends on Lint + Type Check + Test) |
+| **Compile Contracts** | `ci.yml` | Web/shared files only |
+| **Mobile Type Check** | `mobile-ci.yml` | Mobile files only (`paths: mobile/**`) |
+| **Mobile Build Verification** | `mobile-ci.yml` | Mobile files only (depends on Mobile Type Check) |
+
+**Key behavior**: Mobile-only PRs only run Mobile CI. Web-only PRs only run Web CI. Mixed PRs run both.
+
+### Pre-Merge Checklist (Mandatory)
+
+Before creating a PR or requesting review:
+
+```markdown
+- [ ] Branch is up to date with `origin/master`
+- [ ] `npm run lint` passes (from project root)
+- [ ] `npx tsc --noEmit` passes (from project root for web)
+- [ ] `cd mobile && npx tsc --noEmit` passes (for mobile changes)
+- [ ] Tests pass (`npm test`)
+- [ ] `package-lock.json` is in sync with `package.json`
+- [ ] No secrets or `.env` values committed
+- [ ] Mobile changes are isolated to `/mobile/` directory
+- [ ] Commit messages follow conventional format (`feat:`, `fix:`, `docs:`, `chore:`)
+```
+
+### Merge Process
+
+1. **Create feature branch** from latest `master`
+2. **Make changes** following the checklist above
+3. **Push branch** and open PR via GitHub or `gh pr create`
+4. **Wait for all status checks** to pass (CI runs automatically)
+5. **Request review** (or self-review if solo)
+6. **Merge via squash** to keep history clean
+7. **Delete feature branch** after merge
+
+### Lockfile Rule (Critical)
+
+**Any PR that modifies `package.json` must include the updated `package-lock.json`.**
+
+Failure to do this causes `npm ci` to fail with:
+```
+npm error `npm ci` can only install packages when your package.json
+and package-lock.json or npm-shrinkwrap.json are in sync.
+```
+
+**Fix**: Run `npm install` locally and commit the updated lockfile.
+
+### Mobile-Specific Rules
+
+| Rule | Rationale |
+|------|-----------|
+| Mobile changes stay in `/mobile/` | Isolates mobile CI from web CI |
+| Don't modify root `package.json` from mobile branch | Root deps affect web CI; coordinate changes |
+| Mobile deps go in `mobile/package.json` | Separate dependency tree |
+| Run `cd mobile && npx tsc --noEmit` before pushing | Catches TypeScript errors early |
+
+### Breaking Changes & Version Checks
+
+Before using APIs from dependencies:
+1. Check the installed version in `package.json`
+2. Verify the API matches that version's documentation
+3. Major version bumps (e.g., Zod v3 → v4) often have breaking changes
+
+**Recent example**: Zod v4 renamed `result.error.errors` to `result.error.issues` — caused CI failures in PR #10.
+
+### Emergency Overrides
+
+Branch protection can be bypassed with `gh pr merge --admin` **only** for:
+- Hotfixes to production
+- Reverting broken commits
+- Lockfile sync fixes
+
+All admin merges must be documented in the PR description.
