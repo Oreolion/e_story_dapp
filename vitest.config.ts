@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: './__tests__/setup.ts',
     // FIX 1: Explicitly ignore the e2e folder
-    exclude: ['node_modules', 'cre/**/node_modules/**', 'e2e/**/*', '.next', 'out', 'dist'],
+    exclude: ['node_modules', 'cre/**/node_modules/**', 'e2e/**/*', 'mobile/**/*', '.next', 'out', 'dist'],
     alias: {
       '@': path.resolve(__dirname, './'),
     },
