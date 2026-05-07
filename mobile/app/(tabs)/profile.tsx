@@ -27,6 +27,8 @@ import {
   X,
   Camera,
   Trash2,
+  Crown,
+  ChevronRight,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { useAccount } from "wagmi";
@@ -46,7 +48,7 @@ import {
 import { TestnetBanner } from "../../components/TestnetBanner";
 
 export default function ProfileScreen() {
-  const { user, isAuthenticated, logout, deleteAccount, updateProfile } =
+  const { user, isAuthenticated, logout, deleteAccount, updateProfile, subscription } =
     useAuthStore();
   const { address, isConnected } = useAccount();
   const { open } = useAppKit();
@@ -246,6 +248,19 @@ export default function ProfileScreen() {
                     @{user.username}
                   </Text>
                 )}
+                {subscription.active && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 }}>
+                    <Crown size={14} color="#fbbf24" />
+                    <Text style={{ fontSize: 12, color: "#fbbf24", fontWeight: "600", textTransform: "capitalize" }}>
+                      {subscription.plan} Plan
+                    </Text>
+                    {subscription.expires_at && (
+                      <Text style={{ fontSize: 11, color: "#64748b" }}>
+                        · Expires {new Date(subscription.expires_at).toLocaleDateString()}
+                      </Text>
+                    )}
+                  </View>
+                )}
                 {user.bio && (
                   <Text style={{ marginTop: 8, textAlign: "center", fontSize: 14, color: "#cbd5e1", lineHeight: 20 }}>
                     {user.bio}
@@ -256,8 +271,46 @@ export default function ProfileScreen() {
           </GlassCard>
         </AnimatedListItem>
 
-        {/* Connected Accounts */}
+        {/* Subscription */}
         <AnimatedListItem index={2}>
+          <View style={{ marginTop: 16 }}>
+            <SectionHeader title="Subscription" />
+            <TouchableOpacity
+              onPress={() => router.push("/pricing")}
+              activeOpacity={0.8}
+            >
+              <GlassCard
+                intensity="light"
+                style={{
+                  padding: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <Crown size={20} color={subscription.active ? "#fbbf24" : "#64748b"} />
+                  <View>
+                    <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600", textTransform: "capitalize" }}>
+                      {subscription.active ? subscription.plan : "Free"} Plan
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                      {subscription.active
+                        ? subscription.expires_at
+                          ? `Expires ${new Date(subscription.expires_at).toLocaleDateString()}`
+                          : "Active"
+                        : "Upgrade for premium features"}
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={18} color="#64748b" />
+              </GlassCard>
+            </TouchableOpacity>
+          </View>
+        </AnimatedListItem>
+
+        {/* Connected Accounts */}
+        <AnimatedListItem index={3}>
           <View style={{ marginTop: 16 }}>
             <SectionHeader title="Connected Accounts" />
             <TestnetBanner />
@@ -308,7 +361,7 @@ export default function ProfileScreen() {
         </AnimatedListItem>
 
         {/* Sign Out */}
-        <AnimatedListItem index={3}>
+        <AnimatedListItem index={4}>
           <View style={{ marginTop: 16 }}>
             <TouchableOpacity
               onPress={handleLogout}
@@ -346,7 +399,7 @@ export default function ProfileScreen() {
         </AnimatedListItem>
 
         {/* Delete Account */}
-        <AnimatedListItem index={4}>
+        <AnimatedListItem index={5}>
           <View style={{ marginTop: 8 }}>
             <TouchableOpacity onPress={handleDeleteAccount} activeOpacity={0.8}>
               <GlassCard
@@ -367,7 +420,7 @@ export default function ProfileScreen() {
         </AnimatedListItem>
 
         {/* Legal Links */}
-        <AnimatedListItem index={5}>
+        <AnimatedListItem index={6}>
           <View style={{ marginTop: 24, marginBottom: 16, alignItems: "center", gap: 8 }}>
             <TouchableOpacity onPress={() => Linking.openURL("https://estories.app/privacy")}>
               <Text style={{ fontSize: 12, color: "#64748b", textDecorationLine: "underline" }}>Privacy Policy</Text>

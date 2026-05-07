@@ -7,7 +7,17 @@ import { apiGet, apiPost, apiPut, apiDelete } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import type { Notification } from "../types";
 
-Notifications.setNotificationHandler({
+(Notifications as unknown as {
+  setNotificationHandler: (handler: {
+    handleNotification: () => Promise<{
+      shouldShowAlert: boolean;
+      shouldPlaySound: boolean;
+      shouldSetBadge: boolean;
+      shouldShowBanner: boolean;
+      shouldShowList: boolean;
+    }>;
+  }) => void;
+}).setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,

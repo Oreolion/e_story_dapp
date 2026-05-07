@@ -20,7 +20,15 @@ export interface UserProfile {
   bio: string | null;
   badges: string[] | null;
   google_id: string | null;
+  subscription_plan: string | null;
+  subscription_expires_at: string | null;
   created_at: string;
+}
+
+interface SubscriptionInfo {
+  plan: string;
+  active: boolean;
+  expires_at: string | null;
 }
 
 interface AuthState {
@@ -28,6 +36,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   authMethod: "wallet" | "google" | "email" | null;
+  subscription: SubscriptionInfo;
 
   // Actions
   initialize: () => Promise<void>;
@@ -42,6 +51,7 @@ interface AuthState {
   fetchProfile: () => Promise<void>;
   completeOnboarding: (data: OnboardingData) => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  refreshSubscription: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -49,6 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   isAuthenticated: false,
   authMethod: null,
+  subscription: { plan: "free", active: false, expires_at: null },
 
   initialize: async () => {
     try {
@@ -56,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (session) {
         await setAuthToken(session.access_token);
         await get().fetchProfile();
+        await get().refreshSubscription();
         const provider = session.user?.app_metadata?.provider;
         const authMethod = provider === "google" ? "google" : provider === "email" ? "email" : "wallet";
         set({ isAuthenticated: true, authMethod });
@@ -110,6 +122,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         authMethod: "wallet",
       });
+      await get().refreshSubscription();
     } catch (err) {
       console.error("[Auth] Wallet login failed:", err);
       throw err;
@@ -131,6 +144,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       await setAuthToken(data.session.access_token);
       await get().fetchProfile();
+      await get().refreshSubscription();
       set({ isAuthenticated: true, authMethod: "google" });
 
       const user = get().user;
@@ -148,6 +162,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await setAuthToken(accessToken);
       await get().fetchProfile();
+      await get().refreshSubscription();
       set({ isAuthenticated: true, authMethod: "google" });
 
       const user = get().user;
@@ -170,6 +185,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       await setAuthToken(data.session.access_token);
       await get().fetchProfile();
+      await get().refreshSubscription();
       set({ isAuthenticated: true, authMethod: "email" });
     } catch (err) {
       console.error("[Auth] Email login failed:", err);
@@ -204,6 +220,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
 
       await get().fetchProfile();
+      await get().refreshSubscription();
       set({ isAuthenticated: true, authMethod: "email" });
     } catch (err) {
       console.error("[Auth] Email signup failed:", err);
@@ -224,7 +241,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await clearAuthToken();
       await removeItem(TOKEN_KEY);
       await removeItem(REFRESH_KEY);
-      set({ user: null, isAuthenticated: false, authMethod: null });
+      set({ user: null, isAuthenticated: false, authMethod: null, subscription: { plan: "free", active: false, expires_at: null } });
     } catch (err) {
       console.error("[Auth] Logout failed:", err);
     }
@@ -239,7 +256,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await clearAuthToken();
     await removeItem(TOKEN_KEY);
     await removeItem(REFRESH_KEY);
-    set({ user: null, isAuthenticated: false, authMethod: null });
+    set({ user: null, isAuthenticated: false, authMethod: null, subscription: { plan: "free", active: false, expires_at: null } });
   },
 
   fetchProfile: async () => {
@@ -250,6 +267,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch (err) {
       console.error("[Auth] Fetch profile failed:", err);
+    }
+  },
+
+  refreshSubscription: async () => {
+    try {
+      const res = await api<{
+        plan: string;
+        active: boolean;
+        expires_at: string | null;
+      }>("/api/payment/status");
+      if (res.ok && res.data) {
+        set({ subscription: res.data });
+      }
+    } catch (err) {
+      console.error("[Auth] Refresh subscription failed:", err);
     }
   },
 

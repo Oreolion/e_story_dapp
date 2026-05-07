@@ -73,7 +73,6 @@ const appKitStorage = {
 // Create Wagmi Adapter
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
-  // @ts-expect-error - AppKitNetwork <-> viem Chain type mismatch is a known Reown SDK issue
   networks,
 });
 
