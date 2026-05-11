@@ -9,6 +9,8 @@ import { Toaster } from "react-hot-toast";
 import { GlobalBackgroundDynamic } from "../components/three/GlobalBackgroundDynamic";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { MetaPixel } from "../components/MetaPixel";
+import { CookieConsent } from "../components/CookieConsent";
 
 const inter = Inter({ subsets: ["latin"] });
 const loveLight = Love_Light({
@@ -111,6 +113,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <MetaPixel />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -144,6 +147,7 @@ export default async function RootLayout({
         </ProvidersDynamic>
         <Analytics />
         <SpeedInsights />
+        <CookieConsent />
       </body>
     </html>
   );

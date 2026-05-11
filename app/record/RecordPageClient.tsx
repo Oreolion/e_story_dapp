@@ -12,6 +12,7 @@ import { useParentStory } from "@/lib/queries/hooks";
 import { ipfsService } from "../../app/utils/ipfsService";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
 import { STORY_TYPES, type StoryType } from "@/app/types";
+import { trackCustomEvent } from "@/lib/meta-pixel";
 
 // Vault — local encrypted storage (optional, non-blocking)
 import {
@@ -481,6 +482,13 @@ export default function RecordPage() {
           });
         }
 
+        trackCustomEvent("StoryRecorded", {
+          story_id: insertedStory?.id,
+          story_type: storyType,
+          is_public: isPublic,
+          has_audio: !!audioBlob && !!audioUrl,
+          content_length: transcribedText.length,
+        });
         return { message: "Story saved & pinned to IPFS!", storyId: insertedStory?.id };
       } catch (err: any) {
         throw new Error(err.message || "Save failed");
