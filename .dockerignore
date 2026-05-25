@@ -1,0 +1,47 @@
+# Build artifacts
+.next
+.swc
+.qodo
+coverage
+playwright-report
+test-results
+
+# Mobile build artifacts
+mobile/dist
+mobile/node_modules
+
+# Dependency directories
+node_modules
+
+# Agent / IDE directories
+.claude
+.codex
+.cursor
+.gemini
+.kimi
+.vscode
+
+# CI/CD metadata
+.github
+
+# Cache and temp files
+cache
+*.tsbuildinfo
+__pycache__
+.pytest_cache
+.mypy_cache
+
+# Environment files (credentials)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep repository history available for validation tooling.
