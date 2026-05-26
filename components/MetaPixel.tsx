@@ -8,9 +8,9 @@ import { getConsent } from "./CookieConsent";
  * Meta Pixel Base Code — loads via next/script with afterInteractive strategy.
  * Only loads if user has given "all" cookie consent (GDPR compliant).
  *
- * Pixel ID: 749978950873721
+ * Pixel ID: 851587207471228
  */
-const PIXEL_ID = "749978950873721";
+const PIXEL_ID = "851587207471228";
 
 export function MetaPixel() {
   const [canLoad, setCanLoad] = useState(false);

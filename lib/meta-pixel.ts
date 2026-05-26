@@ -1,6 +1,6 @@
 /**
  * Meta Pixel (Facebook Pixel) tracking utilities
- * Pixel ID: 749978950873721
+ * Pixel ID: 851587207471228
  *
  * Use these helpers to fire standard and custom events from anywhere in the app.
  * The base pixel script is loaded once in the root layout via <Script>.
