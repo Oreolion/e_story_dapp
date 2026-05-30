@@ -1,10 +1,15 @@
 /**
  * Meta Pixel (Facebook Pixel) tracking utilities
- * Pixel ID: 851587207471228
  *
  * Use these helpers to fire standard and custom events from anywhere in the app.
  * The base pixel script is loaded once in the root layout via <Script>.
+ *
+ * IMPORTANT: Custom events are only sent if the user has granted "all" cookie
+ * consent. The initial PageView is handled unconditionally in <MetaPixel> so
+ * Meta can verify the domain, but all subsequent tracking respects GDPR.
  */
+
+import { getConsent } from "@/components/CookieConsent";
 
 // Extend Window interface for fbq
 declare global {
@@ -54,7 +59,7 @@ export function trackEvent(
   eventName: StandardEvent,
   params?: Record<string, unknown>
 ): void {
-  if (typeof window !== "undefined" && window.fbq) {
+  if (typeof window !== "undefined" && window.fbq && getConsent() === "all") {
     try {
       if (params) {
         window.fbq("track", eventName, params);
@@ -75,7 +80,7 @@ export function trackCustomEvent(
   eventName: CustomEvent,
   params?: Record<string, unknown>
 ): void {
-  if (typeof window !== "undefined" && window.fbq) {
+  if (typeof window !== "undefined" && window.fbq && getConsent() === "all") {
     try {
       if (params) {
         window.fbq("trackCustom", eventName, params);

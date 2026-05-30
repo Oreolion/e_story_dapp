@@ -1,28 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Script from "next/script";
-import { getConsent } from "./CookieConsent";
 
 /**
- * Meta Pixel Base Code — loads via next/script with afterInteractive strategy.
- * Only loads if user has given "all" cookie consent (GDPR compliant).
+ * Meta Pixel Base Code — loads unconditionally so Meta can verify the domain.
+ * The Pixel ID is configured via NEXT_PUBLIC_META_PIXEL_ID.
  *
- * Pixel ID: 851587207471228
+ * Note: The base PageView fires on every load so Meta Events Manager can
+ * verify the pixel. Custom events (Lead, Purchase, etc.) are gated behind
+ * cookie consent in lib/meta-pixel.ts.
  */
-const PIXEL_ID = "851587207471228";
+const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || "";
 
 export function MetaPixel() {
-  const [canLoad, setCanLoad] = useState(false);
-
-  useEffect(() => {
-    const check = () => setCanLoad(getConsent() === "all");
-    check();
-    window.addEventListener("consentUpdated", check);
-    return () => window.removeEventListener("consentUpdated", check);
-  }, []);
-
-  if (!canLoad) return null;
+  // Don't render if no pixel ID is configured
+  if (!PIXEL_ID) return null;
 
   return (
     <>
