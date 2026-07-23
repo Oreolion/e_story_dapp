@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
     <article className="prose prose-gray dark:prose-invert max-w-3xl mx-auto py-8">
       <h1>Privacy Policy</h1>
       <p className="text-sm text-muted-foreground">
-        Last updated: March 23, 2026
+        Last updated: May 11, 2026
       </p>
 
       <section>
@@ -60,6 +60,13 @@ export default function PrivacyPolicyPage() {
             <strong>Device Information:</strong> Browser type, operating system,
             and device identifiers.
           </li>
+          <li>
+            <strong>Advertising Data:</strong> We use the Meta Pixel (Facebook
+            Pixel) to collect data about your browsing behaviour for advertising
+            and retargeting purposes. This includes page views, actions taken on
+            the site (e.g. signing up, subscribing, recording stories), and
+            device information shared with Meta&apos;s advertising platform.
+          </li>
         </ul>
 
         <h3>2.3 Blockchain Data</h3>
@@ -79,6 +86,8 @@ export default function PrivacyPolicyPage() {
           <li>Authenticate your identity and secure your account</li>
           <li>Generate aggregated, anonymized usage statistics</li>
           <li>Respond to your requests and provide support</li>
+          <li>Deliver, measure, and optimise advertising campaigns via Meta Pixel</li>
+          <li>Build retargeting audiences for Facebook and Instagram ads</li>
         </ul>
       </section>
 
@@ -181,7 +190,69 @@ export default function PrivacyPolicyPage() {
       </section>
 
       <section>
-        <h2>9. Security</h2>
+        <h2>9. Cookies &amp; Tracking Technologies</h2>
+        <p>
+          We use cookies and similar tracking technologies to enhance your
+          experience and for marketing purposes:
+        </p>
+        <ul>
+          <li>
+            <strong>Essential cookies:</strong> Required for the platform to
+            function (authentication, security, preferences). These cannot be
+            disabled.
+          </li>
+          <li>
+            <strong>Analytics cookies:</strong> Help us understand how visitors
+            interact with the site (Vercel Analytics).
+          </li>
+          <li>
+            <strong>Marketing cookies (Meta Pixel):</strong> Used to track
+            conversions, build audiences, and run retargeting campaigns on
+            Facebook and Instagram. This Pixel is only activated if you consent
+            to marketing cookies via our cookie banner.
+          </li>
+        </ul>
+        <p>
+          You can manage your cookie preferences at any time by clearing your
+          browser cache or contacting us. For EU/UK visitors, marketing trackers
+          are blocked until explicit consent is given.
+        </p>
+        <h3>Opting Out of Meta Pixel Tracking</h3>
+        <p>
+          If you have consented to marketing cookies and wish to opt out:
+        </p>
+        <ul>
+          <li>
+            Use our cookie banner to select &quot;Essential Only&quot; — this
+            immediately stops the Meta Pixel from firing.
+          </li>
+          <li>
+            Visit Meta&apos;s{" "}
+            <a
+              href="https://www.facebook.com/settings/?tab=ads"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ad Preferences
+            </a>{" "}
+            to manage how Meta uses your data for ads.
+          </li>
+          <li>
+            Install the{" "}
+            <a
+              href="https://www.facebook.com/help/1762961890779520"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Meta Pixel Opt-Out add-on
+            </a>{" "}
+            for your browser.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>10. Security</h2>
         <p>
           We implement industry-standard security measures including encrypted
           connections (TLS), rate limiting, authentication tokens, input
@@ -191,7 +262,7 @@ export default function PrivacyPolicyPage() {
       </section>
 
       <section>
-        <h2>10. Children&apos;s Privacy</h2>
+        <h2>11. Children&apos;s Privacy</h2>
         <p>
           eStories is not intended for children under 13. We do not knowingly
           collect personal information from children under 13. If we learn we
@@ -200,7 +271,7 @@ export default function PrivacyPolicyPage() {
       </section>
 
       <section>
-        <h2>11. Changes to This Policy</h2>
+        <h2>12. Changes to This Policy</h2>
         <p>
           We may update this Privacy Policy from time to time. We will notify
           you of material changes by posting the new policy on this page and
@@ -209,7 +280,7 @@ export default function PrivacyPolicyPage() {
       </section>
 
       <section>
-        <h2>12. Contact Us</h2>
+        <h2>13. Contact Us</h2>
         <p>
           If you have questions about this Privacy Policy, contact us at{" "}
           <a href="mailto:privacy@estories.app">privacy@estories.app</a>.

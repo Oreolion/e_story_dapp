@@ -23,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { BrandedLoader } from "@/components/ui/branded-loader";
+import { trackCompleteRegistration } from "@/lib/meta-pixel";
 
 type Step = "profile" | "vault" | "wallet" | "done";
 
@@ -118,6 +119,11 @@ export default function OnboardingPageClient() {
     setIsSubmitting(true);
     try {
       await completeOnboarding({ name, username, email });
+      trackCompleteRegistration({
+        content_name: "eStories Account",
+        status: true,
+        auth_provider: profile?.auth_provider || "unknown",
+      });
       nextStep();
     } catch (err: any) {
       setError(err.message || "Something went wrong");

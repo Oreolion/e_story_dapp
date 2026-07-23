@@ -82,6 +82,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Run mobile tests
+        run: npx vitest run
+
       - name: Verify Expo export (web build)
         run: npx expo export --platform web
         # This ensures the app bundles correctly without starting a dev server

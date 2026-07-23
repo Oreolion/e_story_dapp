@@ -38,6 +38,7 @@ import { toast } from "react-hot-toast";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
 import { useSubscription } from "@/app/hooks/useSubscription";
 import { useAuth } from "@/components/AuthProvider";
+import { trackInitiateCheckout, trackPurchase } from "@/lib/meta-pixel";
 
 // ============================================================================
 // Pricing Data
@@ -236,8 +237,24 @@ export default function PricingPageClient() {
       return;
     }
     try {
+      const planPrices: Record<string, number> = {
+        storyteller: 2.99,
+        creator: 7.99,
+      };
+      trackInitiateCheckout(
+        planPrices[planKey],
+        "USD",
+        planKey,
+        [planKey]
+      );
       const result = await subscribe(planKey);
       if (result?.activated) {
+        trackPurchase(
+          planPrices[planKey] ?? 0,
+          "USD",
+          planKey,
+          [planKey]
+        );
         toast.success(result.message || "Subscription activated!");
       }
     } catch (err: unknown) {

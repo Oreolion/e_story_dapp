@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useApp } from "../components/Provider";
 import { Button } from "../components/ui/button";
+import { trackLead } from "@/lib/meta-pixel";
 import {
   Card,
   CardContent,
@@ -203,6 +204,7 @@ export default function HomePage() {
 
       setWaitlistSubmitted(true);
       setEmail("");
+      trackLead({ content_name: "Mobile App Waitlist", content_category: "pre_launch" });
     } catch {
       setWaitlistError("Network error. Please check your connection.");
     } finally {
