@@ -23,6 +23,7 @@ import Animated, {
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import * as Speech from "expo-speech";
+import * as Crypto from "expo-crypto";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import {
@@ -47,6 +48,7 @@ import { router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 import { api, apiUpload } from "../../lib/api";
 import { getRecordDraftKey } from "../../lib/userData";
+import { buildJournalSaveBody } from "../../lib/storySave";
 import { storySchema } from "../../lib/validation";
 import {
   GlassCard,
@@ -108,8 +110,50 @@ export default function RecordScreen() {
   const [duration, setDuration] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [parentStoryId, setParentStoryId] = useState<string | null>(null);
+  const [saveRequestKey, setSaveRequestKey] = useState(() =>
+    Crypto.randomUUID()
+  );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const activeOwnerRef = useRef(user?.id ?? null);
+
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
+  useEffect(() => {
+    soundRef.current = sound;
+  }, [sound]);
+
+  const releaseMedia = useCallback(() => {
+    const activeRecording = recordingRef.current;
+    const activeSound = soundRef.current;
+    recordingRef.current = null;
+    soundRef.current = null;
+
+    if (activeRecording) {
+      void activeRecording.stopAndUnloadAsync().catch(() => {});
+    }
+    if (activeSound) {
+      void activeSound.unloadAsync().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const ownerId = user?.id ?? null;
+    if (activeOwnerRef.current && activeOwnerRef.current !== ownerId) {
+      releaseMedia();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setRecording(null);
+      setSound(null);
+    }
+    activeOwnerRef.current = ownerId;
+  }, [releaseMedia, user?.id]);
 
   const isBusy = step === "transcribing" || step === "enhancing" || step === "saving";
   const hasContent = !!(enhancedText || transcript);
@@ -122,13 +166,53 @@ export default function RecordScreen() {
     try {
       await AsyncStorage.setItem(
         draftKey,
-        JSON.stringify({ title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode, parentStoryId })
+        JSON.stringify({
+          title,
+          transcript,
+          enhancedText,
+          tags,
+          selectedMood,
+          isPublic,
+          storyDate,
+          inputMode,
+          parentStoryId,
+          saveRequestKey,
+        })
       );
     } catch {}
-  }, [draftKey, title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode, parentStoryId]);
+  }, [draftKey, title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode, parentStoryId, saveRequestKey]);
 
   const loadDraft = useCallback(async () => {
     if (!draftKey) return;
+
+    // Clear in-memory editor state before loading the next owner's draft.
+    // Scoped storage alone is insufficient if the screen remains mounted
+    // through an account switch.
+    releaseMedia();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setStep("idle");
+    setRecording(null);
+    setRecordingUri(null);
+    setSound(null);
+    setTranscript("");
+    setEnhancedText("");
+    setPreEnhanceText(null);
+    setTitle("");
+    setTags("");
+    setSelectedMood("neutral");
+    setIsPublic(false);
+    setStoryDate(getTodayString());
+    setInputMode("voice");
+    setParentStoryId(null);
+    setFieldErrors({});
+    setDuration(0);
+    setIsSpeaking(false);
+    setSaveRequestKey(Crypto.randomUUID());
+    Speech.stop();
+
     try {
       const raw = await AsyncStorage.getItem(draftKey);
       if (!raw) return;
@@ -142,12 +226,20 @@ export default function RecordScreen() {
       if (draft.storyDate) setStoryDate(draft.storyDate);
       if (draft.inputMode) setInputMode(draft.inputMode);
       if (draft.parentStoryId) setParentStoryId(draft.parentStoryId);
+      if (
+        typeof draft.saveRequestKey === "string" &&
+        /^[A-Za-z0-9._:-]{16,128}$/.test(draft.saveRequestKey)
+      ) {
+        setSaveRequestKey(draft.saveRequestKey);
+      } else {
+        setSaveRequestKey(Crypto.randomUUID());
+      }
       if (draft.title || draft.transcript || draft.enhancedText) {
         setStep("recorded");
         Toast.show({ type: "info", text1: "Draft restored", text2: "Your previous entry was recovered" });
       }
     } catch {}
-  }, [draftKey]);
+  }, [draftKey, releaseMedia]);
 
   const clearDraft = useCallback(async () => {
     if (!draftKey) return;
@@ -200,8 +292,9 @@ export default function RecordScreen() {
   useEffect(() => {
     return () => {
       Speech.stop();
+      releaseMedia();
     };
-  }, []);
+  }, [releaseMedia]);
 
   if (!isAuthenticated) {
     return (
@@ -379,8 +472,8 @@ export default function RecordScreen() {
     setFieldErrors({});
     const content = enhancedText || transcript;
     const result = storySchema.safeParse({
-      title,
-      content,
+      title: title.trim(),
+      content: content.trim(),
       mood: selectedMood,
       tags,
       isPublic,
@@ -395,6 +488,16 @@ export default function RecordScreen() {
       Toast.show({ type: "error", text1: "Please fix the errors before saving" });
       return;
     }
+
+    const ownerId = user?.id;
+    if (!ownerId) {
+      Toast.show({
+        type: "error",
+        text1: "Sign in again before saving",
+      });
+      return;
+    }
+
     setStep("saving");
     try {
       // Upload audio file if recording exists
@@ -407,9 +510,7 @@ export default function RecordScreen() {
             type: "audio/m4a",
             name: "recording.m4a",
           } as unknown as Blob);
-          if (user?.id) {
-            formData.append("userId", user.id);
-          }
+          formData.append("userId", ownerId);
           const uploadRes = await apiUpload<{ success: boolean; url: string; path: string }>(
             "/api/audio/upload",
             formData
@@ -426,23 +527,38 @@ export default function RecordScreen() {
         }
       }
 
+      if (useAuthStore.getState().user?.id !== ownerId) {
+        throw new Error("Active account changed while saving");
+      }
+
       const res = await api("/api/journal/save", {
         method: "POST",
-        body: {
+        body: buildJournalSaveBody({
           title,
           content,
           mood: selectedMood,
-          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-          hasAudio: !!recordingUri,
-          is_public: isPublic,
-          story_date: storyDate,
-          ...(audioUrl && { audio_url: audioUrl }),
-          ...(parentStoryId && { parent_story_id: parentStoryId }),
+          tags,
+          isPublic,
+          storyDate,
+          audioUrl,
+          parentStoryId,
+        }),
+        offlineQueue: {
+          ownerId,
+          idempotencyKey: saveRequestKey,
         },
       });
 
-      if (res.ok) {
-        Toast.show({ type: "success", text1: "Story saved!" });
+      if (res.ok || res.queued) {
+        Toast.show(
+          res.queued
+            ? {
+                type: "info",
+                text1: "Story queued",
+                text2: "It will sync automatically when you're back online.",
+              }
+            : { type: "success", text1: "Story saved!" }
+        );
         await clearDraft();
         // Reset all state
         setStep("idle");
@@ -453,7 +569,11 @@ export default function RecordScreen() {
         setPreEnhanceText(null);
         setTitle("");
         setTags("");
+        setSelectedMood("neutral");
+        setIsPublic(false);
         setStoryDate(getTodayString());
+        setParentStoryId(null);
+        setSaveRequestKey(Crypto.randomUUID());
         setDuration(0);
         setIsSpeaking(false);
         Speech.stop();
@@ -483,6 +603,11 @@ export default function RecordScreen() {
     setPreEnhanceText(null);
     setTitle("");
     setTags("");
+    setSelectedMood("neutral");
+    setIsPublic(false);
+    setStoryDate(getTodayString());
+    setParentStoryId(null);
+    setSaveRequestKey(Crypto.randomUUID());
     setDuration(0);
     setIsSpeaking(false);
     Speech.stop();

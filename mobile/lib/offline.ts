@@ -196,11 +196,13 @@ export async function processQueue(
         if (result.ok) {
           processed++;
         } else {
+          failed++;
           req.retryCount++;
           req.lastError = result.error || "Request failed";
           remaining.push(req);
         }
       } catch (error) {
+        failed++;
         req.retryCount++;
         req.lastError =
           error instanceof Error ? error.message : "Request failed";

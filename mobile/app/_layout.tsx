@@ -19,6 +19,7 @@ import { wagmiAdapter, appKit } from "../lib/wagmi.config";
 import { useAuthStore } from "../stores/authStore";
 import { useNotifications } from "../hooks/useNotifications";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { SyncStatusBanner } from "../components/SyncStatusBanner";
 import { initSentry } from "../lib/sentry";
 import { useOfflineSync } from "../hooks/useOfflineSync";
 import { useAuthSessionSync } from "../hooks/useAuthSessionSync";
@@ -131,6 +132,7 @@ export default function RootLayout() {
               />
               </Stack>
             </ErrorBoundary>
+            <SyncStatusBanner />
             {AppKitModal && <AppKitModal />}
             <Toast />
             <StatusBar style="light" />

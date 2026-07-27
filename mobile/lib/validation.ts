@@ -36,7 +36,26 @@ export const storySchema = z.object({
     .max(120, "Title must be under 120 characters"),
   content: z.string().min(1, "Content is required").max(50000, "Content is too long"),
   mood: z.string().min(1, "Mood is required"),
-  tags: z.string().optional(),
+  tags: z
+    .string()
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean).length <= 20,
+      "Use at most 20 tags"
+    )
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .every((tag) => tag.length <= 50),
+      "Each tag must be under 50 characters"
+    )
+    .optional(),
   isPublic: z.boolean(),
   storyDate: z
     .string()

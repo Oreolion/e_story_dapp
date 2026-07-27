@@ -104,6 +104,22 @@ describe("offline queue", () => {
     expect(await getPendingCount("user-a")).toBe(1);
   });
 
+  it("reports a failed replay attempt and keeps it queued with its error", async () => {
+    await enqueue(request("user-a", "request-a"));
+
+    const result = await processQueue("user-a", () =>
+      Promise.resolve({ ok: false, error: "Server unavailable" })
+    );
+
+    expect(result).toEqual({ processed: 0, failed: 1 });
+    const queued = await getQueue("user-a");
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({
+      retryCount: 1,
+      lastError: "Server unavailable",
+    });
+  });
+
   it("clears one owner's queue without touching another owner", async () => {
     await enqueue(request("user-a", "request-a"));
     await enqueue(request("user-b", "request-b"));

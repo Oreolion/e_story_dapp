@@ -3,6 +3,7 @@ import { getPendingCount, isOnline, onNetworkChange, processQueue } from "../lib
 import type { QueuedRequest } from "../lib/offline";
 
 interface SyncState {
+  activeOwnerId: string | null;
   isOnline: boolean;
   isSyncing: boolean;
   pendingCount: number;
@@ -21,6 +22,7 @@ interface SyncState {
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
+  activeOwnerId: null,
   isOnline: true,
   isSyncing: false,
   pendingCount: 0,
@@ -34,21 +36,44 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   setSyncing: (syncing) => set({ isSyncing: syncing }),
 
   refreshPendingCount: async (ownerId) => {
+    if (get().activeOwnerId !== ownerId) {
+      set({
+        activeOwnerId: ownerId,
+        pendingCount: 0,
+        lastSyncAt: null,
+        lastSyncResult: null,
+      });
+    }
+
     const count = ownerId ? await getPendingCount(ownerId) : 0;
-    set({ pendingCount: count });
+    if (get().activeOwnerId === ownerId) {
+      set({ pendingCount: count });
+    }
   },
 
   sync: async (ownerId, executeRequest) => {
+    if (get().activeOwnerId !== ownerId) {
+      set({
+        activeOwnerId: ownerId,
+        pendingCount: 0,
+        lastSyncAt: null,
+        lastSyncResult: null,
+      });
+    }
+
     if (get().isSyncing) return;
 
     set({ isSyncing: true });
     try {
       const result = await processQueue(ownerId, executeRequest);
-      set({
-        lastSyncAt: Date.now(),
-        lastSyncResult: result,
-        pendingCount: await getPendingCount(ownerId),
-      });
+      const pendingCount = await getPendingCount(ownerId);
+      if (get().activeOwnerId === ownerId) {
+        set({
+          lastSyncAt: Date.now(),
+          lastSyncResult: result,
+          pendingCount,
+        });
+      }
     } finally {
       set({ isSyncing: false });
     }
