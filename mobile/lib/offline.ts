@@ -6,15 +6,47 @@ const SYNC_LOCK_KEY = "@estory:sync_lock";
 
 export interface QueuedRequest {
   id: string;
+  ownerId: string;
+  idempotencyKey: string;
   path: string;
   method: "POST" | "PUT" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
   headers?: Record<string, string>;
   timestamp: number;
   retryCount: number;
+  lastError?: string;
 }
 
 let isProcessingQueue = false;
+type QueueChangeListener = (ownerId: string | null) => void;
+const queueChangeListeners = new Set<QueueChangeListener>();
+
+function emitQueueChange(ownerId: string | null): void {
+  queueChangeListeners.forEach((listener) => listener(ownerId));
+}
+
+export function onQueueChange(listener: QueueChangeListener): () => void {
+  queueChangeListeners.add(listener);
+  return () => queueChangeListeners.delete(listener);
+}
+
+function isQueuedRequest(value: unknown): value is QueuedRequest {
+  if (!value || typeof value !== "object") return false;
+
+  const request = value as Partial<QueuedRequest>;
+  return (
+    typeof request.id === "string" &&
+    typeof request.ownerId === "string" &&
+    request.ownerId.length > 0 &&
+    typeof request.idempotencyKey === "string" &&
+    request.idempotencyKey.length > 0 &&
+    typeof request.path === "string" &&
+    request.path.startsWith("/") &&
+    ["POST", "PUT", "PATCH", "DELETE"].includes(request.method ?? "") &&
+    typeof request.timestamp === "number" &&
+    typeof request.retryCount === "number"
+  );
+}
 
 /**
  * Check if device is online
@@ -37,10 +69,23 @@ export function onNetworkChange(callback: (isOnline: boolean) => void) {
 /**
  * Get all queued requests
  */
-export async function getQueue(): Promise<QueuedRequest[]> {
+export async function getQueue(ownerId?: string): Promise<QueuedRequest[]> {
   try {
     const raw = await AsyncStorage.getItem(SYNC_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    // Never replay legacy/unscoped queue entries created before owner scoping.
+    const validQueue = parsed.filter(isQueuedRequest);
+    if (validQueue.length !== parsed.length) {
+      await saveQueue(validQueue);
+    }
+
+    return ownerId
+      ? validQueue.filter((request) => request.ownerId === ownerId)
+      : validQueue;
   } catch {
     return [];
   }
@@ -65,6 +110,7 @@ export async function enqueue(request: Omit<QueuedRequest, "id" | "timestamp" | 
     retryCount: 0,
   });
   await saveQueue(queue);
+  emitQueueChange(request.ownerId);
 }
 
 /**
@@ -72,22 +118,35 @@ export async function enqueue(request: Omit<QueuedRequest, "id" | "timestamp" | 
  */
 export async function dequeue(id: string): Promise<void> {
   const queue = await getQueue();
+  const removed = queue.find((item) => item.id === id);
   const filtered = queue.filter((item) => item.id !== id);
   await saveQueue(filtered);
+  if (removed) emitQueueChange(removed.ownerId);
 }
 
 /**
  * Clear entire queue
  */
-export async function clearQueue(): Promise<void> {
-  await AsyncStorage.removeItem(SYNC_QUEUE_KEY);
+export async function clearQueue(ownerId?: string): Promise<void> {
+  if (!ownerId) {
+    await Promise.all([
+      AsyncStorage.removeItem(SYNC_QUEUE_KEY),
+      AsyncStorage.removeItem(SYNC_LOCK_KEY),
+    ]);
+    emitQueueChange(null);
+    return;
+  }
+
+  const queue = await getQueue();
+  await saveQueue(queue.filter((item) => item.ownerId !== ownerId));
+  emitQueueChange(ownerId);
 }
 
 /**
  * Get count of pending items
  */
-export async function getPendingCount(): Promise<number> {
-  const queue = await getQueue();
+export async function getPendingCount(ownerId?: string): Promise<number> {
+  const queue = await getQueue(ownerId);
   return queue.length;
 }
 
@@ -96,6 +155,7 @@ export async function getPendingCount(): Promise<number> {
  * This should be called when coming back online
  */
 export async function processQueue(
+  ownerId: string,
   executeRequest: (req: QueuedRequest) => Promise<{ ok: boolean; error?: string }>
 ): Promise<{ processed: number; failed: number }> {
   // Prevent concurrent queue processing
@@ -111,20 +171,24 @@ export async function processQueue(
   isProcessingQueue = true;
 
   try {
-    const queue = await getQueue();
+    const allRequests = await getQueue();
+    const queue = allRequests.filter((request) => request.ownerId === ownerId);
     if (queue.length === 0) {
       return { processed: 0, failed: 0 };
     }
 
     let processed = 0;
     let failed = 0;
-    const remaining: QueuedRequest[] = [];
+    const remaining = allRequests.filter(
+      (request) => request.ownerId !== ownerId
+    );
 
     for (const req of queue) {
       // Max 3 retries
       if (req.retryCount >= 3) {
         failed++;
-        continue; // Drop permanently failed requests
+        remaining.push(req); // Keep for user-visible/manual recovery.
+        continue;
       }
 
       try {
@@ -133,15 +197,19 @@ export async function processQueue(
           processed++;
         } else {
           req.retryCount++;
+          req.lastError = result.error || "Request failed";
           remaining.push(req);
         }
-      } catch {
+      } catch (error) {
         req.retryCount++;
+        req.lastError =
+          error instanceof Error ? error.message : "Request failed";
         remaining.push(req);
       }
     }
 
     await saveQueue(remaining);
+    emitQueueChange(ownerId);
     return { processed, failed };
   } finally {
     isProcessingQueue = false;

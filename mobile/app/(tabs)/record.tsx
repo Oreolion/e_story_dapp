@@ -46,6 +46,7 @@ import Toast from "react-native-toast-message";
 import { router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 import { api, apiUpload } from "../../lib/api";
+import { getRecordDraftKey } from "../../lib/userData";
 import { storySchema } from "../../lib/validation";
 import {
   GlassCard,
@@ -114,21 +115,22 @@ export default function RecordScreen() {
   const hasContent = !!(enhancedText || transcript);
 
   // === Draft Persistence ===
-  const DRAFT_KEY = "estories_record_draft";
+  const draftKey = user?.id ? getRecordDraftKey(user.id) : null;
 
   const saveDraft = useCallback(async () => {
-    if (!title && !transcript && !enhancedText && !tags) return;
+    if (!draftKey || (!title && !transcript && !enhancedText && !tags)) return;
     try {
       await AsyncStorage.setItem(
-        DRAFT_KEY,
+        draftKey,
         JSON.stringify({ title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode, parentStoryId })
       );
     } catch {}
-  }, [title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode]);
+  }, [draftKey, title, transcript, enhancedText, tags, selectedMood, isPublic, storyDate, inputMode, parentStoryId]);
 
   const loadDraft = useCallback(async () => {
+    if (!draftKey) return;
     try {
-      const raw = await AsyncStorage.getItem(DRAFT_KEY);
+      const raw = await AsyncStorage.getItem(draftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
       if (draft.title) setTitle(draft.title);
@@ -145,14 +147,15 @@ export default function RecordScreen() {
         Toast.show({ type: "info", text1: "Draft restored", text2: "Your previous entry was recovered" });
       }
     } catch {}
-  }, []);
+  }, [draftKey]);
 
   const clearDraft = useCallback(async () => {
-    try { await AsyncStorage.removeItem(DRAFT_KEY); } catch {}
-  }, []);
+    if (!draftKey) return;
+    try { await AsyncStorage.removeItem(draftKey); } catch {}
+  }, [draftKey]);
 
   // Load draft on mount
-  useEffect(() => { loadDraft(); }, []);
+  useEffect(() => { loadDraft(); }, [loadDraft]);
 
   // Auto-save draft on content changes (debounced)
   useEffect(() => {

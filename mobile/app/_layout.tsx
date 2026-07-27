@@ -21,6 +21,7 @@ import { useNotifications } from "../hooks/useNotifications";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { initSentry } from "../lib/sentry";
 import { useOfflineSync } from "../hooks/useOfflineSync";
+import { useAuthSessionSync } from "../hooks/useAuthSessionSync";
 
 // Initialize Sentry as early as possible
 initSentry();
@@ -49,6 +50,7 @@ const queryClient = new QueryClient({
 
 function AuthInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useAuthStore((s) => s.initialize);
+  useAuthSessionSync();
 
   useEffect(() => {
     initialize();

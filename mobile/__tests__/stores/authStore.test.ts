@@ -26,7 +26,12 @@ vi.mock("../../lib/api", () => ({
   clearAuthToken: vi.fn(() => Promise.resolve()),
 }));
 
-import { api } from "../../lib/api";
+vi.mock("../../lib/userData", () => ({
+  clearUserLocalData: vi.fn(() => Promise.resolve()),
+}));
+
+import { api, clearAuthToken, setAuthToken } from "../../lib/api";
+import { clearUserLocalData } from "../../lib/userData";
 import { useAuthStore } from "../../stores/authStore";
 
 const mockApi = vi.mocked(api);
@@ -49,6 +54,44 @@ describe("authStore subscription", () => {
     expect(state.subscription.plan).toBe("free");
     expect(state.subscription.active).toBe(false);
     expect(state.subscription.expires_at).toBeNull();
+  });
+
+  it("should propagate refreshed sessions to the API bearer token", async () => {
+    await useAuthStore.getState().syncSessionToken("refreshed-access-token");
+
+    expect(setAuthToken).toHaveBeenCalledWith("refreshed-access-token");
+    expect(clearAuthToken).not.toHaveBeenCalled();
+  });
+
+  it("should fail closed on a signed-out session while preserving a recoverable draft", async () => {
+    useAuthStore.setState({
+      user: {
+        id: "user-123",
+        name: "Test User",
+        username: "testuser",
+        avatar: null,
+        wallet_address: null,
+        email: "test@example.com",
+        bio: null,
+        badges: null,
+        google_id: null,
+        subscription_plan: "creator",
+        subscription_expires_at: null,
+        created_at: "2024-01-01T00:00:00Z",
+      },
+      isAuthenticated: true,
+      authMethod: "email",
+    });
+
+    await useAuthStore.getState().syncSessionToken(null);
+
+    expect(clearAuthToken).toHaveBeenCalled();
+    expect(clearUserLocalData).toHaveBeenCalledWith({
+      ownerId: "user-123",
+      preserveDraft: true,
+    });
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 
   it("should refresh subscription from API", async () => {
@@ -82,6 +125,20 @@ describe("authStore subscription", () => {
   it("should reset subscription on logout", async () => {
     // Set active subscription first
     useAuthStore.setState({
+      user: {
+        id: "user-123",
+        name: "Test User",
+        username: "testuser",
+        avatar: null,
+        wallet_address: null,
+        email: "test@example.com",
+        bio: null,
+        badges: null,
+        google_id: null,
+        subscription_plan: "storyteller",
+        subscription_expires_at: "2026-06-01T00:00:00Z",
+        created_at: "2024-01-01T00:00:00Z",
+      },
       subscription: { plan: "storyteller", active: true, expires_at: "2026-06-01T00:00:00Z" },
       isAuthenticated: true,
     });
@@ -93,12 +150,27 @@ describe("authStore subscription", () => {
     expect(state.subscription.active).toBe(false);
     expect(state.subscription.expires_at).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+    expect(clearUserLocalData).toHaveBeenCalledWith({ ownerId: "user-123" });
   });
 
   it("should reset subscription on deleteAccount", async () => {
     mockApi.mockResolvedValueOnce({ ok: true, status: 200 });
 
     useAuthStore.setState({
+      user: {
+        id: "user-123",
+        name: "Test User",
+        username: "testuser",
+        avatar: null,
+        wallet_address: null,
+        email: "test@example.com",
+        bio: null,
+        badges: null,
+        google_id: null,
+        subscription_plan: "creator",
+        subscription_expires_at: "2026-12-01T00:00:00Z",
+        created_at: "2024-01-01T00:00:00Z",
+      },
       subscription: { plan: "creator", active: true, expires_at: "2026-12-01T00:00:00Z" },
       isAuthenticated: true,
     });
@@ -110,6 +182,7 @@ describe("authStore subscription", () => {
     expect(state.subscription.active).toBe(false);
     expect(state.subscription.expires_at).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+    expect(clearUserLocalData).toHaveBeenCalledWith({ ownerId: "user-123" });
   });
 
   it("should include subscription fields in UserProfile type", () => {

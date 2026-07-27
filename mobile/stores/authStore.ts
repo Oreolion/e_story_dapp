@@ -5,9 +5,9 @@ import { create } from "zustand";
 import { removeItem } from "../lib/storage";
 import { supabase } from "../lib/supabase";
 import { api, setAuthToken, clearAuthToken } from "../lib/api";
+import { clearUserLocalData } from "../lib/userData";
 import type { OnboardingData, SignupData } from "../types";
 
-const TOKEN_KEY = "supabase_access_token";
 const REFRESH_KEY = "supabase_refresh_token";
 
 export interface UserProfile {
@@ -40,6 +40,7 @@ interface AuthState {
 
   // Actions
   initialize: () => Promise<void>;
+  syncSessionToken: (accessToken: string | null) => Promise<void>;
   loginWithWallet: (address: string, signMessage: (message: string) => Promise<string>) => Promise<void>;
   loginWithGoogle: (accessToken: string, refreshToken: string) => Promise<{ needsOnboarding: boolean }>;
   loginWithGoogleIdToken: (accessToken: string, refreshToken: string) => Promise<{ needsOnboarding: boolean }>;
@@ -65,18 +66,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        await setAuthToken(session.access_token);
+        await get().syncSessionToken(session.access_token);
         await get().fetchProfile();
         await get().refreshSubscription();
         const provider = session.user?.app_metadata?.provider;
         const authMethod = provider === "google" ? "google" : provider === "email" ? "email" : "wallet";
         set({ isAuthenticated: true, authMethod });
+      } else {
+        await get().syncSessionToken(null);
       }
     } catch (err) {
       console.error("[Auth] Initialize failed:", err);
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  syncSessionToken: async (accessToken) => {
+    if (accessToken) {
+      await setAuthToken(accessToken);
+      return;
+    }
+
+    const ownerId = get().user?.id;
+    await Promise.allSettled([
+      clearAuthToken(),
+      removeItem(REFRESH_KEY),
+      clearUserLocalData({ ownerId, preserveDraft: true }),
+    ]);
+
+    set({
+      user: null,
+      isAuthenticated: false,
+      authMethod: null,
+      subscription: { plan: "free", active: false, expires_at: null },
+    });
   },
 
   loginWithWallet: async (address, signMessage) => {
@@ -236,27 +260,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    const ownerId = get().user?.id;
     try {
       await supabase.auth.signOut();
-      await clearAuthToken();
-      await removeItem(TOKEN_KEY);
-      await removeItem(REFRESH_KEY);
-      set({ user: null, isAuthenticated: false, authMethod: null, subscription: { plan: "free", active: false, expires_at: null } });
     } catch (err) {
       console.error("[Auth] Logout failed:", err);
+    } finally {
+      await get().syncSessionToken(null);
+      await clearUserLocalData({ ownerId });
     }
   },
 
   deleteAccount: async () => {
+    const ownerId = get().user?.id;
     const res = await api("/api/user", { method: "DELETE" });
     if (!res.ok) {
       throw new Error(res.error || "Failed to delete account");
     }
-    await supabase.auth.signOut();
-    await clearAuthToken();
-    await removeItem(TOKEN_KEY);
-    await removeItem(REFRESH_KEY);
-    set({ user: null, isAuthenticated: false, authMethod: null, subscription: { plan: "free", active: false, expires_at: null } });
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("[Auth] Remote sign out after account deletion failed:", err);
+    } finally {
+      await get().syncSessionToken(null);
+      await clearUserLocalData({ ownerId });
+    }
   },
 
   fetchProfile: async () => {
