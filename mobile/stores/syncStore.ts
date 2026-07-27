@@ -12,8 +12,11 @@ interface SyncState {
   // Actions
   setOnline: (online: boolean) => void;
   setSyncing: (syncing: boolean) => void;
-  refreshPendingCount: () => Promise<void>;
-  sync: (executeRequest: (req: QueuedRequest) => Promise<{ ok: boolean; error?: string }>) => Promise<void>;
+  refreshPendingCount: (ownerId: string | null) => Promise<void>;
+  sync: (
+    ownerId: string,
+    executeRequest: (req: QueuedRequest) => Promise<{ ok: boolean; error?: string }>
+  ) => Promise<void>;
   init: () => () => void; // returns unsubscribe function
 }
 
@@ -25,32 +28,26 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   lastSyncResult: null,
 
   setOnline: (online) => {
-    const wasOffline = !get().isOnline && online;
     set({ isOnline: online });
-
-    // Auto-sync when coming back online
-    if (wasOffline && get().pendingCount > 0) {
-      // The sync function will be called by the component/hook that has executeRequest
-    }
   },
 
   setSyncing: (syncing) => set({ isSyncing: syncing }),
 
-  refreshPendingCount: async () => {
-    const count = await getPendingCount();
+  refreshPendingCount: async (ownerId) => {
+    const count = ownerId ? await getPendingCount(ownerId) : 0;
     set({ pendingCount: count });
   },
 
-  sync: async (executeRequest) => {
+  sync: async (ownerId, executeRequest) => {
     if (get().isSyncing) return;
 
     set({ isSyncing: true });
     try {
-      const result = await processQueue(executeRequest);
+      const result = await processQueue(ownerId, executeRequest);
       set({
         lastSyncAt: Date.now(),
         lastSyncResult: result,
-        pendingCount: await getPendingCount(),
+        pendingCount: await getPendingCount(ownerId),
       });
     } finally {
       set({ isSyncing: false });
@@ -60,7 +57,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   init: () => {
     // Check initial network state
     isOnline().then((online) => set({ isOnline: online }));
-    get().refreshPendingCount();
 
     // Subscribe to network changes
     const unsubscribe = onNetworkChange((online) => {

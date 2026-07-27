@@ -5,8 +5,17 @@ import { vi } from "vitest";
 // Mock React Native (Flow syntax breaks parser — cannot use vi.importActual)
 vi.mock("react-native", () => {
   const React = require("react");
+  const appStateListeners = new Set();
   return {
     Platform: { OS: "ios", select: (obj) => obj.ios },
+    AppState: {
+      currentState: "active",
+      addEventListener: vi.fn((_event, listener) => {
+        appStateListeners.add(listener);
+        return { remove: vi.fn(() => appStateListeners.delete(listener)) };
+      }),
+      __emit: (state) => appStateListeners.forEach((listener) => listener(state)),
+    },
     Alert: { alert: vi.fn() },
     Share: { share: vi.fn() },
     Linking: { openURL: vi.fn(), canOpenURL: vi.fn(() => Promise.resolve(true)) },

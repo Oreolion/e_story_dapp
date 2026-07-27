@@ -11,8 +11,22 @@ const API_BASE_URL =
 
 const TOKEN_KEY = "supabase_access_token";
 
+function withoutAuthorization(
+  headers: Record<string, string>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name]) => name.toLowerCase() !== "authorization"
+    )
+  );
+}
+
 interface ApiOptions extends Omit<RequestInit, "body"> {
   body?: Record<string, unknown> | FormData;
+  offlineQueue?: {
+    ownerId: string;
+    idempotencyKey: string;
+  };
 }
 
 interface ApiResponse<T = unknown> {
@@ -20,6 +34,7 @@ interface ApiResponse<T = unknown> {
   error?: string;
   status: number;
   ok: boolean;
+  queued?: boolean;
 }
 
 /**
@@ -34,6 +49,7 @@ export async function api<T = unknown>(
   options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const { body: requestBody, offlineQueue, ...requestOptions } = options;
 
   // Get auth token
   const token = await getItem(TOKEN_KEY);
@@ -49,17 +65,21 @@ export async function api<T = unknown>(
 
   // Handle body serialization
   let body: string | FormData | undefined;
-  if (options.body instanceof FormData) {
-    body = options.body;
+  if (requestBody instanceof FormData) {
+    body = requestBody;
     // Don't set Content-Type for FormData — browser/RN sets it with boundary
-  } else if (options.body) {
-    body = JSON.stringify(options.body);
+  } else if (requestBody) {
+    body = JSON.stringify(requestBody);
     headers["Content-Type"] = "application/json";
+  }
+
+  if (offlineQueue?.idempotencyKey) {
+    headers["Idempotency-Key"] = offlineQueue.idempotencyKey;
   }
 
   try {
     const response = await fetch(url, {
-      ...options,
+      ...requestOptions,
       headers,
       body,
     });
@@ -81,22 +101,39 @@ export async function api<T = unknown>(
     console.error(`[API] ${options.method || "GET"} ${path} failed:`, err);
 
     // Queue mutations for retry when offline
-    const method = options.method || "GET";
+    const method = (options.method || "GET").toUpperCase();
     const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
     const isNetworkError = err instanceof TypeError || (err as Error)?.message?.includes("Network");
+    const queuePolicy =
+      offlineQueue &&
+      offlineQueue.ownerId.trim().length > 0 &&
+      offlineQueue.idempotencyKey.trim().length > 0
+        ? offlineQueue
+        : null;
 
-    if (isMutation && isNetworkError && options.body && !(options.body instanceof FormData)) {
+    if (
+      isMutation &&
+      isNetworkError &&
+      requestBody &&
+      !(requestBody instanceof FormData) &&
+      queuePolicy &&
+      path.startsWith("/")
+    ) {
       const online = await isOnline();
       if (!online) {
         await enqueue({
           path,
           method: method as "POST" | "PUT" | "PATCH" | "DELETE",
-          body: options.body as Record<string, unknown>,
-          headers: options.headers as Record<string, string>,
+          body: requestBody as Record<string, unknown>,
+          // The active token is injected at replay time; never persist it in AsyncStorage.
+          headers: withoutAuthorization(headers),
+          ownerId: queuePolicy.ownerId,
+          idempotencyKey: queuePolicy.idempotencyKey,
         });
         return {
           status: 0,
           ok: false,
+          queued: true,
           error: "Offline — change saved and will sync when you're back online.",
         };
       }
