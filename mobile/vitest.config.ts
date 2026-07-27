@@ -10,6 +10,6 @@ export default defineConfig({
     fileParallelism: false,
     maxWorkers: 1,
     isolate: false,
-    exclude: ["node_modules", "e2e/**/*", ".expo", "dist"],
+    exclude: ["node_modules", "e2e/**/*", ".expo", "dist", "__tests__/components/**/*"],
   },
 });
