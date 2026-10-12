@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import { apiGet, apiPost, apiPut, apiDelete } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import type { Notification } from "../types";
@@ -31,6 +32,50 @@ interface FetchParams {
   limit?: number;
   offset?: number;
   unreadOnly?: boolean;
+}
+
+export async function registerForPushNotifications(
+  requestPermission: boolean
+): Promise<boolean> {
+  if (!Device.isDevice) return false;
+
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "eStories notifications",
+        importance: Notifications.AndroidImportance.DEFAULT,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#7c3aed",
+      });
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== "granted" && requestPermission) {
+      const requested = await Notifications.requestPermissionsAsync();
+      finalStatus = requested.status;
+    }
+    if (finalStatus !== "granted") return false;
+
+    const projectId =
+      Constants.easConfig?.projectId ??
+      Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      console.error("[useNotifications] EAS project ID is not configured");
+      return false;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const response = await apiPost("/api/notifications", {
+      type: "push_token",
+      token: tokenData.data,
+      platform: Platform.OS,
+    });
+    return response.ok;
+  } catch (err) {
+    console.error("[useNotifications] Push token registration failed:", err);
+    return false;
+  }
 }
 
 export function useNotifications() {
@@ -104,34 +149,13 @@ export function useNotifications() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const registerPushToken = async () => {
-    if (!Device.isDevice) return;
-    try {
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== "granted") return;
-
-      const tokenData = await Notifications.getExpoPushTokenAsync();
-      await apiPost("/api/notifications", {
-        type: "push_token",
-        token: tokenData.data,
-        platform: Platform.OS,
-      });
-    } catch (err) {
-      console.error("[useNotifications] Push token registration failed:", err);
-    }
-  };
-
   const subscribe = useCallback(() => {
     if (subscribedRef.current || !isAuthenticated) return;
     subscribedRef.current = true;
     fetchNotifications();
-    registerPushToken();
+    // Register silently only when the user has already granted permission.
+    // The system permission prompt is triggered from an explicit profile action.
+    void registerForPushNotifications(false);
     pollRef.current = setInterval(fetchNotifications, 30000);
   }, [isAuthenticated, fetchNotifications]);
 

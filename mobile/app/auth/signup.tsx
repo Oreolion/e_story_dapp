@@ -12,11 +12,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { User, AtSign, Mail, Lock, ArrowLeft } from "lucide-react-native";
+import { User, AtSign, Mail, Lock, ArrowLeft, Check } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { useAuthStore } from "../../stores/authStore";
 import { signInWithGoogleNative } from "../../lib/googleAuth";
 import { signupSchema } from "../../lib/validation";
+import { GOOGLE_SIGN_IN_ENABLED } from "../../lib/releaseConfig";
 import {
   GlassCard,
   GradientButton,
@@ -35,10 +36,15 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleSignup = async () => {
     setErrors({});
+    if (!acceptedPolicies) {
+      setErrors({ policies: "Accept the policies to create an account." });
+      return;
+    }
     const result = signupSchema.safeParse({ name, username, email, password, confirmPassword });
     if (!result.success) {
       const newErrors: Record<string, string> = {};
@@ -68,6 +74,10 @@ export default function SignupScreen() {
   };
 
   const handleGoogleLogin = async () => {
+    if (!acceptedPolicies) {
+      setErrors({ policies: "Accept the policies to create an account." });
+      return;
+    }
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogleNative();
@@ -184,8 +194,66 @@ export default function SignupScreen() {
                 { secureTextEntry: true }
               )}
 
-              {/* Create Account button */}
               <AnimatedListItem index={6}>
+                <View>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                    <TouchableOpacity
+                      accessibilityRole="checkbox"
+                      accessibilityLabel="Accept Terms, Privacy Policy, and Community Guidelines"
+                      accessibilityState={{ checked: acceptedPolicies }}
+                      onPress={() => {
+                        setAcceptedPolicies((accepted) => !accepted);
+                        setErrors((current) => ({ ...current, policies: "" }));
+                      }}
+                      style={{
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 24,
+                        height: 24,
+                        marginTop: 1,
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: acceptedPolicies ? "#8b5cf6" : "#64748b",
+                        backgroundColor: acceptedPolicies ? "#7c3aed" : "transparent",
+                      }}
+                    >
+                      {acceptedPolicies ? <Check size={16} color="#fff" /> : null}
+                    </TouchableOpacity>
+                    <Text style={{ flex: 1, fontSize: 12, lineHeight: 18, color: "#94a3b8" }}>
+                      I agree to the{" "}
+                      <Text
+                        style={{ color: "#a78bfa", textDecorationLine: "underline" }}
+                        onPress={() => Linking.openURL("https://estories.app/terms")}
+                      >
+                        Terms of Service
+                      </Text>
+                      {", "}
+                      <Text
+                        style={{ color: "#a78bfa", textDecorationLine: "underline" }}
+                        onPress={() => Linking.openURL("https://estories.app/privacy")}
+                      >
+                        Privacy Policy
+                      </Text>
+                      {", and "}
+                      <Text
+                        style={{ color: "#a78bfa", textDecorationLine: "underline" }}
+                        onPress={() => Linking.openURL("https://estories.app/community-guidelines")}
+                      >
+                        Community Guidelines
+                      </Text>
+                      .
+                    </Text>
+                  </View>
+                  {errors.policies ? (
+                    <Text style={{ marginTop: 6, marginLeft: 34, fontSize: 11, color: "#f87171" }}>
+                      {errors.policies}
+                    </Text>
+                  ) : null}
+                </View>
+              </AnimatedListItem>
+
+              {/* Create Account button */}
+              <AnimatedListItem index={7}>
                 <View style={{ marginTop: 8 }}>
                   <GradientButton
                     onPress={handleSignup}
@@ -193,39 +261,41 @@ export default function SignupScreen() {
                     gradient={GRADIENTS.primary}
                     size="lg"
                     loading={loading}
-                    disabled={loading}
+                    disabled={loading || !acceptedPolicies}
                     fullWidth
                   />
                 </View>
               </AnimatedListItem>
             </View>
 
-            {/* Divider */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 20 }}>
-              <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
-              <Text style={{ fontSize: 13, color: "#64748b" }}>or</Text>
-              <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
-            </View>
+            {GOOGLE_SIGN_IN_ENABLED ? (
+              <>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 20 }}>
+                  <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
+                  <Text style={{ fontSize: 13, color: "#64748b" }}>or</Text>
+                  <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
+                </View>
 
-            {/* Google Sign In */}
-            <GlassCard intensity="medium" style={{ overflow: "hidden" }}>
-              <TouchableOpacity
-                onPress={handleGoogleLogin}
-                disabled={googleLoading}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 12,
-                  paddingVertical: 16,
-                  opacity: googleLoading ? 0.5 : 1,
-                }}
-              >
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>
-                  {googleLoading ? "Signing in..." : "Continue with Google"}
-                </Text>
-              </TouchableOpacity>
-            </GlassCard>
+                <GlassCard intensity="medium" style={{ overflow: "hidden" }}>
+                  <TouchableOpacity
+                    onPress={handleGoogleLogin}
+                    disabled={googleLoading || !acceptedPolicies}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 12,
+                      paddingVertical: 16,
+                      opacity: googleLoading || !acceptedPolicies ? 0.5 : 1,
+                    }}
+                  >
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>
+                      {googleLoading ? "Signing in..." : "Continue with Google"}
+                    </Text>
+                  </TouchableOpacity>
+                </GlassCard>
+              </>
+            ) : null}
 
             {/* Sign In link */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingTop: 32, paddingBottom: 8 }}>
@@ -235,23 +305,7 @@ export default function SignupScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Terms */}
-            <Text style={{ textAlign: "center", fontSize: 11, color: "#64748b", paddingBottom: 16 }}>
-              By creating an account, you agree to our{" "}
-              <Text
-                style={{ color: "#a78bfa", textDecorationLine: "underline" }}
-                onPress={() => Linking.openURL("https://estories.app/terms")}
-              >
-                Terms of Service
-              </Text>
-              {" "}and{" "}
-              <Text
-                style={{ color: "#a78bfa", textDecorationLine: "underline" }}
-                onPress={() => Linking.openURL("https://estories.app/privacy")}
-              >
-                Privacy Policy
-              </Text>
-            </Text>
+            <View style={{ height: 16 }} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

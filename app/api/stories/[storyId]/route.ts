@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { validateAuth } from "@/lib/auth";
+import { resolveUserId, validateAuth } from "@/lib/auth";
 import { isValidUuid } from "@/lib/validation";
 
 /** Extract the storage path from a Supabase public URL (e.g. ".../story-audio/userId/123.webm" → "userId/123.webm") */
@@ -49,7 +49,31 @@ export async function GET(
     }
 
     // Authenticate viewer (optional — public stories are readable by anyone)
-    const viewerId = await validateAuth(req);
+    const authenticatedViewerId = await validateAuth(req);
+    const viewerId = authenticatedViewerId
+      ? await resolveUserId(authenticatedViewerId)
+      : null;
+
+    const blockedUserIds = new Set<string>();
+    if (viewerId) {
+      const { data: blockRows, error: blockError } = await admin
+        .from("user_blocks")
+        .select("blocker_id, blocked_id")
+        .or(`blocker_id.eq.${viewerId},blocked_id.eq.${viewerId}`);
+      if (blockError) {
+        console.error("[API /stories/[storyId]] block filter failed:", blockError);
+        return NextResponse.json({ error: "Failed to fetch story" }, { status: 500 });
+      }
+      for (const row of blockRows ?? []) {
+        blockedUserIds.add(
+          row.blocker_id === viewerId ? row.blocked_id : row.blocker_id
+        );
+      }
+    }
+
+    if (blockedUserIds.has(story.author_id)) {
+      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    }
 
     // Private stories: only the author can view them
     if (!story.is_public) {
@@ -117,14 +141,16 @@ export async function GET(
       .from("comments")
       .select(
         `id, content, created_at, author_id,
-         author:users!comments_author_id_fkey (name, avatar, wallet_address)`
+         author:users!comments_author_id_fkey (id, name, avatar, wallet_address)`
       )
       .eq("story_id", storyId)
       .order("created_at", { ascending: false });
 
     return NextResponse.json({
       story: { ...story, author, parentStory },
-      comments: comments || [],
+      comments: (comments || []).filter(
+        (comment) => !blockedUserIds.has(comment.author_id)
+      ),
     });
   } catch (err: unknown) {
     console.error("[API /stories/[storyId]] unexpected:", err);

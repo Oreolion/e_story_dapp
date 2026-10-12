@@ -31,20 +31,24 @@
       }
     },
     "production": {
+      "environment": "production",
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
-        "API_BASE_URL": "https://estories.app"
+        "API_BASE_URL": "https://estories.app",
+        "EXPO_PUBLIC_DISTRIBUTION_CHANNEL": "google-play",
+        "EXPO_PUBLIC_ENABLE_WEB3_FEATURES": "false",
+        "EXPO_PUBLIC_ENABLE_GOOGLE_SIGN_IN": "false"
       }
     }
   },
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "./google-services.json",
-        "track": "internal"
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }

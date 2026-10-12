@@ -20,6 +20,7 @@ import { useAccount, useSignMessage } from "wagmi";
 import { useAppKit } from "@reown/appkit-react-native";
 import { useAuthStore } from "../../stores/authStore";
 import { signInWithGoogleNative } from "../../lib/googleAuth";
+import { GOOGLE_SIGN_IN_ENABLED, WEB3_FEATURES_ENABLED } from "../../lib/releaseConfig";
 import { loginSchema } from "../../lib/validation";
 import {
   GlassCard,
@@ -266,15 +267,16 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Divider */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 20 }}>
-              <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
-              <Text style={{ fontSize: 13, color: "#64748b" }}>or</Text>
-              <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
-            </View>
+            {(GOOGLE_SIGN_IN_ENABLED || WEB3_FEATURES_ENABLED) && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 20 }}>
+                <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
+                <Text style={{ fontSize: 13, color: "#64748b" }}>or</Text>
+                <View style={{ height: 1, flex: 1, backgroundColor: GLASS.light.border }} />
+              </View>
+            )}
 
             {/* Google Sign In */}
-            <AnimatedListItem index={5}>
+            {GOOGLE_SIGN_IN_ENABLED && <AnimatedListItem index={5}>
               <GlassCard
                 intensity="medium"
                 style={{ overflow: "hidden" }}
@@ -296,35 +298,36 @@ export default function LoginScreen() {
                   </Text>
                 </TouchableOpacity>
               </GlassCard>
-            </AnimatedListItem>
+            </AnimatedListItem>}
 
-            {/* Wallet Sign In */}
-            <AnimatedListItem index={6}>
-              <View style={{ marginTop: 12 }}>
-                <GlassCard
-                  intensity="medium"
-                  style={{ overflow: "hidden" }}
-                >
-                  <TouchableOpacity
-                    onPress={handleWalletConnect}
-                    disabled={walletLoading}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 12,
-                      paddingVertical: 16,
-                      opacity: walletLoading ? 0.5 : 1,
-                    }}
-                  >
-                    <Wallet size={20} color="#a78bfa" />
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>
-                      {walletLoading ? "Connecting..." : "Connect Wallet"}
-                    </Text>
-                  </TouchableOpacity>
-                </GlassCard>
-              </View>
-            </AnimatedListItem>
+            {WEB3_FEATURES_ENABLED && (
+              <AnimatedListItem index={6}>
+                <View style={{ marginTop: 12 }}>
+                  <GlassCard intensity="medium" style={{ overflow: "hidden" }}>
+                    <TouchableOpacity
+                      onPress={handleWalletConnect}
+                      disabled={walletLoading}
+                      accessibilityRole="button"
+                      accessibilityLabel="Connect a wallet"
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 12,
+                        minHeight: 48,
+                        paddingVertical: 16,
+                        opacity: walletLoading ? 0.5 : 1,
+                      }}
+                    >
+                      <Wallet size={20} color="#a78bfa" />
+                      <Text style={{ fontSize: 16, fontWeight: "600", color: "#fff" }}>
+                        {walletLoading ? "Connecting..." : "Connect Wallet"}
+                      </Text>
+                    </TouchableOpacity>
+                  </GlassCard>
+                </View>
+              </AnimatedListItem>
+            )}
 
             {/* Sign Up link */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingTop: 32, paddingBottom: 16 }}>

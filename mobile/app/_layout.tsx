@@ -15,7 +15,8 @@ import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Toast from "react-native-toast-message";
 
-import { wagmiAdapter, appKit } from "../lib/wagmi.config";
+import { appKit, wagmiConfig } from "../lib/wagmi.config";
+import { WEB3_FEATURES_ENABLED } from "../lib/releaseConfig";
 import { useAuthStore } from "../stores/authStore";
 import { useNotifications } from "../hooks/useNotifications";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -33,7 +34,7 @@ let AppKitProvider: React.ComponentType<{
   instance: NonNullable<typeof appKit>;
 }> | null = null;
 
-if (Platform.OS !== "web") {
+if (Platform.OS !== "web" && WEB3_FEATURES_ENABLED) {
   const appKitModule = require("@reown/appkit-react-native");
   AppKitModal = appKitModule.AppKit;
   AppKitProvider = appKitModule.AppKitProvider;
@@ -63,14 +64,24 @@ function NotificationInitializer({ children }: { children: React.ReactNode }) {
   useNotifications();
 
   useEffect(() => {
-    // Handle notification taps — deep link to relevant screen
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const data = response.notification.request.content.data;
-        if (data?.story_id) {
-          router.push(`/story/${data.story_id}`);
-        }
+    const openNotificationResponse = (
+      response: Notifications.NotificationResponse | null
+    ) => {
+      const storyId = response?.notification.request.content.data?.story_id;
+      if (
+        typeof storyId === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storyId)
+      ) {
+        router.push(`/story/${storyId}`);
       }
+    };
+
+    void Notifications.getLastNotificationResponseAsync().then(
+      openNotificationResponse
+    );
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      openNotificationResponse
     );
 
     return () => {
@@ -88,7 +99,7 @@ function SyncInitializer({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   const content = (
-    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <AuthInitializer>
           <SyncInitializer>
@@ -122,12 +133,20 @@ export default function RootLayout() {
                 options={{ headerShown: false, presentation: "modal" }}
               />
               <Stack.Screen
+                name="auth/reset-password"
+                options={{ headerShown: false, presentation: "modal" }}
+              />
+              <Stack.Screen
                 name="collection/[collectionId]"
                 options={{ headerShown: false, presentation: "card" }}
               />
               <Stack.Screen
                 name="pricing/index"
                 options={{ headerShown: false, presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="settings/blocked-users"
+                options={{ headerShown: false, presentation: "card" }}
               />
               </Stack>
             </ErrorBoundary>

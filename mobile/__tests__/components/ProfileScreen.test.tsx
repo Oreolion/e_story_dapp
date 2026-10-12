@@ -8,6 +8,11 @@ jest.mock('../../stores/authStore', () => ({
   useAuthStore: jest.fn(),
 }));
 
+jest.mock('../../hooks/useNotifications', () => ({
+  useNotifications: jest.fn(),
+  registerForPushNotifications: jest.fn().mockResolvedValue(null),
+}));
+
 import { useAuthStore } from '../../stores/authStore';
 import ProfileScreen from '../../app/(tabs)/profile';
 
@@ -93,7 +98,8 @@ describe('ProfileScreen', () => {
     expect(screen.getByText('Subscription')).toBeTruthy();
     // Free plan shows "Free Plan" (capitalized)
     expect(screen.getByText('Free Plan')).toBeTruthy();
-    expect(screen.getByText('Upgrade for premium features')).toBeTruthy();
+    expect(screen.getByText('Mobile access active')).toBeTruthy();
+    expect(screen.queryByText('Upgrade for premium features')).toBeNull();
   });
 
   it('shows Crown badge and active plan when subscribed', () => {
@@ -221,7 +227,7 @@ describe('ProfileScreen', () => {
     expect(screen.getByText('Delete Account')).toBeTruthy();
   });
 
-  it('shows connected accounts section with wallet and email', () => {
+  it('shows Play-safe connected accounts and community safety controls', () => {
     mockUseAuthStore.mockReturnValue({
       user: {
         id: 'user-123',
@@ -247,7 +253,8 @@ describe('ProfileScreen', () => {
     render(<ProfileScreen />);
 
     expect(screen.getByText('Connected Accounts')).toBeTruthy();
-    expect(screen.getByText('Wallet')).toBeTruthy();
+    expect(screen.queryByText('Wallet')).toBeNull();
     expect(screen.getByText('Email')).toBeTruthy();
+    expect(screen.getByText('Blocked Users')).toBeTruthy();
   });
 });

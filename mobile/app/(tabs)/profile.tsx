@@ -29,6 +29,8 @@ import {
   Trash2,
   Crown,
   ChevronRight,
+  Ban,
+  Bell,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { useAccount } from "wagmi";
@@ -46,6 +48,8 @@ import {
   ANIMATION,
 } from "../../components/ui";
 import { TestnetBanner } from "../../components/TestnetBanner";
+import { WEB3_FEATURES_ENABLED } from "../../lib/releaseConfig";
+import { registerForPushNotifications } from "../../hooks/useNotifications";
 
 export default function ProfileScreen() {
   const { user, isAuthenticated, logout, deleteAccount, updateProfile, subscription } =
@@ -299,7 +303,7 @@ export default function ProfileScreen() {
                         ? subscription.expires_at
                           ? `Expires ${new Date(subscription.expires_at).toLocaleDateString()}`
                           : "Active"
-                        : "Upgrade for premium features"}
+                        : "Mobile access active"}
                     </Text>
                   </View>
                 </View>
@@ -313,9 +317,10 @@ export default function ProfileScreen() {
         <AnimatedListItem index={3}>
           <View style={{ marginTop: 16 }}>
             <SectionHeader title="Connected Accounts" />
-            <TestnetBanner />
+            {WEB3_FEATURES_ENABLED && <TestnetBanner />}
             <GlassCard intensity="light" style={{ padding: 16 }}>
               {/* Wallet */}
+              {WEB3_FEATURES_ENABLED && (
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                   <Wallet size={20} color="#a78bfa" />
@@ -335,6 +340,7 @@ export default function ProfileScreen() {
                   />
                 )}
               </View>
+              )}
 
               {/* Email */}
               <View
@@ -343,8 +349,8 @@ export default function ProfileScreen() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   paddingVertical: 8,
-                  marginTop: 4,
-                  borderTopWidth: 1,
+                  marginTop: WEB3_FEATURES_ENABLED ? 4 : 0,
+                  borderTopWidth: WEB3_FEATURES_ENABLED ? 1 : 0,
                   borderTopColor: "rgba(255,255,255,0.06)",
                 }}
               >
@@ -360,8 +366,68 @@ export default function ProfileScreen() {
           </View>
         </AnimatedListItem>
 
-        {/* Sign Out */}
         <AnimatedListItem index={4}>
+          <View style={{ marginTop: 16 }}>
+            <SectionHeader title="Community Safety" />
+            <TouchableOpacity
+              onPress={() => router.push("/settings/blocked-users")}
+              accessibilityRole="button"
+              accessibilityLabel="Manage blocked users"
+              activeOpacity={0.8}
+            >
+              <GlassCard
+                intensity="light"
+                style={{
+                  minHeight: 48,
+                  padding: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <Ban size={20} color="#f87171" />
+                <Text style={{ flex: 1, color: "#fff", fontSize: 15 }}>Blocked Users</Text>
+                <ChevronRight size={18} color="#64748b" />
+              </GlassCard>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={async () => {
+                const enabled = await registerForPushNotifications(true);
+                Toast.show({
+                  type: enabled ? "success" : "info",
+                  text1: enabled
+                    ? "Notifications enabled"
+                    : "Notifications remain disabled",
+                  text2: enabled
+                    ? "You can change this in Android settings."
+                    : "Enable permission in Android settings if you previously denied it.",
+                });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Enable notifications"
+              activeOpacity={0.8}
+              style={{ marginTop: 10 }}
+            >
+              <GlassCard
+                intensity="light"
+                style={{
+                  minHeight: 48,
+                  padding: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <Bell size={20} color="#60a5fa" />
+                <Text style={{ flex: 1, color: "#fff", fontSize: 15 }}>Enable Notifications</Text>
+                <ChevronRight size={18} color="#64748b" />
+              </GlassCard>
+            </TouchableOpacity>
+          </View>
+        </AnimatedListItem>
+
+        {/* Sign Out */}
+        <AnimatedListItem index={5}>
           <View style={{ marginTop: 16 }}>
             <TouchableOpacity
               onPress={handleLogout}
@@ -399,7 +465,7 @@ export default function ProfileScreen() {
         </AnimatedListItem>
 
         {/* Delete Account */}
-        <AnimatedListItem index={5}>
+        <AnimatedListItem index={6}>
           <View style={{ marginTop: 8 }}>
             <TouchableOpacity onPress={handleDeleteAccount} activeOpacity={0.8}>
               <GlassCard
@@ -420,13 +486,19 @@ export default function ProfileScreen() {
         </AnimatedListItem>
 
         {/* Legal Links */}
-        <AnimatedListItem index={6}>
+        <AnimatedListItem index={7}>
           <View style={{ marginTop: 24, marginBottom: 16, alignItems: "center", gap: 8 }}>
             <TouchableOpacity onPress={() => Linking.openURL("https://estories.app/privacy")}>
               <Text style={{ fontSize: 12, color: "#64748b", textDecorationLine: "underline" }}>Privacy Policy</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => Linking.openURL("https://estories.app/terms")}>
               <Text style={{ fontSize: 12, color: "#64748b", textDecorationLine: "underline" }}>Terms of Service</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL("https://estories.app/community-guidelines")}>
+              <Text style={{ fontSize: 12, color: "#64748b", textDecorationLine: "underline" }}>Community Guidelines</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL("https://estories.app/account-deletion")}>
+              <Text style={{ fontSize: 12, color: "#64748b", textDecorationLine: "underline" }}>Account Deletion Help</Text>
             </TouchableOpacity>
           </View>
         </AnimatedListItem>

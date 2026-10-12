@@ -26,8 +26,9 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           We are committed to protecting your privacy. eStories is designed with
-          privacy-by-default principles including client-side encryption and
-          minimal on-chain data exposure.
+          privacy-by-default principles, secure transport, deletion controls,
+          and minimal on-chain data exposure. The web app also offers an optional
+          client-side Local Vault described below.
         </p>
       </section>
 
@@ -116,16 +117,16 @@ export default function PrivacyPolicyPage() {
       <section>
         <h2>5. AI Processing</h2>
         <p>
-          Story content you submit for analysis is processed by third-party AI
+          Story content saved with AI analysis enabled, or submitted to an AI feature, is processed by third-party AI
           services (Google Gemini, ElevenLabs) to provide transcription,
           enhancement, and narrative insights. AI-generated analysis may also be
           processed through Chainlink&apos;s Compute Runtime Environment (CRE)
           for verifiable, privacy-preserving attestation.
         </p>
         <p>
-          We do not use your story content to train AI models. Content is
-          processed on-demand and not retained by AI providers beyond the
-          duration of the request.
+          eStories does not use your story content to train its own AI models.
+          Third-party processing and retention are governed by the applicable
+          provider terms and our service agreements.
         </p>
       </section>
 
@@ -136,7 +137,8 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Service Providers:</strong> Supabase (database and auth),
             Vercel (hosting), Pinata (IPFS storage), Resend (email), ElevenLabs
-            (transcription), Google (AI analysis).
+            (transcription), Google (authentication and AI analysis), Sentry
+            (error monitoring), and Expo (mobile updates and notifications).
           </li>
           <li>
             <strong>Blockchain Networks:</strong> On-chain transactions and
@@ -155,7 +157,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Account data:</strong> Retained while your account is
             active. You can request deletion at any time from your profile
-            settings.
+            settings or at <a href="/account-deletion">our account deletion page</a>.
           </li>
           <li>
             <strong>Stories:</strong> Retained until you delete them. Private
