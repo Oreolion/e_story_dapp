@@ -6,7 +6,9 @@ export default defineConfig({
     globals: true,
     setupFiles: "./__tests__/setup.ts",
     testTimeout: 10000,
-    pool: "threads",
+    // VM threads avoid Vitest's 60-second worker IPC startup timeout on the
+    // Windows development environment while preserving a single isolated pool.
+    pool: "vmThreads",
     fileParallelism: false,
     maxWorkers: 1,
     isolate: false,

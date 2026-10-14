@@ -1,13 +1,108 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+
+function detectAvatarType(buffer: Buffer): { contentType: string; extension: string } | null {
+  if (buffer.length < 12) return null;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { contentType: "image/jpeg", extension: "jpg" };
+  }
+  if (
+    buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e &&
+    buffer[3] === 0x47 && buffer[4] === 0x0d && buffer[5] === 0x0a &&
+    buffer[6] === 0x1a && buffer[7] === 0x0a
+  ) {
+    return { contentType: "image/png", extension: "png" };
+  }
+  if (
+    buffer.slice(0, 4).toString("ascii") === "RIFF" &&
+    buffer.slice(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return { contentType: "image/webp", extension: "webp" };
+  }
+  return null;
+}
+
+function isOwnedAvatarUrl(value: string, userId: string): boolean {
+  try {
+    const storageOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
+    const avatarUrl = new URL(value);
+    const expectedPrefix = `/storage/v1/object/public/avatars/${userId}/avatar.`;
+    return avatarUrl.origin === storageOrigin && avatarUrl.pathname.startsWith(expectedPrefix);
+  } catch {
+    return false;
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const authResult = await validateAuthOrReject(req);
+    if (isAuthError(authResult)) return authResult;
+    const userId = await resolveUserId(authResult);
+    const formData = await req.formData();
+    const file = formData.get("file");
+
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "No image provided" }, { status: 400 });
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "Image must be 5 MB or smaller" }, { status: 400 });
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const detected = detectAvatarType(buffer);
+    if (!detected) {
+      return NextResponse.json({ error: "Use a JPEG, PNG, or WebP image" }, { status: 400 });
+    }
+
+    const admin = createSupabaseAdminClient();
+    const path = `${userId}/avatar.${detected.extension}`;
+    const { error: uploadError } = await admin.storage
+      .from("avatars")
+      .upload(path, buffer, {
+        contentType: detected.contentType,
+        cacheControl: "3600",
+        upsert: true,
+      });
+    if (uploadError) {
+      console.error("[PROFILE_POST] avatar upload failed:", uploadError);
+      return NextResponse.json({ error: "Avatar upload failed" }, { status: 500 });
+    }
+
+    const { data: publicUrl } = admin.storage.from("avatars").getPublicUrl(path);
+    const avatarUrl = `${publicUrl.publicUrl}?v=${Date.now()}`;
+    const { error: updateError } = await admin
+      .from("users")
+      .update({ avatar: avatarUrl, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+    if (updateError) {
+      console.error("[PROFILE_POST] avatar profile update failed:", updateError);
+      return NextResponse.json({ error: "Avatar update failed" }, { status: 500 });
+    }
+
+    const staleAvatarPaths = ["jpg", "png", "webp"]
+      .filter((extension) => extension !== detected.extension)
+      .map((extension) => `${userId}/avatar.${extension}`);
+    const { error: staleAvatarError } = await admin.storage
+      .from("avatars")
+      .remove(staleAvatarPaths);
+    if (staleAvatarError) {
+      console.warn("[PROFILE_POST] stale avatar cleanup failed:", staleAvatarError.message);
+    }
+
+    return NextResponse.json({ success: true, url: avatarUrl });
+  } catch (error) {
+    console.error("[PROFILE_POST] unexpected error:", error);
+    return NextResponse.json({ error: "Avatar upload failed" }, { status: 500 });
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
     // Auth check
     const authResult = await validateAuthOrReject(request);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
 
     const admin = createSupabaseAdminClient();
 
@@ -71,7 +166,7 @@ export async function PUT(request: NextRequest) {
     // Auth check
     const authResult = await validateAuthOrReject(request);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
 
     const updates = await request.json();
 
@@ -81,7 +176,15 @@ export async function PUT(request: NextRequest) {
 
     for (const key of Object.keys(updates)) {
       if (allowedFields.includes(key) && typeof updates[key] === "string") {
-        validUpdates[key] = updates[key].slice(0, 500); // Limit field length
+        if (key === "avatar") {
+          if (!isOwnedAvatarUrl(updates[key], authenticatedUserId)) {
+            return NextResponse.json({ error: "Invalid avatar URL" }, { status: 400 });
+          }
+          validUpdates.avatar = updates[key];
+        } else {
+          const maxLength = key === "name" ? 100 : 500;
+          validUpdates[key] = updates[key].trim().slice(0, maxLength);
+        }
       }
     }
 

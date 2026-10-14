@@ -1,6 +1,7 @@
 // app/api/stories/feed/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
+import { resolveUserId, validateAuth } from "@/lib/auth";
 
 /**
  * GET /api/stories/feed — Fetch public stories feed with author info (bypasses RLS)
@@ -9,6 +10,29 @@ import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 export async function GET(req: NextRequest) {
   try {
     const admin = createSupabaseAdminClient();
+    const authenticatedUserId = await validateAuth(req);
+    const viewerId = authenticatedUserId
+      ? await resolveUserId(authenticatedUserId)
+      : null;
+
+    const blockedUserIds = new Set<string>();
+    if (viewerId) {
+      const { data: blockRows, error: blockError } = await admin
+        .from("user_blocks")
+        .select("blocker_id, blocked_id")
+        .or(`blocker_id.eq.${viewerId},blocked_id.eq.${viewerId}`);
+
+      if (blockError) {
+        console.error("[API /stories/feed] block filter failed:", blockError);
+        return NextResponse.json({ stories: [] });
+      }
+
+      for (const row of blockRows ?? []) {
+        blockedUserIds.add(
+          row.blocker_id === viewerId ? row.blocked_id : row.blocker_id
+        );
+      }
+    }
 
     // Fetch public stories ordered by newest first
     const { data: stories, error } = await admin
@@ -30,12 +54,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ stories: [] });
     }
 
-    if (!stories || stories.length === 0) {
+    const visibleStories = (stories ?? []).filter(
+      (story) => !blockedUserIds.has(story.author_id)
+    );
+
+    if (visibleStories.length === 0) {
       return NextResponse.json({ stories: [] });
     }
 
     // Collect unique author IDs and fetch author profiles in one query
-    const authorIds = [...new Set(stories.map((s) => s.author_id).filter(Boolean))];
+    const authorIds = [...new Set(visibleStories.map((s) => s.author_id).filter(Boolean))];
 
     const { data: authors, error: authorsErr } = await admin
       .from("users")
@@ -53,7 +81,7 @@ export async function GET(req: NextRequest) {
 
     // Attach author to each story; strip audio_url for voice privacy
     // (public feed never exposes voice recordings — creators access audio from their own archive)
-    const storiesWithAuthors = stories.map((s) => ({
+    const storiesWithAuthors = visibleStories.map((s) => ({
       ...s,
       audio_url: null,
       author: authorMap.get(s.author_id) || null,

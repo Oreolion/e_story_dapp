@@ -13,8 +13,8 @@ export interface AuthorProfile {
 }
 
 export interface StoryDataType {
-  id: number;
-  numeric_id: string;
+  id: string;
+  numeric_id: number;
   author: AuthorProfile;
   author_wallet: AuthorProfile;
   title: string;
@@ -39,10 +39,10 @@ export interface StoryDataType {
 
 export interface StoryCardProps {
   story: StoryDataType;
-  onLike?: (id: number) => void;
+  onLike?: (id: string) => void;
   onFollow?: (username: string) => void;
-  onShare?: (id: number) => void;
-  onUnlock?: (id: number) => void;
+  onShare?: (id: string) => void;
+  onUnlock?: (id: string) => void;
 }
 
 export interface FeaturedWriterType {
@@ -59,6 +59,7 @@ export interface CommentDataTypes {
   content: string;
   created_at: string;
   author: {
+    id: string;
     name: string | null;
     avatar: string | null;
     wallet_address: string | null;

@@ -25,6 +25,7 @@ import Toast from "react-native-toast-message";
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit-react-native";
 import { useAuthStore } from "../../stores/authStore";
+import { WEB3_FEATURES_ENABLED } from "../../lib/releaseConfig";
 import {
   GlassCard,
   GradientButton,
@@ -44,7 +45,8 @@ export default function OnboardingScreen() {
   const { isConnected } = useAccount();
   const { open } = useAppKit();
 
-  const skipWallet = authMethod === "wallet" || isConnected;
+  const skipWallet =
+    !WEB3_FEATURES_ENABLED || authMethod === "wallet" || isConnected;
 
   const [step, setStep] = useState<OnboardingStep>("profile");
   const [name, setName] = useState("");
@@ -281,7 +283,7 @@ export default function OnboardingScreen() {
                   style={{ fontSize: 28 }}
                 />
                 <Text style={{ marginTop: 8, fontSize: 15, color: "#94a3b8" }}>
-                  Your stories are encrypted with AES-256-GCM
+                  Understand how your story data is handled
                 </Text>
               </View>
             </AnimatedListItem>
@@ -298,7 +300,7 @@ export default function OnboardingScreen() {
                     textAlign: "center",
                   }}
                 >
-                  End-to-End Encryption
+                  Secure Story Processing
                 </Text>
                 <Text
                   style={{
@@ -309,13 +311,13 @@ export default function OnboardingScreen() {
                     lineHeight: 20,
                   }}
                 >
-                  Your private stories are encrypted on your device before being
-                  stored. We literally cannot read them. On mobile, your device's
-                  secure keychain protects your encryption keys.
+                  Story content is sent securely to eStories services when you save
+                  or use AI features. Local drafts can remain on this device until
+                  they are saved or removed.
                 </Text>
                 <View style={{ marginTop: 16, flexDirection: "row", gap: 8 }}>
-                  <Badge text="AES-256-GCM" variant="success" />
-                  <Badge text="Device Keychain" variant="violet" />
+                  <Badge text="Secure transport" variant="success" />
+                  <Badge text="Deletion controls" variant="violet" />
                 </View>
               </GlassCard>
             </AnimatedListItem>
@@ -336,7 +338,7 @@ export default function OnboardingScreen() {
         )}
 
         {/* Step: Wallet (optional for Google users) */}
-        {step === "wallet" && (
+        {WEB3_FEATURES_ENABLED && step === "wallet" && (
           <>
             <AnimatedListItem index={0}>
               <View style={{ paddingVertical: 24 }}>

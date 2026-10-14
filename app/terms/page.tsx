@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
     <article className="prose prose-gray dark:prose-invert max-w-3xl mx-auto py-8">
       <h1>Terms of Service</h1>
       <p className="text-sm text-muted-foreground">
-        Last updated: March 23, 2026
+        Last updated: July 31, 2026
       </p>
 
       <section>
@@ -28,10 +28,11 @@ export default function TermsOfServicePage() {
       <section>
         <h2>2. Description of Service</h2>
         <p>
-          eStories is a Web3 AI-powered storytelling platform that enables users
-          to record, write, and preserve stories with AI-powered analysis,
-          client-side encryption, and optional blockchain permanence on the Base
-          network. The platform supports personal journals, historical
+          eStories is a storytelling platform that enables users to record,
+          write, and preserve stories with optional AI-powered features. The web
+          service may also offer a local encrypted vault and optional blockchain
+          features; those features are not included in every distribution. The
+          platform supports personal journals, historical
           narratives, geopolitical analysis, cultural tales, and creative
           non-fiction.
         </p>
@@ -49,8 +50,8 @@ export default function TermsOfServicePage() {
         <h2>4. Accounts</h2>
         <ul>
           <li>
-            You may sign in using a Web3 wallet (e.g., MetaMask) or Google
-            OAuth.
+            You may sign in using the account methods made available in your
+            version of the Service.
           </li>
           <li>
             You are responsible for maintaining the security of your wallet
@@ -82,11 +83,22 @@ export default function TermsOfServicePage() {
           <li>Infringes on intellectual property rights of others</li>
           <li>Contains illegal material or promotes illegal activities</li>
           <li>Constitutes harassment, hate speech, or threats</li>
+          <li>Contains sexual exploitation, non-consensual sexual content, or any sexual content involving minors</li>
+          <li>Promotes self-harm or depicts gratuitous violence</li>
           <li>Contains malware, spam, or deceptive content</li>
           <li>Violates the privacy of others without consent</li>
         </ul>
 
-        <h3>5.3 Content Removal</h3>
+        <h3>5.3 Reporting, Blocking, and Moderation</h3>
+        <p>
+          The <a href="/community-guidelines">Community Guidelines</a> are part
+          of these Terms. You can report stories, comments, and accounts, and
+          block other users from within the Service. We may review reports,
+          remove or restrict content, and suspend or terminate accounts when
+          needed to protect users or comply with law.
+        </p>
+
+        <h3>5.4 Content Removal</h3>
         <p>
           We reserve the right to remove content that violates these Terms.
           Content that has been minted as an NFT on the blockchain cannot be
@@ -161,7 +173,7 @@ export default function TermsOfServicePage() {
           Upon deletion:
         </p>
         <ul>
-          <li>Your stories, profile, and platform data will be permanently deleted</li>
+          <li>Your off-chain stories, profile, uploaded media, and platform data will be permanently deleted</li>
           <li>On-chain data (NFTs, transactions, verified metrics) will persist on the blockchain</li>
           <li>Vault-encrypted data in your browser will remain until you clear it</li>
         </ul>

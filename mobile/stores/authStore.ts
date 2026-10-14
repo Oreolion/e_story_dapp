@@ -255,7 +255,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   resetPassword: async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: "estory://auth/reset-password",
+    });
     if (error) throw error;
   },
 
@@ -335,11 +337,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       body: updates as Record<string, unknown>,
     });
 
-    if (res.ok) {
-      const user = get().user;
-      if (user) {
-        set({ user: { ...user, ...updates } });
-      }
+    if (!res.ok) {
+      throw new Error(res.error || "Profile update failed");
+    }
+
+    const user = get().user;
+    if (user) {
+      set({ user: { ...user, ...updates } });
     }
   },
 }));

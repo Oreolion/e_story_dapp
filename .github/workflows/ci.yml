@@ -82,6 +82,15 @@ jobs:
       - name: Run Vitest
         run: npm run test
 
+      - name: Rehearse production feature migration on PostgreSQL 17
+        run: |
+          docker run -d --name istory-migration019-rehearsal-20261014 --network none --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+          for attempt in $(seq 1 30); do
+            if docker exec istory-migration019-rehearsal-20261014 pg_isready -U postgres; then break; fi
+            sleep 1
+          done
+          node scripts/test-migration019.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest

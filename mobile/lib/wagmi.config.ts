@@ -6,6 +6,9 @@ import { WagmiAdapter } from "@reown/appkit-wagmi-react-native";
 import type { AppKitNetwork } from "@reown/appkit-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { createConfig, http } from "wagmi";
+import { baseSepolia as viemBaseSepolia } from "viem/chains";
+import { WEB3_FEATURES_ENABLED } from "./releaseConfig";
 
 const projectId =
   Constants.expoConfig?.extra?.WALLETCONNECT_PROJECT_ID || "";
@@ -70,10 +73,17 @@ const appKitStorage = {
   },
 };
 
-// Create Wagmi Adapter
-export const wagmiAdapter = new WagmiAdapter({
-  projectId,
-  networks,
+// Keep a read-only Wagmi provider available because some shared hooks rely on
+// its context. The Play distribution does not initialize WalletConnect/AppKit.
+export const wagmiAdapter = WEB3_FEATURES_ENABLED && projectId
+  ? new WagmiAdapter({ projectId, networks })
+  : null;
+
+export const wagmiConfig = wagmiAdapter?.wagmiConfig ?? createConfig({
+  chains: [viemBaseSepolia],
+  transports: {
+    [viemBaseSepolia.id]: http("https://sepolia.base.org"),
+  },
 });
 
 // Create AppKit instance — called once at module level (native only)
@@ -81,7 +91,7 @@ import { Platform } from "react-native";
 
 export let appKit: ReturnType<typeof createAppKit> | null = null;
 
-if (Platform.OS !== "web" && projectId) {
+if (Platform.OS !== "web" && WEB3_FEATURES_ENABLED && projectId && wagmiAdapter) {
   appKit = createAppKit({
     projectId,
     networks,

@@ -26,4 +26,10 @@ module.exports = {
   Crown: mockIcon('Crown'),
   ChevronRight: mockIcon('ChevronRight'),
   AlertTriangle: mockIcon('AlertTriangle'),
+  ShieldCheck: mockIcon('ShieldCheck'),
+  Sparkles: mockIcon('Sparkles'),
+  Flag: mockIcon('Flag'),
+  Ban: mockIcon('Ban'),
+  Bell: mockIcon('Bell'),
+  Lock: mockIcon('Lock'),
 };

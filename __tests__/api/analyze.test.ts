@@ -7,13 +7,20 @@ import { NextRequest } from "next/server";
 const originalEnv = process.env;
 
 // Mock auth - use vi.hoisted to avoid hoisting issues
-const { MOCK_USER_ID } = vi.hoisted(() => ({
+const { MOCK_USER_ID, mockResolveUserId, mockConsumeApiQuota } = vi.hoisted(() => ({
   MOCK_USER_ID: "test-user-123",
+  mockResolveUserId: vi.fn(),
+  mockConsumeApiQuota: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
   validateAuthOrReject: vi.fn().mockResolvedValue(MOCK_USER_ID),
   isAuthError: vi.fn().mockReturnValue(false),
+  resolveUserId: mockResolveUserId,
+}));
+
+vi.mock("@/lib/apiQuota", () => ({
+  consumeApiQuota: mockConsumeApiQuota,
 }));
 
 // Mock Supabase admin client
@@ -71,12 +78,12 @@ function setupSupabaseMock(options: {
   ownerAuthorId?: string; // defaults to MOCK_USER_ID (passes ownership check)
   isPaidUser?: boolean; // defaults to true (skips monthly limit check)
 }) {
-  // Ownership check: from("stories").select("author_id").eq("id", storyId).single()
+  // Ownership check: from("stories").select("author_id").eq("id", storyId).maybeSingle()
   mockOwnershipSingle.mockResolvedValue({
     data: { author_id: options.ownerAuthorId ?? MOCK_USER_ID },
     error: null,
   });
-  mockOwnershipEq.mockReturnValue({ single: mockOwnershipSingle });
+  mockOwnershipEq.mockReturnValue({ maybeSingle: mockOwnershipSingle });
   mockOwnershipSelect.mockReturnValue({ eq: mockOwnershipEq });
 
   // Users table: subscription check — default to paid user to skip monthly limit logic
@@ -149,6 +156,14 @@ import { POST } from "@/app/api/ai/analyze/route";
 describe("POST /api/ai/analyze", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveUserId.mockReset().mockResolvedValue(MOCK_USER_ID);
+    mockConsumeApiQuota.mockReset().mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      retryAfter: 3600,
+      unavailable: false,
+    });
+    setupSupabaseMock({});
     // Set up environment variables
     process.env = {
       ...originalEnv,
@@ -202,6 +217,101 @@ describe("POST /api/ai/analyze", () => {
       expect(response.status).toBe(500);
       const data = await response.json();
       expect(data.error).toContain("API Key missing");
+    });
+  });
+
+  describe("Ownership and usage controls", () => {
+    it("uses the resolved profile ID for story ownership, subscription, and quota checks", async () => {
+      const profileId = "linked-wallet-profile-456";
+      mockResolveUserId.mockResolvedValue(profileId);
+      setupSupabaseMock({ ownerAuthorId: profileId, upsertData: { id: "metadata-id" } });
+      setupGeminiMock(validMetadataResponse);
+
+      const response = await POST(createMockRequest({
+        storyId: "mapped-profile-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(200);
+      expect(mockResolveUserId).toHaveBeenCalledWith(MOCK_USER_ID);
+      expect(mockUserEq).toHaveBeenCalledWith("id", profileId);
+      expect(mockConsumeApiQuota).toHaveBeenCalledWith(
+        expect.objectContaining({ from: mockSupabaseFrom }),
+        profileId,
+        { action: "ai_analyze_hour", maxRequests: 10, windowSeconds: 3600 }
+      );
+    });
+
+    it("rejects another user's story before consuming quota or calling Gemini", async () => {
+      setupSupabaseMock({ ownerAuthorId: "another-profile" });
+
+      const response = await POST(createMockRequest({
+        storyId: "another-users-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(403);
+      expect(mockConsumeApiQuota).not.toHaveBeenCalled();
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+      expect(mockSupabaseUpsert).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for a missing story without calling Gemini", async () => {
+      mockOwnershipSingle.mockResolvedValue({ data: null, error: null });
+
+      const response = await POST(createMockRequest({
+        storyId: "missing-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(404);
+      expect(mockConsumeApiQuota).not.toHaveBeenCalled();
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    it("fails closed when story ownership cannot be verified", async () => {
+      mockOwnershipSingle.mockResolvedValue({ data: null, error: { message: "Database unavailable" } });
+
+      const response = await POST(createMockRequest({
+        storyId: "ownership-error-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(503);
+      expect(mockConsumeApiQuota).not.toHaveBeenCalled();
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    it("returns 429 and Retry-After when the durable quota is exhausted", async () => {
+      mockConsumeApiQuota.mockResolvedValue({
+        allowed: false, remaining: 0, retryAfter: 120, unavailable: false,
+      });
+
+      const response = await POST(createMockRequest({
+        storyId: "quota-exhausted-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get("Retry-After")).toBe("120");
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+      expect(mockSupabaseUpsert).not.toHaveBeenCalled();
+    });
+
+    it("returns 503 and Retry-After when durable usage controls are unavailable", async () => {
+      mockConsumeApiQuota.mockResolvedValue({
+        allowed: false, remaining: 0, retryAfter: 3600, unavailable: true,
+      });
+
+      const response = await POST(createMockRequest({
+        storyId: "quota-unavailable-story",
+        storyText: validStoryText,
+      }));
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("3600");
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+      expect(mockSupabaseUpsert).not.toHaveBeenCalled();
     });
   });
 

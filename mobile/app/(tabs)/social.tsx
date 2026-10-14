@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
@@ -16,12 +17,13 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Search, Heart, MessageCircle, Share2, Lock, UserPlus, UserCheck, BookOpen } from "lucide-react-native";
+import { Search, Heart, MessageCircle, Share2, Lock, UserPlus, BookOpen, Flag, Ban } from "lucide-react-native";
 import { Share } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useAuthStore } from "../../stores/authStore";
 import { apiGet, apiPost } from "../../lib/api";
 import type { StoryDataType } from "../../types";
+import { SafetyReportModal, type SafetyTarget } from "../../components/SafetyReportModal";
 import {
   GlassCard,
   GradientButton,
@@ -35,6 +37,44 @@ import {
 } from "../../components/ui";
 
 type FeedTab = "latest" | "trending" | "following";
+
+function normalizeFeedStory(raw: Record<string, any>): StoryDataType {
+  const author = {
+    id: raw.author?.id,
+    name: raw.author?.name ?? null,
+    username: raw.author?.username ?? null,
+    avatar: raw.author?.avatar ?? null,
+    wallet_address: raw.author?.wallet_address ?? null,
+    badges: raw.author?.badges ?? [],
+    followers: Number(raw.author?.followers_count ?? 0),
+    isFollowing: Boolean(raw.author?.isFollowing),
+  };
+
+  return {
+    id: String(raw.id),
+    numeric_id: Number(raw.numeric_id ?? 0),
+    author,
+    author_wallet: author,
+    title: String(raw.title ?? "Untitled"),
+    content: String(raw.content ?? ""),
+    teaser: raw.teaser ?? undefined,
+    timestamp: new Date(raw.created_at ?? Date.now()).toLocaleDateString(),
+    likes: Number(raw.likes ?? 0),
+    comments: Number(raw.comments_count ?? 0),
+    shares: Number(raw.shares ?? 0),
+    hasAudio: Boolean(raw.has_audio),
+    audio_url: raw.audio_url ?? undefined,
+    isLiked: Boolean(raw.isLiked),
+    mood: String(raw.mood ?? "neutral"),
+    tags: Array.isArray(raw.tags) ? raw.tags : [],
+    paywallAmount: Number(raw.paywall_amount ?? 0),
+    isPaid: Boolean(raw.isPaid),
+    is_public: Boolean(raw.is_public),
+    story_date: String(raw.story_date ?? ""),
+    created_at: String(raw.created_at ?? ""),
+    parent_story_id: raw.parent_story_id ?? null,
+  };
+}
 
 function HeartButton({ isLiked, count, onPress }: { isLiked: boolean; count: number; onPress: () => void }) {
   const scale = useSharedValue(1);
@@ -76,12 +116,13 @@ export default function SocialScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<FeedTab>("latest");
+  const [reportTarget, setReportTarget] = useState<SafetyTarget | null>(null);
 
   const fetchStories = useCallback(async () => {
     try {
-      const res = await apiGet<{ stories: StoryDataType[] }>("/api/stories");
+      const res = await apiGet<{ stories: Record<string, any>[] }>("/api/stories/feed");
       if (res.ok && res.data?.stories) {
-        setStories(res.data.stories);
+        setStories(res.data.stories.map(normalizeFeedStory));
       }
     } catch (err) {
       console.error("[Social] Fetch failed:", err);
@@ -100,7 +141,7 @@ export default function SocialScreen() {
     setRefreshing(false);
   };
 
-  const handleLike = async (storyId: number) => {
+  const handleLike = async (storyId: string) => {
     if (!isAuthenticated) {
       router.push("/auth/login");
       return;
@@ -137,6 +178,61 @@ export default function SocialScreen() {
         message: `"${story.title}" on eStories\n\nhttps://estories.app/story/${story.id}`,
       });
     } catch {}
+  };
+
+  const openReportOptions = (story: StoryDataType) => {
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+
+    const authorId = story.author.id;
+    Alert.alert("Report", "What would you like to report?", [
+      {
+        text: "Story",
+        onPress: () =>
+          setReportTarget({ targetType: "story", targetId: story.id, label: "story" }),
+      },
+      ...(authorId
+        ? [{
+            text: "Author",
+            onPress: () =>
+              setReportTarget({ targetType: "user" as const, targetId: authorId, label: "author" }),
+          }]
+        : []),
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleBlock = (story: StoryDataType) => {
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+    const blockedUserId = story.author.id;
+    if (!blockedUserId) return;
+
+    Alert.alert(
+      "Block author?",
+      "You will no longer see each other's stories or comments. Following connections will be removed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const response = await apiPost("/api/safety/block", { blockedUserId });
+            if (response.ok) {
+              setStories((current) =>
+                current.filter((item) => item.author.id !== blockedUserId)
+              );
+            } else {
+              Alert.alert("Unable to block", response.error || "Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const filteredStories = stories.filter(
@@ -215,6 +311,36 @@ export default function SocialScreen() {
               <Share2 size={18} color="#64748b" />
               <Text style={{ fontSize: 13, color: "#94a3b8" }}>Share</Text>
             </TouchableOpacity>
+            {isAuthenticated && (
+              <>
+                <TouchableOpacity
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    openReportOptions(item);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Report story or author"
+                  hitSlop={10}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 4, minHeight: 44 }}
+                >
+                  <Flag size={18} color="#fbbf24" />
+                </TouchableOpacity>
+                {item.author.id && (
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      handleBlock(item);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Block author"
+                    hitSlop={10}
+                    style={{ minHeight: 44, justifyContent: "center" }}
+                  >
+                    <Ban size={18} color="#f87171" />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
         </GlassCard>
       </TouchableOpacity>
@@ -302,6 +428,7 @@ export default function SocialScreen() {
           </View>
         }
       />
+      <SafetyReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
     </SafeAreaView>
   );
 }

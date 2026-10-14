@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { analysisLogger } from "@/app/utils/analysisLogger";
 import { performanceMonitor, OperationTimer } from "@/app/utils/performanceMonitor";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { consumeApiQuota } from "@/lib/apiQuota";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 
 // ============================================================================
 // Configuration Constants
@@ -12,8 +13,6 @@ import { validateAuthOrReject, isAuthError } from "@/lib/auth";
 const MAX_CONTENT_LENGTH = 10000;
 const MIN_CONTENT_LENGTH = 50;
 const MAX_RETRIES = 3;
-const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
 const FREE_MONTHLY_ANALYSIS_LIMIT = 10;
 
 // Valid values for validation
@@ -62,36 +61,6 @@ Guidelines:
 - actionable_advice: A specific, practical suggestion the author could act on based on what they wrote. For personal stories, this could be a self-improvement tip or reflection prompt. For historical/geopolitical/cultural stories, this could be a suggestion to explore a related topic, research a source, or consider an alternative perspective. Keep it encouraging, not prescriptive. 1-2 sentences max.
 
 Return ONLY the JSON object, nothing else.`;
-
-// ============================================================================
-// Rate Limiting (In-Memory)
-// ============================================================================
-
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-const rateLimitMap = new Map<string, RateLimitEntry>();
-
-function checkRateLimit(identifier: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const entry = rateLimitMap.get(identifier);
-
-  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
-    // New window
-    rateLimitMap.set(identifier, { count: 1, windowStart: now });
-    return { allowed: true };
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    const retryAfter = Math.ceil((entry.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000);
-    return { allowed: false, retryAfter };
-  }
-
-  entry.count++;
-  return { allowed: true };
-}
 
 // ============================================================================
 // Concurrent Request Tracking (In-Memory)
@@ -283,7 +252,7 @@ export async function POST(req: NextRequest) {
     // Auth check
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
 
     // Check API key configuration
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -315,13 +284,22 @@ export async function POST(req: NextRequest) {
 
     // Verify caller owns this story
     const ownershipSupabase = createSupabaseAdminClient();
-    const { data: storyOwner } = await ownershipSupabase
+    const { data: storyOwner, error: storyOwnerError } = await ownershipSupabase
       .from("stories")
       .select("author_id")
       .eq("id", body.storyId)
-      .single();
+      .maybeSingle();
 
-    if (storyOwner && storyOwner.author_id !== authenticatedUserId) {
+    if (storyOwnerError) {
+      analysisLogger.error(storyId, "ownership_lookup_failed", storyOwnerError.message);
+      return NextResponse.json({ error: "Unable to verify story ownership" }, { status: 503 });
+    }
+
+    if (!storyOwner) {
+      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    }
+
+    if (storyOwner.author_id !== authenticatedUserId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -379,16 +357,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limiting
-    const rateLimitId = body.storyId; // Could also use IP or user ID
-    const rateCheck = checkRateLimit(rateLimitId);
-    if (!rateCheck.allowed) {
-      analysisLogger.warn(storyId, "rate_limited", { retryAfter: rateCheck.retryAfter });
+    // Durable per-user quota works across serverless instances and restarts.
+    const quota = await consumeApiQuota(ownershipSupabase, authenticatedUserId, {
+      action: "ai_analyze_hour",
+      maxRequests: 10,
+      windowSeconds: 60 * 60,
+    });
+    if (!quota.allowed) {
+      analysisLogger.warn(storyId, "rate_limited", { retryAfter: quota.retryAfter });
       return NextResponse.json(
-        { error: "Rate limit exceeded. Please try again later." },
         {
-          status: 429,
-          headers: { "Retry-After": String(rateCheck.retryAfter) },
+          error: quota.unavailable
+            ? "Usage controls are temporarily unavailable. Please try again later."
+            : "Hourly analysis limit reached. Please try again after the quota resets.",
+        },
+        {
+          status: quota.unavailable ? 503 : 429,
+          headers: { "Retry-After": String(quota.retryAfter) },
         }
       );
     }

@@ -45,6 +45,8 @@ import {
   ShieldCheck,
   ExternalLink,
   FileText,
+  Flag,
+  Ban,
 } from "lucide-react-native";
 import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
@@ -64,6 +66,8 @@ import {
   GRADIENTS,
 } from "../../components/ui";
 import { TestnetBanner } from "../../components/TestnetBanner";
+import { WEB3_FEATURES_ENABLED } from "../../lib/releaseConfig";
+import { SafetyReportModal, type SafetyTarget } from "../../components/SafetyReportModal";
 
 const DOMAIN_ICONS: Record<string, React.ComponentType<any>> = {
   work: Briefcase,
@@ -135,6 +139,7 @@ export default function StoryDetailScreen() {
   const [tipAmount, setTipAmount] = useState("0.001");
   const [tipping, setTipping] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [reportTarget, setReportTarget] = useState<SafetyTarget | null>(null);
 
   const { isConnected } = useAccount();
   const { tipCreator, payPaywall } = useStoryProtocol();
@@ -221,6 +226,51 @@ export default function StoryDetailScreen() {
     await apiPost("/api/social/follow", { targetUserId: authorId });
   };
 
+  const openReportOptions = () => {
+    if (!story || !isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+    const authorId = story.author.id;
+    Alert.alert("Report", "What would you like to report?", [
+      {
+        text: "Story",
+        onPress: () =>
+          setReportTarget({ targetType: "story", targetId: story.id, label: "story" }),
+      },
+      ...(authorId
+        ? [{
+            text: "Author",
+            onPress: () =>
+              setReportTarget({ targetType: "user" as const, targetId: authorId, label: "author" }),
+          }]
+        : []),
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleBlockAuthor = () => {
+    const blockedUserId = story?.author.id;
+    if (!blockedUserId || !isAuthenticated) return;
+
+    Alert.alert(
+      "Block author?",
+      "You will no longer see each other's stories or comments. Following connections will be removed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const response = await apiPost("/api/safety/block", { blockedUserId });
+            if (response.ok) router.back();
+            else Alert.alert("Unable to block", response.error || "Please try again.");
+          },
+        },
+      ]
+    );
+  };
+
   const handleTip = async () => {
     if (!story || !isConnected) {
       Alert.alert("Wallet Required", "Connect your wallet to send tips.");
@@ -232,7 +282,10 @@ export default function StoryDetailScreen() {
     }
     setTipping(true);
     try {
-      await tipCreator(story.author.wallet_address, tipAmount, story.id);
+      if (!Number.isSafeInteger(story.numeric_id) || story.numeric_id <= 0) {
+        throw new Error("Story is not available for on-chain tipping");
+      }
+      await tipCreator(story.author.wallet_address, tipAmount, story.numeric_id);
       setShowTipModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -250,7 +303,14 @@ export default function StoryDetailScreen() {
     if (!story.author.wallet_address) return;
     setUnlocking(true);
     try {
-      await payPaywall(story.author.wallet_address, String(story.paywallAmount), story.id);
+      if (!Number.isSafeInteger(story.numeric_id) || story.numeric_id <= 0) {
+        throw new Error("Story is not available for on-chain access");
+      }
+      await payPaywall(
+        story.author.wallet_address,
+        String(story.paywallAmount),
+        story.numeric_id
+      );
       setStory({ ...story, isPaid: true });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -393,6 +453,28 @@ export default function StoryDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {isAuthenticated && !isOwner && story.author.id && (
+            <View style={{ flexDirection: "row", gap: 12, marginTop: -6, marginBottom: 16 }}>
+              <TouchableOpacity
+                onPress={openReportOptions}
+                accessibilityRole="button"
+                accessibilityLabel="Report story or author"
+                style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 }}
+              >
+                <Flag size={16} color="#fbbf24" />
+                <Text style={{ color: "#fbbf24", fontSize: 13 }}>Report</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBlockAuthor}
+                accessibilityRole="button"
+                accessibilityLabel="Block author"
+                style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 }}
+              >
+                <Ban size={16} color="#f87171" />
+                <Text style={{ color: "#f87171", fontSize: 13 }}>Block</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </AnimatedListItem>
 
         {/* Audio Player */}
@@ -426,18 +508,22 @@ export default function StoryDetailScreen() {
                 Premium Content
               </Text>
               <Text style={{ marginTop: 4, fontSize: 13, color: "#94a3b8" }}>
-                {story.teaser || "Unlock this story for"} {story.paywallAmount} $STORY
+                {WEB3_FEATURES_ENABLED
+                  ? `${story.teaser || "Unlock this story for"} ${story.paywallAmount} $STORY`
+                  : "This premium story is not available for purchase in the Google Play release."}
               </Text>
-              <View style={{ marginTop: 16 }}>
-                <GradientButton
-                  onPress={handleUnlockPaywall}
-                  title={unlocking ? "Unlocking..." : `Unlock for ${story.paywallAmount} $STORY`}
-                  gradient={GRADIENTS.primary}
-                  fullWidth
-                  loading={unlocking}
-                  disabled={unlocking}
-                />
-              </View>
+              {WEB3_FEATURES_ENABLED && (
+                <View style={{ marginTop: 16 }}>
+                  <GradientButton
+                    onPress={handleUnlockPaywall}
+                    title={unlocking ? "Unlocking..." : `Unlock for ${story.paywallAmount} $STORY`}
+                    gradient={GRADIENTS.primary}
+                    fullWidth
+                    loading={unlocking}
+                    disabled={unlocking}
+                  />
+                </View>
+              )}
             </GlassCard>
           ) : (
             <Text style={{ marginBottom: 24, fontSize: 15, lineHeight: 26, color: "#e2e8f0" }}>
@@ -509,7 +595,7 @@ export default function StoryDetailScreen() {
 
         {/* Verified Metrics Section */}
         <AnimatedListItem index={5}>
-          <TestnetBanner />
+          {WEB3_FEATURES_ENABLED && <TestnetBanner />}
           {isVerifying ? (
             <GlassCard intensity="medium" style={{ padding: 20, marginBottom: 16, alignItems: "center" }}>
               <SkeletonLoader variant="line" count={3} />
@@ -695,7 +781,7 @@ export default function StoryDetailScreen() {
               <MessageCircle size={22} color="#64748b" />
               <Text style={{ fontSize: 13, color: "#94a3b8" }}>{comments.length}</Text>
             </View>
-            {!isOwner && (
+            {WEB3_FEATURES_ENABLED && !isOwner && (
               <TouchableOpacity
                 onPress={() => setShowTipModal(true)}
                 style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
@@ -715,7 +801,7 @@ export default function StoryDetailScreen() {
         </AnimatedListItem>
 
         {/* Tip Modal */}
-        <Modal visible={showTipModal} transparent animationType="fade">
+        <Modal visible={WEB3_FEATURES_ENABLED && showTipModal} transparent animationType="fade">
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.7)" }}>
             <GlassCard intensity="heavy" style={{ width: 300, padding: 24 }}>
               <Text style={{ fontSize: 18, fontWeight: "700", color: "#fff", marginBottom: 4 }}>
@@ -816,6 +902,23 @@ export default function StoryDetailScreen() {
                   <Text style={{ fontSize: 11, color: "#64748b" }}>
                     {new Date(c.created_at).toLocaleDateString()}
                   </Text>
+                  {isAuthenticated && c.author.id !== user?.id && (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setReportTarget({
+                          targetType: "comment",
+                          targetId: c.id,
+                          label: "comment",
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Report comment"
+                      hitSlop={10}
+                      style={{ marginLeft: "auto", minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+                    >
+                      <Flag size={15} color="#fbbf24" />
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <Text style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1", lineHeight: 18 }}>
                   {c.content}
@@ -825,6 +928,7 @@ export default function StoryDetailScreen() {
           ))}
         </View>
       </ScrollView>
+      <SafetyReportModal target={reportTarget} onClose={() => setReportTarget(null)} />
     </SafeAreaView>
   );
 }

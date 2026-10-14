@@ -13,6 +13,7 @@ import { Mic, BookOpen, Users, TrendingUp, Wallet, Flame, Bell } from "lucide-re
 import { useAccount } from "wagmi";
 import { useAuthStore } from "../../stores/authStore";
 import { apiGet } from "../../lib/api";
+import { WEB3_FEATURES_ENABLED } from "../../lib/releaseConfig";
 import {
   GlassCard,
   GradientButton,
@@ -165,7 +166,7 @@ export default function HomeScreen() {
           )}
 
           {/* Wallet Status */}
-          {isConnected && address && (
+          {WEB3_FEATURES_ENABLED && isConnected && address && (
             <AnimatedListItem index={4}>
               <GlassCard
                 intensity="light"
@@ -208,8 +209,9 @@ export default function HomeScreen() {
                     lineHeight: 20,
                   }}
                 >
-                  Connect your wallet or sign in with Google to start writing
-                  stories.
+                  {WEB3_FEATURES_ENABLED
+                    ? "Connect your wallet or sign in to start writing stories."
+                    : "Sign in or create an account to start writing stories."}
                 </Text>
                 <View style={{ marginTop: 16, width: "100%" }}>
                   <GradientButton
