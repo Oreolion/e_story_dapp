@@ -151,6 +151,51 @@ data changes, PR merge, production deployment, signed EAS build or Play upload
 were performed during this repair. The pending decision is authorization to
 prepare the production-compatible feature migration and its execution.
 
+## Authorized production prerequisite repair
+
+The user authorized repairing, testing and applying feature migration 019 on
+2026-10-14, then completing the production release. Earlier hold statements above
+describe the previous checkpoint, not the current authorization. The Cloudflare
+migration is still documentation-only.
+
+The repaired migration preserves production IDs and column types, explicitly
+deletes email/wallet-owned stories, removes orphaned polymorphic reports and
+legacy wallet activity/achievements, and maintains surviving social counters.
+Verification logs are removed through their verified story FK, not an invented
+user column. RPC execution is explicitly revoked from anon/authenticated as well
+as PUBLIC, addressing Supabase default function grants. New tables are RLS-on
+and writable through the service role only.
+
+`scripts/test-migration019.mjs` exercises PostgreSQL 17 fixtures in an isolated
+Docker container without network access or published ports. It covers TEXT and
+UUID author IDs, reruns, exact history/body verification, concurrent quota grants,
+window reset, invalid limits, idempotent blocking/deletion, transaction rollback,
+email/wallet ownership, child cleanup and unrelated account preservation. CI now
+runs this rehearsal as well as the application tests. Eight deletion API tests
+cover linked IDs, pagination, failures, wallet-only identities and cookie cleanup.
+
+`scripts/apply-migration019.mjs` applies ONLY 019 to the already verified project,
+inside a transaction with lock/statement timeouts and an advisory lock, recording
+the exact SQL in migration history. It refuses an already recorded migration or
+unexpected deletion RPC. Its `--verify` mode checks history, RPC bodies/privileges,
+RLS and the avatar bucket. It does not run `db push`, apply older migrations or
+delete customer fixtures. This additive schema can coexist with the old release;
+on an application rollback leave the new tables/RPCs in place. Existing bucket
+limits before this change were NULL; restore those separately only if needed.
+
+Storage, relational data and Supabase Auth cannot share one atomic transaction.
+The existing deletion API stops before DB/auth deletion on media failure and
+does not report success on DB/auth failure, but earlier stages can have completed.
+The new failure tests verify that limitation rather than claiming cross-service
+atomicity. Operators must reconcile a reported partial deletion; automatic
+durable retry orchestration is outside this narrow CI/schema repair.
+
+Application dependencies still have the previously documented high advisories.
+A signed AAB, physical-device checks, account-deletion acceptance testing and
+Play Console readiness remain gates for a mobile-store launch, independently
+of publishing the web/API release. No public Play submission is authorized by
+this migration approval.
+
 Security patch references:
 
 - [Next.js image-optimization advisory](https://github.com/advisories/GHSA-2xp9-vwfh-vxw4)

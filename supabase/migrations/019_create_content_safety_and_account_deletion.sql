@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 ALTER TABLE content_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_blocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_rate_limits ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE content_reports, user_blocks, api_rate_limits FROM anon, authenticated;
+GRANT ALL ON TABLE content_reports, user_blocks, api_rate_limits TO service_role;
 
 -- No direct client policies. The service role bypasses RLS and API handlers
 -- perform authentication, authorization, validation, and rate limiting.
@@ -70,7 +72,8 @@ DECLARE
   v_window_started_at TIMESTAMPTZ;
   v_request_count INTEGER;
 BEGIN
-  IF p_max_requests < 1 OR p_window_seconds < 1 THEN
+  IF p_max_requests IS NULL OR p_window_seconds IS NULL
+     OR p_max_requests < 1 OR p_window_seconds < 1 THEN
     RAISE EXCEPTION 'Quota limits must be positive';
   END IF;
 
@@ -108,7 +111,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION consume_api_quota(UUID, TEXT, INTEGER, INTEGER) FROM PUBLIC;
+REVOKE ALL ON FUNCTION consume_api_quota(UUID, TEXT, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION consume_api_quota(UUID, TEXT, INTEGER, INTEGER) TO service_role;
 
 CREATE OR REPLACE FUNCTION block_user(p_blocker_id UUID, p_blocked_id UUID)
@@ -126,13 +129,19 @@ BEGIN
   VALUES (p_blocker_id, p_blocked_id)
   ON CONFLICT (blocker_id, blocked_id) DO NOTHING;
 
-  DELETE FROM follows
-  WHERE (follower_id = p_blocker_id AND following_id = p_blocked_id)
-     OR (follower_id = p_blocked_id AND following_id = p_blocker_id);
+  WITH removed AS (
+    DELETE FROM follows
+    WHERE (follower_id = p_blocker_id AND following_id = p_blocked_id)
+       OR (follower_id = p_blocked_id AND following_id = p_blocker_id)
+    RETURNING following_id
+  )
+  UPDATE users SET followers_count = GREATEST(0, COALESCE(followers_count, 0) - removed_counts.total)
+  FROM (SELECT following_id, count(*)::integer AS total FROM removed GROUP BY following_id) removed_counts
+  WHERE users.id = removed_counts.following_id;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION block_user(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION block_user(UUID, UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION block_user(UUID, UUID) TO service_role;
 
 CREATE OR REPLACE FUNCTION delete_user_account_data(p_user_id UUID)
@@ -144,29 +153,44 @@ AS $$
 DECLARE
   v_email TEXT;
   v_wallet TEXT;
+  v_story_ids UUID[];
+  v_comment_ids UUID[];
 BEGIN
   SELECT email, wallet_address
   INTO v_email, v_wallet
   FROM users
-  WHERE id = p_user_id;
+  WHERE id = p_user_id
+  FOR UPDATE;
+
+  -- A repeated deletion is harmless. Do not use a NULL/missing profile to
+  -- select unrelated content.
+  IF NOT FOUND THEN RETURN; END IF;
+
+  -- Production has TEXT author_id; the committed base schema uses UUID.
+  -- Never cast stored text to UUID: historical values may not be UUIDs.
+  SELECT COALESCE(array_agg(id), ARRAY[]::UUID[]) INTO v_story_ids
+  FROM stories
+  WHERE author_id::text = p_user_id::text
+     OR (v_wallet IS NOT NULL AND author_wallet = v_wallet);
+
+  SELECT COALESCE(array_agg(id), ARRAY[]::UUID[]) INTO v_comment_ids
+  FROM comments
+  WHERE author_id::text = p_user_id::text
+     OR (v_wallet IS NOT NULL AND author_wallet = v_wallet)
+     OR story_id = ANY(v_story_ids);
 
   -- Remove safety data authored by or targeting this user and their content.
   DELETE FROM content_reports
   WHERE reporter_id = p_user_id
      OR (target_type = 'user' AND target_id = p_user_id)
-     OR (target_type = 'story' AND target_id IN (
-       SELECT id FROM stories WHERE author_id = p_user_id
-     ))
-     OR (target_type = 'comment' AND target_id IN (
-       SELECT id FROM comments WHERE author_id = p_user_id
-     ));
+     OR (target_type = 'story' AND target_id = ANY(v_story_ids))
+     OR (target_type = 'comment' AND target_id = ANY(v_comment_ids));
 
   DELETE FROM user_blocks
   WHERE blocker_id = p_user_id OR blocked_id = p_user_id;
 
   -- These relationships use SET NULL or have no user foreign key.
   DELETE FROM notifications WHERE related_user_id = p_user_id;
-  DELETE FROM verification_logs WHERE triggered_by = p_user_id;
   DELETE FROM story_collections WHERE author_id = p_user_id;
 
   -- Some production environments contain the legacy books table even though
@@ -181,15 +205,49 @@ BEGIN
 
   IF v_wallet IS NOT NULL THEN
     DELETE FROM auth_nonces WHERE lower(address) = lower(v_wallet);
+    -- Legacy wallet tables have no user FK and are absent on fresh installs.
+    IF to_regclass('public.user_achievements') IS NOT NULL THEN
+      EXECUTE 'DELETE FROM public.user_achievements WHERE lower(wallet_address) = lower($1)' USING v_wallet;
+    END IF;
+    IF to_regclass('public.user_activity') IS NOT NULL THEN
+      EXECUTE 'DELETE FROM public.user_activity WHERE lower(wallet_address) = lower($1)' USING v_wallet;
+    END IF;
   END IF;
 
-  -- Cascades remove stories, metadata, comments, likes, follows, saved and
-  -- unlocked content, payments, notifications, habits, logs, and reflections.
+  -- Keep surviving users' denormalized follow counts consistent.
+  WITH removed AS (
+    DELETE FROM follows WHERE follower_id = p_user_id OR following_id = p_user_id
+    RETURNING following_id
+  )
+  UPDATE users SET followers_count = GREATEST(0, COALESCE(followers_count, 0) - removed_counts.total)
+  FROM (SELECT following_id, count(*)::integer AS total FROM removed GROUP BY following_id) removed_counts
+  WHERE users.id = removed_counts.following_id;
+
+  -- Explicitly cover email-only stories: production has no author_id FK.
+  -- Story FKs cascade metadata, verification_logs and other story children.
+  -- Delete wallet-only comments first, before their wallet FK can block users.
+  WITH removed AS (
+    DELETE FROM comments WHERE id = ANY(v_comment_ids) RETURNING story_id
+  )
+  UPDATE stories SET comments_count = GREATEST(0, COALESCE(comments_count, 0) - removed_counts.total)
+  FROM (SELECT story_id, count(*)::integer AS total FROM removed GROUP BY story_id) removed_counts
+  WHERE stories.id = removed_counts.story_id;
+
+  WITH removed AS (
+    DELETE FROM likes WHERE user_id = p_user_id RETURNING story_id
+  )
+  UPDATE stories SET likes = GREATEST(0, COALESCE(likes, 0) - removed_counts.total)
+  FROM (SELECT story_id, count(*)::integer AS total FROM removed GROUP BY story_id) removed_counts
+  WHERE stories.id = removed_counts.story_id;
+  DELETE FROM stories WHERE id = ANY(v_story_ids);
+
+  -- User FKs cascade likes, saved/unlocked content, payments, notifications,
+  -- habits, daily logs, reflections and quotas.
   DELETE FROM users WHERE id = p_user_id;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION delete_user_account_data(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION delete_user_account_data(UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION delete_user_account_data(UUID) TO service_role;
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
