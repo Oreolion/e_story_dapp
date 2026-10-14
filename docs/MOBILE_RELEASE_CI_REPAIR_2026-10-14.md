@@ -84,8 +84,8 @@ provider configuration or a signed mobile binary.
 
 | # | Check | Status | Evidence or remaining limitation |
 |---|---|---|---|
-| 1 | Rate limits | PARTIAL | Middleware limits all API paths; new cost-bearing routes use durable quotas. Middleware memory limits reset across instances; live quota RPC is unverified. |
-| 2 | RLS / database access | FAIL | New DDL enables RLS and restricts RPCs, but all three tables and RPCs are absent in production. Migration 019 also conflicts with verified live column types/names. |
+| 1 | Rate limits | PARTIAL | New durable quota SQL passed PostgreSQL 17 concurrency/reset tests and its exact production definition is verified. Middleware memory limits still reset across instances; authenticated live API acceptance remains separate. |
+| 2 | RLS / database access | PASS for 019 | Production-compatible 019 was rehearsed/applied; exact history/body checks, RLS and service-only RPC grants passed. This is not a complete audit of all existing database policies. |
 | 3 | Auth guards | PARTIAL | New private routes validate auth and resolve ownership; analysis denial tests pass. Public/auth/retired routes are distinguished; live end-to-end sessions remain a release gate. |
 | 4 | Input validation | PARTIAL | Report/block IDs, reasons, avatar/audio bytes and sizes are checked. Local route fixtures do not prove maximum payloads work on Vercel. |
 | 5 | Outbound requests | PARTIAL | Changed AI routes use provider SDKs and bounded retries. Existing authenticated email endpoint accepts a caller-provided recipient with an in-memory limit; further abuse hardening remains. |
@@ -95,9 +95,10 @@ provider configuration or a signed mobile binary.
 | 9 | Dependencies | PARTIAL | Final production audits: zero criticals in root/mobile, with 15 root and 41 mobile high advisories remaining for risk review. No forced major upgrades were used. |
 | 10 | Callbacks / redirects | PARTIAL | OAuth redirects are restricted; cron/CRE use verified service secrets. Existing payment webhook compares HMAC strings before its timing-safe fallback and merits separate hardening. |
 
-Deploy decision: **DO NOT DEPLOY** until the verified migration incompatibilities
-are repaired, rehearsed and applied, and the remaining release risks reviewed.
-The CI fix is verified; production is still on the prior healthy release.
+Deploy decision: the verified schema blocker is resolved by the authorized
+execution recorded below. Merge/deploy remains gated on all final-head checks
+passing. Existing partial audit findings remain documented; do not describe
+this as vulnerability-free or as approval for a public mobile-store launch.
 
 ## Final verification and concrete release blocker
 
@@ -195,6 +196,28 @@ A signed AAB, physical-device checks, account-deletion acceptance testing and
 Play Console readiness remain gates for a mobile-store launch, independently
 of publishing the web/API release. No public Play submission is authorized by
 this migration approval.
+
+### Production schema execution evidence
+
+Repaired code commit: `5b7cad38b7f9d397755410300a41c6dd0ac955be`.
+The exact production wrapper passed a fresh PostgreSQL 17 rehearsal for both
+author types. Twelve simultaneous service-role quota calls allowed exactly five,
+and deletion preserved unrelated accounts/content. The eight API regressions,
+44 analysis tests, four quota tests, root TypeScript and focused lint passed.
+
+Migration 019 was then committed atomically on production project
+`qfwhtsmqndnocfidhdhy`, with its exact SQL recorded in migration history and
+PostgREST schema reload notified. No historical migration gaps were applied and
+no customer deletion was invoked. Read-only verification returned true for:
+
+- exact migration-history SQL;
+- all three RPC bodies matching the reviewed file;
+- all three tables present with RLS enabled;
+- service-role RPC access with anon/authenticated execution denied;
+- avatar bucket public/5 MiB/JPEG-PNG-WebP configuration.
+
+The old web/API release remained available during this additive schema change.
+Final-head CI and application production deployment are pending at this entry.
 
 Security patch references:
 
