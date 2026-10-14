@@ -37,8 +37,9 @@ The new APIs depend on
 Its absence causes quota checks to fail closed with HTTP 503 and prevents
 moderation, account deletion and avatar operations from working as intended.
 Applying or verifying that migration requires access to the intended production
-Supabase project. Neither database access nor execution was performed by this
-CI repair. Do not merge this API release solely because tests are green.
+Supabase project. The final read-only verification below found that the
+migration is absent and needs compatibility repairs. No application migration
+was applied. Do not merge this API release solely because tests are green.
 
 A production operator can run these read-only checks in the Supabase SQL editor:
 
@@ -84,19 +85,71 @@ provider configuration or a signed mobile binary.
 | # | Check | Status | Evidence or remaining limitation |
 |---|---|---|---|
 | 1 | Rate limits | PARTIAL | Middleware limits all API paths; new cost-bearing routes use durable quotas. Middleware memory limits reset across instances; live quota RPC is unverified. |
-| 2 | RLS / database access | PARTIAL | New tables enable RLS and RPCs restrict execution to service_role; live migration and existing production schema/policies are unverified. |
+| 2 | RLS / database access | FAIL | New DDL enables RLS and restricts RPCs, but all three tables and RPCs are absent in production. Migration 019 also conflicts with verified live column types/names. |
 | 3 | Auth guards | PARTIAL | New private routes validate auth and resolve ownership; analysis denial tests pass. Public/auth/retired routes are distinguished; live end-to-end sessions remain a release gate. |
 | 4 | Input validation | PARTIAL | Report/block IDs, reasons, avatar/audio bytes and sizes are checked. Local route fixtures do not prove maximum payloads work on Vercel. |
 | 5 | Outbound requests | PARTIAL | Changed AI routes use provider SDKs and bounded retries. Existing authenticated email endpoint accepts a caller-provided recipient with an in-memory limit; further abuse hardening remains. |
 | 6 | Secrets | PARTIAL | No secret files/values were read. Scanned client code has no service-role usage; env exclusions and file-name-only history checks found no tracked .env/.env.local history. This is not a complete historical secret scan. |
 | 7 | CORS | PASS | Middleware uses an explicit origin allowlist, with no wildcard credential policy introduced by this PR. |
 | 8 | CSP / headers | PARTIAL | Security headers exist; existing script-src unsafe-inline/unsafe-eval exceptions remain. |
-| 9 | Dependencies | PARTIAL | Newly identified critical packages are patched in the candidate; final audits and remaining high transitive advisories must be recorded/reviewed. No forced major upgrades were used. |
+| 9 | Dependencies | PARTIAL | Final production audits: zero criticals in root/mobile, with 15 root and 41 mobile high advisories remaining for risk review. No forced major upgrades were used. |
 | 10 | Callbacks / redirects | PARTIAL | OAuth redirects are restricted; cron/CRE use verified service secrets. Existing payment webhook compares HMAC strings before its timing-safe fallback and merits separate hardening. |
 
-Deploy decision at this checkpoint: **HOLD** pending production database
-verification, clean Linux CI and remaining release-risk review. Keep production
-at its current healthy release while those prerequisites are unresolved.
+Deploy decision: **DO NOT DEPLOY** until the verified migration incompatibilities
+are repaired, rehearsed and applied, and the remaining release risks reviewed.
+The CI fix is verified; production is still on the prior healthy release.
+
+## Final verification and concrete release blocker
+
+Verified code commit: `b4f184749124fb67657d6c90b056a78d1d6b9d5b`.
+All 11 GitHub/Vercel checks passed on that commit:
+
+- [Web CI](https://github.com/Oreolion/e_story_dapp/actions/runs/38577426172):
+  139 tests, TypeScript, lint, contracts and the Linux production build passed.
+- [Mobile CI](https://github.com/Oreolion/e_story_dapp/actions/runs/38577426276):
+  types, both test suites, Expo Doctor and Android export passed.
+- [Playwright](https://github.com/Oreolion/e_story_dapp/actions/runs/38577426121)
+  and Vercel preview passed.
+- Local Android export passed: 4,010 modules and a 9.04 MB Hermes bundle.
+  The separate retry passed the four local content-safety tests whose worker
+  had failed to start. Linux CI passed the whole web suite in a single run.
+
+Authenticated read-only Supabase queries verified project
+`qfwhtsmqndnocfidhdhy`, which also appears in the deployed public web bundle.
+The following are confirmed absent:
+
+- `content_reports`, `user_blocks`, `api_rate_limits`
+- `consume_api_quota(uuid,text,integer,integer)`, `block_user(uuid,uuid)`,
+  `delete_user_account_data(uuid)`
+
+Additional live-schema findings mean the committed migration is not safe to
+apply unchanged:
+
+1. `stories.author_id` is TEXT while `users.id` is UUID. Migration line 158
+   compares `author_id = p_user_id` with a UUID parameter. A read-only EXPLAIN
+   reproduced PostgreSQL error 42883: `operator does not exist: text = uuid`.
+2. `verification_logs` exists, but its columns are `id`, `story_id`,
+   `workflow_run_id`, `status`, `error_message`, `created_at`, and `updated_at`.
+   Migration line 169 references nonexistent `triggered_by`.
+3. Stories cascade from `users.wallet_address` through `author_wallet`.
+   There is no `stories.author_id -> users.id` FK. Deleting only the users row
+   does not establish deletion of email/Google-authored stories without a wallet.
+4. The avatars bucket is already public, with NULL size and MIME restrictions.
+   Applying 019 would add the intended 5 MiB and JPEG/PNG/WebP restrictions.
+
+The required next change is therefore **repair and rehearse 019**, rather than
+blindly apply it: preserve existing IDs/types, use compatible ownership
+comparisons, explicitly delete owned stories inside the account-data transaction,
+and let their verified story FKs cascade verification logs and other children.
+Validate moderation-report cleanup and email/wallet/linked-account deletion with
+controlled fixtures before production execution. The current deletion route
+removes storage before invoking its database RPC, so an incompatible RPC would
+also risk partial deletion; include that failure path in the release tests.
+
+The earlier migration hold was respected. No application schema or customer
+data changes, PR merge, production deployment, signed EAS build or Play upload
+were performed during this repair. The pending decision is authorization to
+prepare the production-compatible feature migration and its execution.
 
 Security patch references:
 
