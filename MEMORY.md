@@ -1,8 +1,21 @@
 # iStory DApp Memory
 
-Last updated: 2026-07-31T10:28:56.7959477-07:00
+Last updated: 2026-10-14
 
 ## Current State
+
+- PR #20 is open on `feature/mobile-google-play-readiness`; it is not deployed to production. Production `/api/health` reports commit `5e0047e`.
+- Release CI repair is isolated in `C:\Users\HP 240 G9\AppData\Local\Temp\istory-pr20-20261014` on `feature/fix-mobile-release-ci`. The main workspace's existing `.gitignore` edit and migration guide remain untouched.
+- Synced the PR with `origin/master` at `5e0047e`, including the dependency fixes from PR #19.
+- Updated analysis test mocks for `resolveUserId`, ownership `maybeSingle()`, and durable quotas. Added six regressions for linked-profile resolution, ownership denial/missing/error results, quota exhaustion, and quota outage. All 44 analysis tests passed locally.
+- Expo SDK 54 patch alignment resolves the Android CI blocker: Expo 54.0.37, constants 18.0.14, file system 19.0.24, updates 29.0.20, and jest-expo 54.0.18. Mobile types, 36 Vitest tests, 12 Jest tests, and Expo Doctor 18/18 passed.
+- Deployment verification now checks out the successful CI commit and waits for the production health endpoint to report that commit before smoke tests or a Sentry release.
+- Release dependency security patches: Next.js/ESLint 15.5.27, mobile `shell-quote` override 1.11.0, and root `proxy-addr` override 2.0.8. Final audit and Linux CI results must be recorded before release.
+- Local root TypeScript and lint passed (lint has existing warnings). The local full test attempt passed 135 tests; one content-safety worker timed out during startup and is being checked separately. The Windows build attempt encountered restricted font-download networking and was stopped; Linux CI is the production build gate.
+- Production release remains on hold until migration `019_create_content_safety_and_account_deletion.sql` is confirmed applied and its tables/RPCs/bucket verified. No production database access or migration execution has occurred in this repair.
+- Android export and updated remote PR checks are pending at this checkpoint. No merge, EAS signed build, or Play submission has occurred. See `docs/MOBILE_RELEASE_CI_REPAIR_2026-10-14.md` for release prerequisites and audit limitations.
+
+## Prior implementation checkpoint (2026-07-31)
 
 - Active branch: `feature/mobile-google-play-readiness` from `origin/master` at `2bddb6a`.
 - Active milestone: Google Play production-readiness implementation and release gate.

@@ -13,7 +13,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy & Smoke Test
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'master' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -21,10 +21,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Get commit SHA
         id: git
-        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       # Note: Vercel auto-deploys from git. This job verifies the deployment.
       # If you use Vercel CLI deploy instead, uncomment the step below and
@@ -38,8 +39,24 @@ jobs:
       #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
       #     vercel-args: '--prod'
 
-      - name: Wait for Vercel Deploy
-        run: sleep 90
+      - name: Verify the expected production commit
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          expected_version="${EXPECTED_SHA:0:7}"
+          for attempt in $(seq 1 30); do
+            if health=$(curl --fail --silent --show-error --max-time 15 "https://estories.app/api/health?release=${EXPECTED_SHA}"); then
+              deployed_version=$(printf '%s' "$health" | jq -r '.version // empty')
+              if [ "$deployed_version" = "$expected_version" ]; then
+                echo "Verified production commit $expected_version"
+                exit 0
+              fi
+              echo "Waiting for $expected_version; production reports $deployed_version (attempt $attempt/30)"
+            fi
+            sleep 10
+          done
+          echo "::error::Production did not serve expected commit $expected_version within the deployment window."
+          exit 1
 
       - name: Smoke Test — Homepage
         run: |
