@@ -68,7 +68,7 @@ Object.assign(environment, {
   EVAL_SOURCE_SNAPSHOT_SHA256: sourceSha256,
   CI: '1', APP_ENV: 'ci', NEXT_TELEMETRY_DISABLED: '1', NODE_OPTIONS: '--max-old-space-size=4096',
   NEXT_PUBLIC_SUPABASE_URL: 'https://synthetic.invalid', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-placeholder',
-  SUPABASE_SERVICE_ROLE_KEY: 'synthetic-placeholder', WALLET_JWT_SECRET: 'synthetic-verification-placeholder-not-a-live-key',
+  SUPABASE_SERVICE_ROLE_KEY: 'synthetic-placeholder',
   NEXT_PUBLIC_PROJECT_ID: 'synthetic-placeholder', NEXT_PUBLIC_APP_URL: 'http://127.0.0.1:3001',
   PINATA_JWT: 'synthetic-provider-placeholder',
   EXPO_NO_TELEMETRY: '1', EXPO_NO_DOTENV: '1',
@@ -105,7 +105,7 @@ const stages = mode === '--mobile-types'
   : mode === '--compat'
     ? [['compatibility', ['node_modules/vitest/vitest.mjs', 'run', '--config', 'evals/vitest.config.ts', 'evals/postgres/compatibility.test.ts', 'evals/postgres/live-schema.test.ts'], 5 * minute]]
     : mode === '--lint'
-      ? [['lint', ['node_modules/eslint/bin/eslint.js', 'app', 'components', 'lib', 'scripts', '__tests__', 'evals', 'e2e'], 6 * minute]]
+      ? [['lint', ['node_modules/eslint/bin/eslint.js'], 6 * minute]]
       : tests;
 
 async function run([name, args, timeout, subdirectory = '']) {

@@ -1,6 +1,6 @@
 # Production checkpoint — 2026-11-04
 
-Web/API decision: **NO_GO**. This records verified evidence and its limits; it is not release approval. Older notes remain historical. Branch `feature/production-audit-repairs` is based on `d0cb70220b3ab1b2c48261578205758d0d1db51e`. This checkpoint is being committed for feature-branch CI validation; no master push, production deployment or production migration has occurred.
+Web/API decision: **NO_GO**. This records verified evidence and its limits; it is not release approval. Older notes remain historical. Branch `feature/production-audit-repairs` is based on `d0cb70220b3ab1b2c48261578205758d0d1db51e`. Checkpoint `9bd7873b1ce8eca7327b60a80e480b684a8f77d5` was committed and pushed to the feature branch for CI validation; no master push, production deployment or production migration has occurred.
 
 The user now authorizes direct master push at the next reasonable verified production checkpoint. Staging is explicitly deferred until after the production update: do not treat staging provisioning itself as the current critical path. Actual production prerequisites, dependency remediation, exact-candidate CI and the required pre-publication/delivery audit still have to clear. Wallets are preserved. Mobile is unreleased; no native or OTA publication is planned.
 
@@ -90,3 +90,11 @@ Fresh Nov 4 master-protection readback confirmed those settings unchanged; maste
 Independent Vercel metadata at `2026-11-04T15:33:59Z` confirms production branch `master`, Node 22, repository `Oreolion/e_story_dapp` and default install/build commands. This establishes configured source/build metadata, not deployment-check enforcement or current-candidate delivery; the Vercel gate remains unverified.
 
 Next production checkpoint must resolve actual target schema/configuration/grants, obtain exact-candidate CI evidence, and complete the installed production audit before any production side effect. Delivery must then be verified against the exact commit/artifact/environment before claiming success. Staging remains deferred by the user's instruction. Feature-branch source validation does not publish this candidate to production.
+
+## Feature checkpoint CI follow-up
+
+CI run [41899758262](https://github.com/Oreolion/e_story_dapp/actions/runs/41899758262), bound to `9bd7873b1ce8eca7327b60a80e480b684a8f77d5`, passed root types, web tests/PostgreSQL rehearsal, contract compilation and runtime dependency security. It failed lint and the identity evaluation setup, so the build was skipped and the required aggregate correctly failed.
+
+Three test-tooling corrections follow that evidence: name the React test provider as a component; exclude only hash-pinned upstream sources from application lint while retaining their executable integrity/regression tests; define the synthetic wallet signing key in evaluation configuration so lifecycle hooks do not depend on the local verifier's environment. The isolated lint command now matches CI's whole-tree scope. Local lint passed in TEMP `Ii9BRN`, source `83c6cf0667f96b10187193f1f98e6719e5151da9e643068cfaabc09fc19be130`. The subsequent isolated evaluation retry `xHpUh8` timed out without reporting test results; it is not a pass. Fresh CI must validate the follow-up commit.
+
+The full development-inclusive audit at 2026-11-04 19:46:47 UTC reported 0 critical / 24 high / 47 moderate / 26 low; raw SHA-256 `3533321dcfdda1c8bd02b0ee3f3e23725c2eacdfd3059c73b94cfa72f3ecfc8c`, TEMP `istory-full-audit-ao8SN0`. This differs from the runtime-only audit. Additional development-tool findings remain recorded; the verified runtime backport assessment is not a blanket clean-audit claim.

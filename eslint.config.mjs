@@ -22,6 +22,9 @@ const eslintConfig = [
       "typechain-types/**",
       "skills/**",
       "cre/**",
+      // Hash-pinned upstream sources retain their original lint directives.
+      // Their behavior and integrity run in test:dependency-security instead.
+      "security/upstream/**",
       "mobile/**",
     ],
   },
