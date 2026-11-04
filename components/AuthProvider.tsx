@@ -92,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const signInAttemptRef = useRef(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const authEpochRef = useRef(0);
+  const oauthRequestRef = useRef<{ subject: string; promise: Promise<void> } | null>(null);
 
   // Refs to stabilize onAuthStateChange callback without adding unstable
   // dependencies (isConnected, handleGoogleSignIn) that cause constant
@@ -233,158 +236,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleGoogleSignIn = useCallback(
     async (session: Session) => {
       if (!supabase) return;
-      const user = session.user;
-      const googleId = user.identities?.[0]?.id ?? user.id;
-
-      try {
-        // PRIORITY 1: Check for secure linking token (wallet user initiated "Link Google")
-        const linkingToken =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("googleLinkingToken")
-            : null;
-        const linkingUserId =
-          typeof window !== "undefined"
-            ? sessionStorage.getItem("googleLinkingUserId")
-            : null;
-
-        if (linkingToken && linkingUserId) {
+      const subject = session.user.id;
+      if (oauthRequestRef.current?.subject === subject) return oauthRequestRef.current.promise;
+      const epoch = ++authEpochRef.current;
+      const work = (async () => {
+        try {
+          const stored = sessionStorage.getItem("googleLinkingProof");
+          sessionStorage.removeItem("googleLinkingProof");
           sessionStorage.removeItem("googleLinkingToken");
           sessionStorage.removeItem("googleLinkingUserId");
-
-          try {
-            const res = await fetch("/api/auth/link-google", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                existingUserId: linkingUserId,
-                googleId,
-                googleEmail: user.email,
-                googleAvatar: user.user_metadata?.avatar_url,
-                googleName:
-                  user.user_metadata?.full_name ?? user.user_metadata?.name,
-                linkingToken,
-              }),
+          const headers = { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` };
+          if (stored) {
+            const proof = JSON.parse(stored);
+            const linked = await fetchWithTimeout("/api/auth/link-google", {
+              method: "POST", headers, body: JSON.stringify({ challengeId: proof.challengeId, signature: proof.signature }),
             });
-
-            if (res.ok) {
-              const { user: updated } = await res.json();
-              if (updated) {
-                console.log("[AUTH] Google linked successfully via secure token");
-                setUnifiedProfile(updated, user);
-                return;
-              }
-            } else {
-              const errData = await res.json().catch(() => ({}));
-              console.error("[AUTH] Secure link-google failed:", errData);
-            }
-          } catch (linkErr) {
-            console.error("[AUTH] Secure link-google request error:", linkErr);
+            const result = await linked.json();
+            if (!linked.ok) throw new Error(result.code === "link_conflict" ? "Account link conflict. Your existing data is preserved; contact support before merging accounts." : "Link verification failed or expired. Restart from your wallet profile.");
           }
-        }
-
-        // PRIORITY 2: Look up by Supabase auth user id (returning Google user)
-        const { data: existing } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (existing) {
-          setUnifiedProfile(existing, user);
-          return;
-        }
-
-        // PRIORITY 3: Look up by google_id (account was merged, ID differs)
-        const { data: byGoogleId } = await supabase
-          .from("users")
-          .select("*")
-          .eq("google_id", googleId)
-          .maybeSingle();
-
-        if (byGoogleId) {
-          setUnifiedProfile(byGoogleId, user);
-          return;
-        }
-
-        // PRIORITY 4: Check by email for potential auto-linking (same email)
-        const userEmail = user.email;
-        if (userEmail) {
-          const { data: emailMatch } = await supabase
-            .from("users")
-            .select("*")
-            .eq("email", userEmail)
-            .maybeSingle();
-
-          if (emailMatch && !emailMatch.google_id) {
-            console.log("[AUTH] Auto-linking by email match (same email proves ownership)");
-            const { data: updated, error: updateErr } = await supabase
-              .from("users")
-              .update({
-                google_id: googleId,
-                auth_provider: emailMatch.wallet_address ? "both" : "google",
-                avatar:
-                  emailMatch.avatar ||
-                  user.user_metadata?.avatar_url ||
-                  null,
-              })
-              .eq("id", emailMatch.id)
-              .select()
-              .single();
-
-            if (!updateErr && updated) {
-              setUnifiedProfile(updated, user);
-              return;
-            }
+          const response = await fetchWithTimeout("/api/auth/session", { method: "POST", headers });
+          const result = await response.json();
+          if (authEpochRef.current !== epoch) return;
+          if (!response.ok || !result.user) {
+            setUnifiedProfile(null, null);
+            setAuthError(result.code === "identity_reverification_required"
+              ? "This account link needs verification. Sign out, connect your wallet, then choose Verify Google link in Profile and sign in to the same Google account."
+              : "Your account could not be loaded. Please retry signing in.");
+            return;
           }
+          setAuthError(null);
+          setUnifiedProfile(result.user, session.user);
+        } catch (error) {
+          if (authEpochRef.current !== epoch) return;
+          setUnifiedProfile(null, null);
+          setAuthError(error instanceof Error && error.message.startsWith("Account link conflict") ? error.message : "Account verification could not finish. Restart linking from your wallet profile.");
         }
-
-        // PRIORITY 5: Create new Google-only user (fresh Google sign-up)
-        // Set is_onboarded: false so they go through OnboardingModal to pick a username
-        const { data: created, error: createErr } = await supabase
-          .from("users")
-          .upsert(
-            {
-              id: user.id,
-              name:
-                user.user_metadata?.full_name ??
-                user.user_metadata?.name ??
-                null,
-              email: user.email ?? null,
-              avatar: user.user_metadata?.avatar_url ?? null,
-              google_id: googleId,
-              auth_provider: "google",
-              is_onboarded: false,
-              wallet_address: null,
-            },
-            { onConflict: "id", ignoreDuplicates: true }
-          )
-          .select()
-          .maybeSingle();
-
-        if (createErr) {
-          console.error("[AUTH] Google user creation failed:", createErr);
-          setProfile(null);
-          return;
-        }
-
-        if (created) {
-          setUnifiedProfile(created, user);
-        } else {
-          const { data: existingFetch } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", user.id)
-            .maybeSingle();
-          if (existingFetch) {
-            setUnifiedProfile(existingFetch, user);
-          } else {
-            setProfile(null);
-          }
-        }
-      } catch (err) {
-        console.error("[AUTH] handleGoogleSignIn error:", err);
-        setProfile(null);
-      }
+      })();
+      oauthRequestRef.current = { subject, promise: work };
+      try { await work; }
+      finally { if (oauthRequestRef.current?.promise === work) oauthRequestRef.current = null; }
     },
     [supabase, address, isConnected, ethBalance]
   );
@@ -472,6 +362,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (event === "SIGNED_OUT") {
+          authEpochRef.current++;
+          oauthRequestRef.current = null;
           if (!isConnectedRef.current) {
             setProfile(null);
             setNeedsOnboarding(false);
@@ -673,141 +565,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Supabase session handler (Google/OAuth) ─────────────────────────
   const handleSession = async (session: Session | null) => {
-    if (!supabase) return;
     if (!session?.user) {
-      setProfile(null);
-      setNeedsOnboarding(false);
+      authEpochRef.current++;
+      oauthRequestRef.current = null;
+      setUnifiedProfile(null, null);
       return;
     }
-
-    const sessionWalletAddress =
-      (session.user.user_metadata?.wallet_address as string | undefined) ||
-      (address ?? null);
-    const walletLower = sessionWalletAddress?.toLowerCase?.() ?? null;
-
+    if (session.user.identities?.some(identity => identity.provider === "google")) {
+      await handleGoogleSignInRef.current?.(session);
+      return;
+    }
+    const epoch = ++authEpochRef.current;
     try {
-      let userProfile = null;
-
-      // Step 1: Try lookup by Supabase auth id
-      const { data: byId, error: idErr } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      if (idErr)
-        console.error("[AUTH] fetch profile by id error:", idErr);
-
-      if (byId) {
-        userProfile = byId;
-      } else if (walletLower) {
-        // Step 2: If not found by id, try by wallet_address
-        const { data: byWallet, error: walletErr } = await supabase
-          .from("users")
-          .select("*")
-          .eq("wallet_address", walletLower)
-          .maybeSingle();
-
-        if (walletErr)
-          console.error("[AUTH] fetch profile by wallet error:", walletErr);
-        if (byWallet) userProfile = byWallet;
-      }
-
-      // Step 3: Google session, try by google_id
-      if (!userProfile && session.user.app_metadata?.provider === "google") {
-        const googleId =
-          session.user.identities?.[0]?.id ?? session.user.id;
-        const { data: byGoogleId, error: googleErr } = await supabase
-          .from("users")
-          .select("*")
-          .eq("google_id", googleId)
-          .maybeSingle();
-
-        if (googleErr)
-          console.error("[AUTH] fetch profile by google_id error:", googleErr);
-        if (byGoogleId) userProfile = byGoogleId;
-      }
-
-      if (userProfile) {
-        setUnifiedProfile(userProfile, session.user);
-        return;
-      }
-
-      // Don't attempt insert if wallet_address is null
-      if (!walletLower) {
-        console.warn(
-          "[AUTH] No wallet_address available, skipping user creation from session"
-        );
-        setProfile(null);
-        return;
-      }
-
-      const insertPayload = {
-        id: session.user.id,
-        wallet_address: walletLower,
-        name: session.user.user_metadata?.name ?? null,
-        email: session.user.email ?? null,
-        avatar: session.user.user_metadata?.avatar_url ?? null,
-        auth_provider: "wallet" as const,
-        is_onboarded: false,
-      };
-
-      const { data: inserted, error: insertError } = await supabase
-        .from("users")
-        .insert(insertPayload)
-        .select("*")
-        .maybeSingle();
-
-      if (insertError) {
-        if (insertError.code === "23505") {
-          let existing = null;
-          const { data: byIdRetry } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", session.user.id)
-            .maybeSingle();
-          if (byIdRetry) {
-            existing = byIdRetry;
-          } else if (walletLower) {
-            const { data: byWallet } = await supabase
-              .from("users")
-              .select("*")
-              .eq("wallet_address", walletLower)
-              .maybeSingle();
-            existing = byWallet;
-          }
-          if (existing) {
-            setUnifiedProfile(existing, session.user);
-          } else {
-            console.error(
-              "[AUTH] 23505 conflict but couldn't find existing user"
-            );
-            setProfile(null);
-          }
-        } else {
-          console.error(
-            "[AUTH] failed to create public.users row:",
-            insertError
-          );
-          setProfile(null);
-        }
-      } else if (inserted) {
-        setUnifiedProfile(inserted, session.user);
-      } else {
-        const { data: existing } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .maybeSingle();
-        if (existing) {
-          setUnifiedProfile(existing, session.user);
-        } else {
-          setProfile(null);
-        }
-      }
-    } catch (err) {
-      console.error("[AUTH] handleSession unexpected:", err);
-      setProfile(null);
+      const response = await fetchWithTimeout("/api/user/profile", { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const result = await response.json();
+      if (authEpochRef.current !== epoch) return;
+      setUnifiedProfile(response.ok ? result.user : null, response.ok ? session.user : null);
+    } catch {
+      if (authEpochRef.current === epoch) setUnifiedProfile(null, null);
     }
   };
   handleSessionRef.current = handleSession;
@@ -851,17 +626,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log(
               "[AUTH] Active Supabase session detected — skipping wallet auto-login. Use 'Link Wallet' to connect."
             );
-            // Try to load the profile for this Google session user so the
-            // UI doesn't stay in a loading/null state.
-            const { data: sessionUser } = await supabase
-              .from("users")
-              .select("*")
-              .eq("id", existingSession.user.id)
-              .maybeSingle();
-
-            if (sessionUser) {
-              setUnifiedProfile(sessionUser, existingSession.user);
-            }
+            // Reuse canonical server resolution; an OAuth subject may map to
+            // a different domain profile after verified wallet linking.
+            await handleSessionRef.current?.(existingSession);
             return;
           }
         }
@@ -969,6 +736,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   const signOut = useCallback(async () => {
+    authEpochRef.current++;
+    oauthRequestRef.current = null;
+    setAuthError(null);
+    sessionStorage.removeItem("googleLinkingProof");
     if (!supabase) return;
     await supabase.auth.signOut();
     // Clear httpOnly wallet JWT cookie via server endpoint
@@ -1052,7 +823,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>
+      {authError && <div role="alert" className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">{authError} <button type="button" onClick={() => void signOut()} className="ml-2 underline">Sign out to verify your wallet</button></div>}
+      {children}
+    </AuthContext.Provider>
   );
 }
 

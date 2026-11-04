@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
+import { apiFetch } from "@/lib/api";
 import {
   useProfileData,
   useUserStories,
@@ -315,7 +316,7 @@ export default function ProfilePage() {
     email: "",
   });
 
-  // Preferences State (Local UI state for now)
+  // Persisted through the authenticated server API.
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
     publicProfile: true,
@@ -324,6 +325,10 @@ export default function ProfilePage() {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const preferenceSaveRef = useRef(false);
+  const latestProfileOwner = useRef(authInfo?.id);
+  latestProfileOwner.current = authInfo?.id;
   const [isLinkingWallet, setIsLinkingWallet] = useState(false);
   const [isLinkingGoogle, setIsLinkingGoogle] = useState(false);
   const [currentTab, setCurrentTab] = useState("overview");
@@ -342,21 +347,21 @@ export default function ProfilePage() {
     if (!authInfo?.id || !address) return;
     setIsLinkingWallet(true);
     try {
-      const message = `Link wallet ${address.toLowerCase()} to eStories account ${authInfo.id}`;
-      const signature = await signMessageAsync({ message });
       const token = await getAccessToken();
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && token !== "cookie" ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const started = await fetch("/api/auth/initiate-link", {
+        method: "POST", credentials: "same-origin", headers,
+        body: JSON.stringify({ direction: "google_to_wallet", walletAddress: address }),
+      });
+      const challenge = await started.json();
+      if (!started.ok) throw new Error(challenge.error || "Linking unavailable");
+      const signature = await signMessageAsync({ message: challenge.message });
       const res = await fetch("/api/auth/link-account", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          userId: authInfo.id,
-          walletAddress: address,
-          signature,
-          message,
-        }),
+        method: "POST", credentials: "same-origin", headers,
+        body: JSON.stringify({ challengeId: challenge.challengeId, signature }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Linking failed");
@@ -400,35 +405,19 @@ export default function ProfilePage() {
 
     setIsLinkingGoogle(true);
     try {
-      // Step 1: Sign message to prove wallet ownership
-      const message = `Link Google account to eStories wallet ${address.toLowerCase()}\n\nTimestamp: ${Date.now()}`;
-      const signature = await signMessageAsync({ message });
-
-      // Step 2: Get secure linking token from server
       const res = await fetch("/api/auth/initiate-link", {
-        method: "POST",
+        method: "POST", credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: authInfo.id,
-          walletAddress: address,
-          signature,
-          message,
-        }),
+        body: JSON.stringify({ direction: "wallet_to_google", walletAddress: address }),
       });
-
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to initiate linking");
-      }
-
-      // Step 3: Store token in sessionStorage for AuthProvider to use after OAuth
-      sessionStorage.setItem("googleLinkingToken", data.linkingToken);
-      sessionStorage.setItem("googleLinkingUserId", authInfo.id);
-
-      // Step 4: Start OAuth flow
+      if (!res.ok) throw new Error(data.error || "Failed to initiate linking");
+      const signature = await signMessageAsync({ message: data.message });
+      sessionStorage.setItem("googleLinkingProof", JSON.stringify({ challengeId: data.challengeId, signature }));
       await signInWithGoogle();
       // OAuth redirect will handle the rest
     } catch (err: any) {
+      sessionStorage.removeItem("googleLinkingProof");
       sessionStorage.removeItem("googleLinkingToken");
       sessionStorage.removeItem("googleLinkingUserId");
       if (err.message?.includes("User rejected") || err.code === "ACTION_REJECTED") {
@@ -469,16 +458,21 @@ export default function ProfilePage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
   e.preventDefault();
-  if (!supabase || !authInfo?.id) return toast.error("Not authenticated");
+  if (!authInfo?.id) return toast.error("Not authenticated");
+  const ownerAtStart = authInfo.id;
 
   setIsSaving(true);
   try {
-    const { error } = await supabase
-      .from("users")
-      .update(formData)
-      .eq("id", authInfo.id);
-
-    if (error) throw error;
+    const updates = Object.fromEntries(Object.entries(formData).filter(([key, value]) =>
+      value !== (profileData?.[key as keyof ProfileFormData] ?? "")));
+    if (Object.keys(updates).length) {
+      const token = await getAccessToken();
+      if (latestProfileOwner.current !== ownerAtStart) return;
+      await apiFetch(token, "/api/user/profile", {
+        method: "PUT", headers: { "x-profile-owner-id": ownerAtStart }, body: JSON.stringify(updates),
+      });
+    }
+    if (latestProfileOwner.current !== ownerAtStart) return;
 
     // --- NEW: Check if we should send a welcome email ---
     // Logic: If email is present AND different from what we had (or it's first setup)
@@ -506,32 +500,38 @@ export default function ProfilePage() {
 };
 
   const togglePreference = async (key: keyof typeof preferences) => {
+    if (preferenceSaveRef.current) return;
+    if (!authInfo?.id) return toast.error("Not authenticated");
+    const ownerAtStart = authInfo.id;
+    preferenceSaveRef.current = true;
+    setIsSavingPreferences(true);
     const newPrefs = { ...preferences, [key]: !preferences[key] };
     setPreferences(newPrefs);
-
-    // Persist to database
-    if (supabase && authInfo?.id) {
+    try {
       const dbPrefs = {
         email_notifications: newPrefs.emailNotifications,
         public_profile: newPrefs.publicProfile,
         ai_enhancement: newPrefs.aiEnhancement,
         re_engagement_emails: newPrefs.reEngagementEmails,
       };
-      const { error } = await supabase
-        .from("users")
-        .update({ notification_preferences: dbPrefs })
-        .eq("id", authInfo.id);
-
-      if (error) {
-        console.error("[PROFILE] Preference save error:", error);
-        // Revert on failure
+      const token = await getAccessToken();
+      if (latestProfileOwner.current !== ownerAtStart) return;
+      await apiFetch(token, "/api/user/profile", {
+        method: "PUT", headers: { "x-profile-owner-id": ownerAtStart },
+        body: JSON.stringify({ notification_preferences: dbPrefs }),
+      });
+      if (latestProfileOwner.current !== ownerAtStart) return;
+      queryClient.invalidateQueries({ queryKey: queryKeys.user.profile(ownerAtStart) });
+      toast.success("Preference updated");
+    } catch {
+      if (latestProfileOwner.current === ownerAtStart) {
         setPreferences(preferences);
         toast.error("Failed to save preference");
-        return;
       }
-      queryClient.invalidateQueries({ queryKey: queryKeys.user.profile(authInfo.id) });
+    } finally {
+      preferenceSaveRef.current = false;
+      setIsSavingPreferences(false);
     }
-    toast.success("Preference updated");
   };
 
   const handleDeleteAccount = async () => {
@@ -569,6 +569,7 @@ export default function ProfilePage() {
     if (todaysStories.length < 2) return toast.error("Need at least 2 stories today to compile.");
     if (!authInfo?.id || !supabase) return;
 
+    if (!window.confirm("Publish today’s stories publicly and permanently on IPFS? This includes any private stories in today’s selection.")) return;
     const toastId = toast.loading("Compiling Daily Journal...");
 
     try {
@@ -587,7 +588,7 @@ export default function ProfilePage() {
        };
 
        // 2. Upload to IPFS
-       const ipfsResult = await ipfsService.uploadMetadata(metadata, await getAccessToken());
+       const ipfsResult = await ipfsService.uploadMetadata(metadata, await getAccessToken(), { visibility: "public" });
        if(!ipfsResult?.hash) throw new Error("IPFS upload failed");
        
        // 3. Mint
@@ -1113,7 +1114,7 @@ export default function ProfilePage() {
                                 )}
                               </div>
                             </div>
-                            {!isGoogleLinked && (
+                            {(authInfo?.wallet_address || !isGoogleLinked) && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1121,7 +1122,7 @@ export default function ProfilePage() {
                                 disabled={isLinkingGoogle || !address}
                                 title={!address ? "Connect wallet first" : undefined}
                               >
-                                {isLinkingGoogle ? <Loader2 className="w-4 h-4 animate-spin" /> : "Link Google"}
+                                {isLinkingGoogle ? <Loader2 className="w-4 h-4 animate-spin" /> : isGoogleLinked ? "Verify Google link" : "Link Google"}
                               </Button>
                             )}
                           </div>
@@ -1194,7 +1195,7 @@ export default function ProfilePage() {
                               <Label className="text-base">Email Notifications</Label>
                               <p className="text-xs text-gray-500">Receive updates about new followers and tips.</p>
                           </div>
-                          <Button variant={preferences.emailNotifications ? "default" : "outline"} onClick={() => togglePreference("emailNotifications")} size="sm">
+                          <Button disabled={isSavingPreferences} variant={preferences.emailNotifications ? "default" : "outline"} onClick={() => togglePreference("emailNotifications")} size="sm">
                              {preferences.emailNotifications ? "Enabled" : "Disabled"}
                           </Button>
                       </div>
@@ -1204,7 +1205,7 @@ export default function ProfilePage() {
                               <Label className="text-base">Public Profile</Label>
                               <p className="text-xs text-gray-500">Allow others to see your stories on the social feed.</p>
                           </div>
-                          <Button variant={preferences.publicProfile ? "default" : "outline"} onClick={() => togglePreference("publicProfile")} size="sm">
+                          <Button disabled={isSavingPreferences} variant={preferences.publicProfile ? "default" : "outline"} onClick={() => togglePreference("publicProfile")} size="sm">
                              {preferences.publicProfile ? <Eye className="w-4 h-4 mr-2"/> : <Shield className="w-4 h-4 mr-2"/>}
                              {preferences.publicProfile ? "Public" : "Private"}
                           </Button>
@@ -1215,7 +1216,7 @@ export default function ProfilePage() {
                               <Label className="text-base">AI Enhancements</Label>
                               <p className="text-xs text-gray-500">Automatically suggest improvements for your stories.</p>
                           </div>
-                          <Button variant={preferences.aiEnhancement ? "default" : "outline"} onClick={() => togglePreference("aiEnhancement")} size="sm">
+                          <Button disabled={isSavingPreferences} variant={preferences.aiEnhancement ? "default" : "outline"} onClick={() => togglePreference("aiEnhancement")} size="sm">
                              {preferences.aiEnhancement ? <Zap className="w-4 h-4 mr-2 fill-current"/> : "Disabled"}
                              {preferences.aiEnhancement ? "On" : "Off"}
                           </Button>

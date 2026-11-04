@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File | null;
     const userId = formData.get("userId") as string | null;
 
-    if (!file) {
+    if (formData.get("visibility") !== "public") {
+      return NextResponse.json({ error: "Public audio publication requires explicit consent. Private audio storage is not available yet." }, { status: 400 });
+    }
+    if (!(file instanceof Blob)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 

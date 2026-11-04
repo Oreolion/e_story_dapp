@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { z } from "zod";
+import { externalMediaEnabled } from "@/lib/runtime/config";
 
 // ============================================================================
 // Book Compilation API
@@ -34,9 +36,12 @@ export async function POST(request: NextRequest) {
     // Auth check
     const authResult = await validateAuthOrReject(request);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
+    if (!externalMediaEnabled()) return NextResponse.json({ error: "Public book compilation is unavailable in this environment" }, { status: 503 });
 
     const body = await request.json();
+    const publication = z.object({ visibility: z.literal("public"), entryIds: z.array(z.string().uuid()).min(1).max(50), title: z.string().max(200).optional(), description: z.string().max(2000).optional() }).safeParse(body);
+    if (!publication.success || new Set(publication.data.entryIds).size !== publication.data.entryIds.length) return NextResponse.json({ error: "Explicit public publication and unique valid story IDs are required" }, { status: 400 });
     const { title, entryIds, description, coverStyle, authorId, authorWallet } = body;
 
     // Validate input
@@ -78,7 +83,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!stories || stories.length === 0) {
+    if (!stories || stories.length !== entryIds.length) {
       return NextResponse.json(
         { error: 'No valid stories found with the provided IDs' },
         { status: 404 }
@@ -113,6 +118,7 @@ export async function POST(request: NextRequest) {
         mood: story.mood,
       })),
     };
+    if (Buffer.byteLength(JSON.stringify(bookMetadata)) > 1024 * 1024) return NextResponse.json({ error: "Book metadata exceeds 1MB" }, { status: 413 });
 
     // 3. Upload to IPFS via Pinata
     const pinataJWT = process.env.PINATA_JWT;

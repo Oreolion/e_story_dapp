@@ -45,7 +45,7 @@ const features = [
     icon: Mic,
     title: "Just talk",
     description:
-      "Hit record and speak. About your day, a realization, a memory. AI transcribes perfectly. No typing required.",
+      "Hit record and speak. About your day, a realization, a memory. AI creates a transcript you can review and correct.",
   },
   {
     icon: Brain,
@@ -57,7 +57,7 @@ const features = [
     icon: Lock,
     title: "Yours forever",
     description:
-      "Your stories are encrypted and stored permanently. No platform shutdown, no acquisition, no server failure can touch them.",
+      "Save stories to your account. An optional Local Vault encrypts a copy on this device; export backups for safekeeping.",
   },
   {
     icon: BookOpen,
@@ -129,7 +129,7 @@ const steps = [
     icon: ShieldCheck,
     title: "Own",
     description:
-      "Your stories are encrypted and stored permanently. No platform can delete them. No company can sell them. They're yours.",
+      "Keep private stories in your account and choose what to publish. Public IPFS publication can be permanent.",
   },
 ];
 
@@ -574,7 +574,7 @@ export default function HomePage() {
               icon: EyeOff,
               title: "We don't read your stories",
               description:
-                "Your entries are encrypted. We couldn't read them even if we wanted to.",
+                "Private entries are stored in your account. The optional Local Vault encrypts a separate copy on your device.",
             },
             {
               icon: Lock,
@@ -695,7 +695,7 @@ export default function HomePage() {
                   "Weekly AI reflections",
                   "Advanced theme & pattern tracking",
                   "Storytelling progress reports",
-                  "Priority CRE verification",
+                  "On-chain verification — Coming soon",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2.5">
                     <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
@@ -774,7 +774,7 @@ export default function HomePage() {
               {[
                 {
                   q: "What can I write about on eStories?",
-                  a: "Anything you're passionate about! Personal journals, historical narratives, geopolitical analysis, cultural stories, creative non-fiction, memoirs, travel writing — the platform is for all forms of storytelling. Private stories stay encrypted; public stories can be shared with the community.",
+                  a: "Anything you're passionate about! Personal journals, historical narratives, geopolitical analysis, cultural stories, creative non-fiction, memoirs, travel writing — the platform is for all forms of storytelling. Private stories stay in your account; public stories can be shared with the community.",
                 },
                 {
                   q: "How does the AI help me become a better writer?",
@@ -782,7 +782,7 @@ export default function HomePage() {
                 },
                 {
                   q: "Is my data private and secure?",
-                  a: "Yes. Private stories are encrypted with AES-256-GCM in your browser before storage — we literally cannot read them. Your encryption key is derived from your PIN and never leaves your device. For public stories, Chainlink CRE provides verifiable AI analysis without exposing raw data on-chain.",
+                  a: "Private stories are stored in your account. The optional Local Vault encrypts a separate copy on this device with AES-256-GCM. AI features send input to the configured AI provider. Public IPFS publication can be permanent. On-chain verification is coming soon; testnet verification is parked.",
                 },
                 {
                   q: "Do I need a crypto wallet?",
@@ -793,8 +793,8 @@ export default function HomePage() {
                   a: "$STORY is an ERC-20 token on Base (Ethereum L2) being developed for the creator economy — tipping, paywalled stories, and NFT minting. It is currently on testnet and will launch on mainnet once the platform reaches critical adoption. You don't need tokens to use eStories today.",
                 },
                 {
-                  q: "What is CRE-verified quality?",
-                  a: "Chainlink CRE runs AI analysis across multiple independent nodes inside encrypted enclaves. The nodes reach consensus and write a cryptographic proof on-chain. Quality ratings on paywalled stories are verifiable and tamper-proof — readers can trust the score before purchasing.",
+                  q: "Is on-chain verification available?",
+                  a: "On-chain verification is coming soon. Testnet CRE verification is parked while its proof and delivery guarantees are reviewed. Current AI insights are interpretations, not on-chain attestations.",
                 },
                 {
                   q: "How do story collections work?",
@@ -802,11 +802,11 @@ export default function HomePage() {
                 },
                 {
                   q: "Can I cancel anytime?",
-                  a: "Yes. Upgrade, downgrade, or cancel at any time. Your stories are always yours — they stay in your encrypted vault regardless of your plan.",
+                  a: "Yes. Upgrade, downgrade, or cancel at any time. Your existing stories remain available in your account regardless of your plan.",
                 },
                 {
                   q: "What happens if eStories shuts down?",
-                  a: "Your private stories live in your browser's encrypted local vault — on your device, not our servers. Public stories have permanent blockchain provenance. Audio is on IPFS (decentralized). Your content survives independently.",
+                  a: "Stories in your account depend on our service. If enabled, the Local Vault keeps an encrypted device copy; export a backup before clearing browser storage. Explicitly published IPFS content may remain available independently. On-chain verification is coming soon.",
                 },
               ].map((faq) => (
                 <FAQItem key={faq.q} question={faq.q} answer={faq.a} />

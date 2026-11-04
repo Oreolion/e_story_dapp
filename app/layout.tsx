@@ -13,6 +13,7 @@ import { MetaPixel } from "../components/MetaPixel";
 import { CookieConsent } from "../components/CookieConsent";
 
 const inter = Inter({ subsets: ["latin"] });
+const isStaging = process.env.APP_ENV === "staging";
 const loveLight = Love_Light({
   weight: "400",
   subsets: ["latin"],
@@ -20,7 +21,7 @@ const loveLight = Love_Light({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://estories.app"),
+  metadataBase: new URL(isStaging ? process.env.NEXT_PUBLIC_APP_URL ?? "https://staging.invalid" : "https://estories.app"),
   title: {
     default: "eStories - AI-Powered Sovereign Storytelling",
     template: "%s | eStories",
@@ -43,11 +44,11 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "eStories Team" }],
   robots: {
-    index: true,
-    follow: true,
+    index: !isStaging,
+    follow: !isStaging,
     googleBot: {
-      index: true,
-      follow: true,
+      index: !isStaging,
+      follow: !isStaging,
       "max-image-preview": "large",
       "max-snippet": -1,
       "max-video-preview": -1,
@@ -113,7 +114,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <MetaPixel />
+        {!isStaging && <MetaPixel />}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -130,6 +131,7 @@ export default async function RootLayout({
           <GlobalBackgroundDynamic />
 
           <div className="relative min-h-screen flex flex-col">
+            {isStaging && <div role="status" className="relative z-50 bg-amber-100 px-4 py-2 text-center text-sm text-amber-950">Staging — synthetic data only. AI responses may be fixtures.</div>}
             <Navigation />
             <main className="container mx-auto px-4 py-8 flex-1 relative z-10">
               {children}
@@ -145,8 +147,8 @@ export default async function RootLayout({
             />
           </div>
         </ProvidersDynamic>
-        <Analytics />
-        <SpeedInsights />
+        {!isStaging && <Analytics />}
+        {!isStaging && <SpeedInsights />}
         <CookieConsent />
       </body>
     </html>

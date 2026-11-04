@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["./**/*.ts", "../scripts/evaluate-ai.ts"],
+  "exclude": ["../node_modules", "../cre", "../mobile"]
+}

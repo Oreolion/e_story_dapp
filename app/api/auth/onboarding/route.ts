@@ -4,6 +4,7 @@ import { validateAuthOrReject, isAuthError } from "@/lib/auth";
 import { Resend } from "resend";
 import WelcomeEmail from "@/components/emails/WelcomeEmail";
 import { buildUnsubscribeUrl } from "@/lib/unsubscribeToken";
+import { assertEmailRecipient } from "@/lib/runtime/config";
 
 let _resend: Resend | null = null;
 function getResend() {
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
     // the response is returned, which silently drops the welcome email.
     try {
       if (email) {
+        assertEmailRecipient(email);
         const unsubscribeUrl = buildUnsubscribeUrl(authenticatedUserId, "all");
         await getResend().emails.send({
           from: "EStories <noreply@estories.app>",

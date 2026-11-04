@@ -1,0 +1,40 @@
+name: AI correctness evaluations
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps --ignore-scripts
+      - run: node scripts/install-runtime-compat.mjs
+      - run: npx tsc --project evals/tsconfig.json --noEmit
+      - run: npx eslint evals scripts/evaluate-ai.ts
+      - run: npm run eval:ai:check
+      - run: npm run eval:ai
+      - run: npm run eval:ai -- --product
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-ai-evaluation-report
+          path: output/evaluations/
+          if-no-files-found: warn
+          retention-days: 14
+
+# CI calls this workflow before its build/browser acceptance job. The fixture
+# reports remain advisory about semantic quality; they do not approve a release.
+# Parent CI owns the full web typecheck/unit suite; do not duplicate it here.

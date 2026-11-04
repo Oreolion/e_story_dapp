@@ -43,10 +43,10 @@ jobs:
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          expected_version="${EXPECTED_SHA:0:7}"
+          expected_version="$EXPECTED_SHA"
           for attempt in $(seq 1 30); do
             if health=$(curl --fail --silent --show-error --max-time 15 "https://estories.app/api/health?release=${EXPECTED_SHA}"); then
-              deployed_version=$(printf '%s' "$health" | jq -r '.version // empty')
+              deployed_version=$(printf '%s' "$health" | jq -r '.commitSha // empty')
               if [ "$deployed_version" = "$expected_version" ]; then
                 echo "Verified production commit $expected_version"
                 exit 0
@@ -72,8 +72,10 @@ jobs:
 
       - name: Check Sentry Token
         id: sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
-          if [ -n "${{ secrets.SENTRY_AUTH_TOKEN }}" ]; then
+          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
             echo "has_token=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_token=false" >> "$GITHUB_OUTPUT"
@@ -95,4 +97,4 @@ jobs:
       - name: Notify on Failure
         if: failure()
         run: |
-          echo "::error::Production smoke tests failed after deploy. Consider rolling back via GitHub Actions > Rollback Production."
+          echo "::error::Production smoke tests failed. Prepare an exact rollback candidate via GitHub Actions > Prepare Production Rollback, then review schema compatibility and run the release gate."

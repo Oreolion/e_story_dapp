@@ -330,6 +330,7 @@ export default function LibraryPage() {
     if (!newBookTitle.trim()) return toast.error("Please enter a book title");
     if (!supabase || !authInfo?.id) return;
 
+    if (!window.confirm("Publish the selected stories publicly and permanently on IPFS? This includes any private stories you selected.")) return;
     setIsSavingBook(true);
     try {
       const selectedStories = entries.filter(
@@ -353,7 +354,7 @@ export default function LibraryPage() {
       };
 
       toast.loading("Uploading Metadata...", { id: "book-toast" });
-      const ipfsResult = await ipfsService.uploadMetadata(metadata, await getAccessToken());
+      const ipfsResult = await ipfsService.uploadMetadata(metadata, await getAccessToken(), { visibility: "public" });
       if (!ipfsResult?.hash) throw new Error("IPFS upload failed");
       const tokenURI = `ipfs://${ipfsResult.hash}`;
 

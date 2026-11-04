@@ -275,13 +275,13 @@ export default function TrackerScreen() {
         return;
       }
 
-      const enhanceRes = await apiPost<{ enhanced: string }>("/api/ai/enhance", {
+      const enhanceRes = await apiPost<{ text: string }>("/api/ai/enhance", {
         text: prompt,
-        type: "journal",
+        task: "tracker",
       });
-      if (enhanceRes.ok && enhanceRes.data?.enhanced) {
+      if (enhanceRes.ok && enhanceRes.data?.text) {
         const saveRes = await apiPost("/api/journal/save", {
-          content: enhanceRes.data.enhanced,
+          content: enhanceRes.data.text,
           source: "tracker",
           mood: selectedMood,
           date: today,

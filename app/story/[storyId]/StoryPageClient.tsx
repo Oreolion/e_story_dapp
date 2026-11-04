@@ -90,7 +90,8 @@ export default function StoryPage({
   const { allowance, approve, isPending: isApproving } = useEStoryToken();
 
   // Metadata hook for canonical status
-  const { metadata: storyMetadata } = useStoryMetadata(storyId);
+  const metadataState = useStoryMetadata(storyId);
+  const storyMetadata = metadataState.metadata;
   // CRE verified metrics hook
   const { metrics: verifiedMetrics, proof: verifiedProof, isPending: isVerifyPending, isVerified, isAuthor: isVerifyAuthor } = useVerifiedMetrics(storyId);
   const {
@@ -848,12 +849,12 @@ export default function StoryPage({
       </motion.div>
 
       {/* AI Insights Section - only show when story content is accessible */}
-      {!isPaywalled && story.content && (
-        <StoryInsights storyId={storyId} storyText={story.content} />
+      {isAuthor && !isPaywalled && story.content && (
+        <StoryInsights storyId={storyId} storyText={story.content} state={metadataState} />
       )}
 
       {/* Verified Metrics - show for all stories with CRE verification */}
-      {(isVerified || isVerifyPending) && !isPaywalled && (
+      {!isPaywalled && (
         <VerifiedMetricsCard
           metrics={verifiedMetrics}
           proof={verifiedProof}

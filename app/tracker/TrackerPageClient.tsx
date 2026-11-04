@@ -229,7 +229,7 @@ export default function TasksPage() {
         const enhanceRes = await fetch("/api/ai/enhance", {
              method: "POST",
              headers,
-             body: JSON.stringify({ text: prompt })
+             body: JSON.stringify({ text: prompt, task: "tracker" })
         });
 
         if (!enhanceRes.ok) throw new Error("AI generation failed");

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { createPaymentAddress, PLAN_PRICES } from "@/lib/blockradar";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { activateSubscription } from "@/lib/subscription";
+import { paymentConfiguration } from "@/lib/payments/receipts";
 
 /**
  * POST /api/payment/create
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
-    const userId = authResult;
+    const userId = await resolveUserId(authResult);
+    try { paymentConfiguration(); } catch { return NextResponse.json({ error: "Payment acceptance unavailable" }, { status: 503 }); }
 
     const body = await req.json();
     const { plan } = body;
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
         { error: "Failed to verify subscription status" },
         { status: 500 }
       );
+    }
+    if (user?.subscription_plan === "creator" && plan === "storyteller" && Date.parse(user.subscription_expires_at ?? "") > Date.now()) {
+      return NextResponse.json({ error: "A lower plan can be purchased after your current Creator period ends." }, { status: 409 });
     }
 
     if (
@@ -78,38 +82,6 @@ export async function POST(req: NextRequest) {
         network: "Base",
         note: "Send exactly the amount shown in USDC to this address. Your subscription will activate automatically.",
       });
-    }
-
-    // Check for completed payments where subscription wasn't activated.
-    // This covers the case where payment was marked "completed" but
-    // activateSubscription failed — retry instead of creating a new address.
-    const { data: completedPayment } = await admin
-      .from("payments")
-      .select("id, plan")
-      .eq("user_id", userId)
-      .eq("plan", plan)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (completedPayment) {
-      // Payment was completed but subscription isn't active (we checked above).
-      // Retry activation.
-      console.warn(`[PAYMENT_CREATE] Found completed payment ${completedPayment.id} without active subscription — activating`);
-      try {
-        const { expiresAt } = await activateSubscription(admin, userId, plan);
-        return NextResponse.json({
-          success: true,
-          activated: true,
-          plan,
-          expires_at: expiresAt,
-          message: "Your payment was already received! Subscription activated.",
-        });
-      } catch (activateErr) {
-        console.error("[PAYMENT_CREATE] Retry activation failed:", activateErr);
-        // Fall through to create new address as last resort
-      }
     }
 
     // Create Blockradar payment address

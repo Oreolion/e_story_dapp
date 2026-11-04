@@ -5,6 +5,7 @@ import WaitlistEmail from "@/components/emails/WaitlistEmail";
 import SubscriptionEmail from "@/components/emails/SubscriptionEmail";
 import { validateAuthOrReject, isAuthError } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { assertEmailRecipient } from "@/lib/runtime/config";
 
 let _resend: Resend | null = null;
 function getResend() {
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid email type" }, { status: 400 });
     }
 
+    assertEmailRecipient(email);
     const data = await getResend().emails.send({
       from: "EStories <noreply@estories.app>",
       to: [email],

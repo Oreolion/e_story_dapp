@@ -1,3 +1,4 @@
+import { useStoryAnalysis } from "../../hooks/useStoryAnalysis";
 // Story Detail Screen - Content, audio, like, share, tip, paywall, CRE badge, metadata, canonical toggle
 import React, { useState, useEffect } from "react";
 import {
@@ -52,7 +53,6 @@ import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { useAuthStore } from "../../stores/authStore";
 import { apiGet, apiPost, apiPatch } from "../../lib/api";
-import { useVerifiedMetrics, getEmotionalDepthLabel } from "../../hooks/useVerifiedMetrics";
 import { useStoryProtocol } from "../../hooks/useStoryProtocol";
 import { useAccount } from "wagmi";
 import type { StoryDataType, CommentDataTypes, StoryMetadata } from "../../types";
@@ -146,19 +146,16 @@ export default function StoryDetailScreen() {
 
   const isOwner =
     isAuthenticated && story && user &&
-    (story.author.wallet_address === user.wallet_address || (story.author as any).id === user.id);
+    (story.author.id === user.id);
 
-  const {
-    metrics: verifiedMetrics,
-    proof,
-    isVerified: isCREVerified,
-    isAuthor: isCREAuthor,
-    isLoading: isVerifying,
-    error: verifyError,
-    triggerVerification,
-  } = useVerifiedMetrics(storyId);
+
+
+  const storyAnalysis = useStoryAnalysis(storyId, user?.id, !!isOwner);
+  useEffect(() => { if (isOwner) { setMetadata(storyAnalysis.metadata); setIsCanonical(storyAnalysis.metadata?.is_canonical === true); } }, [isOwner, storyAnalysis.metadata]);
 
   useEffect(() => {
+    let cancelled = false;
+    setStory(null); setMetadata(null); setComments([]); setLoading(true);
     const fetchStory = async () => {
       try {
         const res = await apiGet<{
@@ -167,7 +164,7 @@ export default function StoryDetailScreen() {
           metadata?: StoryMetadata;
           story_metadata?: StoryMetadata;
         }>(`/api/stories/${storyId}`);
-        if (res.ok && res.data) {
+        if (!cancelled && res.ok && res.data) {
           setStory(res.data.story);
           setComments(res.data.comments || []);
           const meta = res.data.metadata || res.data.story_metadata ||
@@ -179,12 +176,12 @@ export default function StoryDetailScreen() {
       } catch (err) {
         console.error("[StoryDetail] Fetch failed:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     if (storyId) fetchStory();
-    return () => { sound?.unloadAsync(); };
-  }, [storyId]);
+    return () => { cancelled = true; sound?.unloadAsync(); };
+  }, [storyId, user?.id, isAuthenticated]);
 
   const handleLike = async () => {
     if (!story || !isAuthenticated) return;
@@ -593,148 +590,20 @@ export default function StoryDetailScreen() {
           </AnimatedListItem>
         )}
 
-        {/* Verified Metrics Section */}
         <AnimatedListItem index={5}>
-          {WEB3_FEATURES_ENABLED && <TestnetBanner />}
-          {isVerifying ? (
-            <GlassCard intensity="medium" style={{ padding: 20, marginBottom: 16, alignItems: "center" }}>
-              <SkeletonLoader variant="line" count={3} />
-              <Text style={{ marginTop: 12, fontSize: 13, color: "#eab308" }}>
-                Chainlink CRE is verifying this story...
-              </Text>
-            </GlassCard>
-          ) : isCREVerified && isCREAuthor && verifiedMetrics ? (
-            <GlassCard intensity="light" style={{ padding: 16, marginBottom: 16, borderColor: "rgba(52,211,153,0.3)", borderWidth: 1 }}>
-              {/* Header */}
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <ShieldCheck size={18} color="#34d399" />
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: "#34d399" }}>Verified Metrics</Text>
-                </View>
-                {verifiedMetrics.on_chain_tx_hash && (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <ExternalLink size={12} color="#64748b" />
-                    <Text style={{ fontSize: 11, color: "#64748b" }}>
-                      {verifiedMetrics.on_chain_tx_hash.slice(0, 6)}...{verifiedMetrics.on_chain_tx_hash.slice(-4)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Score Bars */}
-              <View style={{ gap: 10, marginBottom: 14 }}>
-                {/* Significance */}
-                <View>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                      <Star size={12} color="#94a3b8" />
-                      <Text style={{ fontSize: 12, color: "#94a3b8" }}>Significance</Text>
-                    </View>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#e2e8f0" }}>{verifiedMetrics.significance_score}/100</Text>
-                  </View>
-                  <View style={{ height: 6, borderRadius: 3, backgroundColor: "rgba(100,116,139,0.3)" }}>
-                    <LinearGradient
-                      colors={["#818cf8", "#a78bfa"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={{ height: 6, borderRadius: 3, width: `${verifiedMetrics.significance_score}%` }}
-                    />
-                  </View>
-                </View>
-
-                {/* Quality */}
-                <View>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                      <Sparkles size={12} color="#94a3b8" />
-                      <Text style={{ fontSize: 12, color: "#94a3b8" }}>Quality</Text>
-                    </View>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#e2e8f0" }}>{verifiedMetrics.quality_score}/100</Text>
-                  </View>
-                  <View style={{ height: 6, borderRadius: 3, backgroundColor: "rgba(100,116,139,0.3)" }}>
-                    <LinearGradient
-                      colors={["#34d399", "#22d3ee"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={{ height: 6, borderRadius: 3, width: `${verifiedMetrics.quality_score}%` }}
-                    />
-                  </View>
-                </View>
-              </View>
-
-              {/* Emotional Depth + Word Count */}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-                <Badge
-                  text={`${getEmotionalDepthLabel(verifiedMetrics.emotional_depth)} Depth`}
-                  color="#f472b6"
-                  bgColor="rgba(244,114,182,0.15)"
-                />
-                <Badge
-                  text={`${verifiedMetrics.word_count.toLocaleString()} words`}
-                  color="#94a3b8"
-                  bgColor="rgba(148,163,184,0.15)"
-                />
-                {proof && (
-                  <Badge
-                    text={`Tier ${proof.qualityTier}`}
-                    color={proof.meetsQualityThreshold ? "#34d399" : "#f59e0b"}
-                    bgColor={proof.meetsQualityThreshold ? "rgba(52,211,153,0.15)" : "rgba(245,158,11,0.15)"}
-                  />
-                )}
-              </View>
-
-              {/* Verified Themes */}
-              {verifiedMetrics.verified_themes && verifiedMetrics.verified_themes.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-                  {verifiedMetrics.verified_themes.map((theme, i) => (
-                    <Badge
-                      key={theme}
-                      text={theme}
-                      color="#34d399"
-                      bgColor="rgba(52,211,153,0.12)"
-                    />
-                  ))}
-                </View>
-              )}
-
-              {/* Footer */}
-              <View style={{ borderTopWidth: 1, borderTopColor: "rgba(100,116,139,0.2)", paddingTop: 10 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <ShieldCheck size={11} color="#64748b" />
-                  <Text style={{ fontSize: 10, color: "#64748b" }}>Verified by Chainlink CRE</Text>
-                </View>
-              </View>
-            </GlassCard>
-          ) : isCREVerified && proof ? (
-            /* Non-author: proof-only badge */
-            <GlassCard intensity="light" style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 14, marginBottom: 16, borderColor: "rgba(52,211,153,0.2)", borderWidth: 1 }}>
-              <ShieldCheck size={18} color="#34d399" />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "500", color: "#34d399" }}>Verified Story</Text>
-                <Text style={{ fontSize: 11, color: "#94a3b8" }}>Quality Tier {proof.qualityTier}/5</Text>
-              </View>
-              {proof.meetsQualityThreshold && (
-                <Badge text="Quality" color="#34d399" bgColor="rgba(52,211,153,0.15)" />
-              )}
-            </GlassCard>
-          ) : isOwner && !isCREVerified ? (
-            /* Owner: verify button */
-            <View style={{ marginBottom: 16 }}>
-              <GradientButton
-                onPress={triggerVerification}
-                title="Verify with Chainlink CRE"
-                icon={<ShieldCheck size={18} color="#fff" />}
-                gradient={GRADIENTS.success}
-                fullWidth
-              />
-              {verifyError && (
-                <Text style={{ marginTop: 6, fontSize: 12, color: "#ef4444", textAlign: "center" }}>
-                  {verifyError}
-                </Text>
-              )}
-            </View>
-          ) : null}
+          <GlassCard intensity="light" style={{ padding: 16, marginBottom: 16 }}>
+            <Text style={{ color: "#e2e8f0", fontWeight: "600" }}>On-chain verification · Coming soon</Text>
+            <Text style={{ color: "#94a3b8", marginTop: 8 }}>Testnet verification is parked. AI insights are not on-chain attestations.</Text>
+          </GlassCard>
         </AnimatedListItem>
+
+        {isOwner && ["queued", "running", "retry_wait", "failed"].includes(storyAnalysis.analysis.status) && (
+          <GlassCard intensity="light" style={{ padding: 16, marginBottom: 16 }}>
+            <Text style={{ color: "#e2e8f0" }}>{storyAnalysis.analysis.status === "failed" ? "AI analysis could not finish." : "AI analysis is processing. Your story is already saved."}</Text>
+            <TouchableOpacity onPress={storyAnalysis.refresh} accessibilityRole="button" style={{ marginTop: 10 }}><Text style={{ color: "#a5b4fc" }}>Refresh status</Text></TouchableOpacity>
+            {storyAnalysis.canRetry && <TouchableOpacity disabled={storyAnalysis.busy} onPress={() => void storyAnalysis.retry()} accessibilityRole="button" style={{ marginTop: 10 }}><Text style={{ color: "#a5b4fc" }}>Retry analysis</Text></TouchableOpacity>}
+          </GlassCard>
+        )}
 
         {/* Key Moment Toggle (owner only) */}
         {isOwner && (

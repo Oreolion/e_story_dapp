@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 
 /**
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
-    const userId = authResult;
+    const userId = await resolveUserId(authResult);
 
     const admin = createSupabaseAdminClient();
     const { data: user, error } = await admin
@@ -20,13 +20,8 @@ export async function GET(req: NextRequest) {
       .eq("id", userId)
       .single();
 
-    if (error || !user) {
-      return NextResponse.json({
-        plan: "free",
-        active: false,
-        expires_at: null,
-      });
-    }
+    if (error) return NextResponse.json({ error: "Subscription status unavailable" }, { status: 503 });
+    if (!user) return NextResponse.json({ error: "Account not found" }, { status: 404 });
 
     const isActive =
       user.subscription_plan &&
@@ -37,7 +32,7 @@ export async function GET(req: NextRequest) {
     // Check for any pending payment (regardless of expiry — user may have sent funds)
     const { data: pendingPayment } = await admin
       .from("payments")
-      .select("payment_address, plan, amount_expected, currency, created_at, expires_at")
+      .select("payment_address, plan, amount_expected, currency, created_at, expires_at, deferred, amount_received")
       .eq("user_id", userId)
       .eq("status", "pending")
       .order("created_at", { ascending: false })

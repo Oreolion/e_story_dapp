@@ -1,113 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { parseJournalInput } from "@/lib/stories/contracts";
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth check
-    const authResult = await validateAuthOrReject(request);
-    if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
-
-    const { title, content, mood, tags, hasAudio, audioUrl, parentStoryId } = await request.json();
-
-    // Validate input
-    if (!content || content.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Content is required' },
-        { status: 400 }
-      );
-    }
-
+    const actor = await validateAuthOrReject(request);
+    if (isAuthError(actor)) return actor;
+    const ownerId = await resolveUserId(actor);
+    let body: ReturnType<typeof parseJournalInput>;
+    try { body = parseJournalInput(await request.json()); }
+    catch { return NextResponse.json({ error: "Invalid journal fields or conflicting aliases" }, { status: 400 }); }
     const admin = createSupabaseAdminClient();
-
-    // Get user's wallet address for the story
-    const { data: user, error: userError } = await admin
-      .from("users")
-      .select("wallet_address")
-      .eq("id", authenticatedUserId)
-      .single();
-
-    if (userError || !user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Insert story into database
-    const { data: story, error: insertError } = await admin
-      .from("stories")
-      .insert({
-        author_id: authenticatedUserId,
-        author_wallet: user.wallet_address,
-        title: title || `Journal Entry ${new Date().toLocaleDateString()}`,
-        content,
-        mood: mood || 'neutral',
-        tags: tags || [],
-        has_audio: !!hasAudio,
-        audio_url: audioUrl || null,
-        likes: 0,
-        comments_count: 0,
-        shares: 0,
-        ...(parentStoryId ? { parent_story_id: parentStoryId } : {}),
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('[JOURNAL/SAVE] Insert error:', insertError);
-      return NextResponse.json(
-        { error: 'Failed to save journal entry' },
-        { status: 500 }
-      );
-    }
-
-    // Trigger AI analysis in the background (fire and forget)
-    try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const authHeader = request.headers.get("Authorization");
-      fetch(`${appUrl}/api/ai/analyze`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
-        body: JSON.stringify({
-          storyId: story.id,
-          storyText: content,
-        }),
-      }).catch(err => console.error("[JOURNAL/SAVE] Analysis trigger failed:", err));
-    } catch {
-      // Non-critical: analysis can be retried later
-    }
-
-    // Trigger CRE verification in the background (fire and forget)
-    try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const authHeader = request.headers.get("Authorization");
-      if (authHeader) {
-        fetch(`${appUrl}/api/cre/trigger`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
-          body: JSON.stringify({ storyId: story.id }),
-        }).catch(err => console.error("[JOURNAL/SAVE] CRE trigger failed:", err));
+    const { data: owner, error } = await admin.from("users").select("wallet_address, subscription_plan, subscription_expires_at").eq("id", ownerId).single();
+    if (error || !owner) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (body.parent_story_id) {
+      if (!owner.subscription_plan || owner.subscription_plan === "free" || Date.parse(owner.subscription_expires_at ?? "") <= Date.now() || !Number.isFinite(Date.parse(owner.subscription_expires_at ?? ""))) {
+        return NextResponse.json({ error: "Story continuations require an active paid plan", code: "PLAN_REQUIRED" }, { status: 403 });
       }
-    } catch {
-      // Non-critical: verification can be triggered manually later
+      const { data: parent, error: parentError } = await admin.from("stories").select("author_id").eq("id", body.parent_story_id).maybeSingle();
+      if (parentError) return NextResponse.json({ error: "Unable to verify parent ownership" }, { status: 503 });
+      if (!parent || parent.author_id !== ownerId) return NextResponse.json({ error: "Parent story not found" }, { status: 404 });
     }
-
-    return NextResponse.json({
-      success: true,
-      data: story,
-      message: 'Journal entry saved successfully!'
-    });
-
-  } catch (error) {
-    console.error('Error saving journal entry:', error);
-    return NextResponse.json(
-      { error: 'Failed to save journal entry' },
-      { status: 500 }
-    );
+    // Migration 020 enqueues analysis in the same transaction as this insert.
+    // No self-HTTP, detached promise, CRE call or auth credentials in a job.
+    const { data: story, error: insertError } = await admin.from("stories").insert({
+      author_id: ownerId, author_wallet: owner.wallet_address,
+      title: body.title ?? `Journal Entry ${new Date().toISOString().slice(0, 10)}`,
+      content: body.content, mood: body.mood, tags: body.tags,
+      has_audio: !!body.audio_url, audio_url: body.audio_url ?? null,
+      is_public: body.is_public, story_type: body.story_type,
+      ...(body.story_date ? { story_date: body.story_date } : {}),
+      ...(body.parent_story_id ? { parent_story_id: body.parent_story_id } : {}),
+      likes: 0, comments_count: 0, shares: 0,
+    }).select().single();
+    if (insertError?.message === "Story write quota exceeded") return NextResponse.json({ error: "Daily story write limit reached" }, { status: 429 });
+    if (insertError || !story) return NextResponse.json({ error: "Failed to save journal entry" }, { status: 500 });
+    return NextResponse.json({ success: true, data: story, message: "Journal entry saved", analysis: { status: body.content.length < 50 ? "skipped" : typeof story.revision === "number" ? "queued" : "unavailable" } });
+  } catch {
+    console.error("Journal save failed");
+    return NextResponse.json({ error: "Failed to save journal entry" }, { status: 500 });
   }
 }

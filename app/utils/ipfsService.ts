@@ -26,9 +26,11 @@ export class IPFSService {
   /**
    * Uploads JSON metadata (for NFTs/Books) to IPFS via our API route.
    */
-  async uploadMetadata(data: any, accessToken?: string | null): Promise<IPFSUploadResult> {
+  async uploadMetadata(data: any, accessToken: string | null | undefined, publication: { visibility: "public" }): Promise<IPFSUploadResult> {
     try {
+      if (publication?.visibility !== "public") throw new Error("Explicit public publication is required");
       const formData = new FormData();
+      formData.append("visibility", "public");
       // Send as stringified JSON
       formData.append("metadata", JSON.stringify(data));
 
@@ -37,6 +39,7 @@ export class IPFSService {
         method: "POST",
         headers: { ...authHeaders },
         body: formData,
+        credentials: "same-origin",
       });
 
       if (!response.ok) {
@@ -54,9 +57,11 @@ export class IPFSService {
   /**
    * Uploads a physical file (Audio/Image) to IPFS via our API route.
    */
-  async uploadFile(file: Blob, accessToken?: string | null): Promise<IPFSUploadResult> {
+  async uploadFile(file: Blob, accessToken: string | null | undefined, publication: { visibility: "public" }): Promise<IPFSUploadResult> {
     try {
+      if (publication?.visibility !== "public") throw new Error("Explicit public publication is required");
       const formData = new FormData();
+      formData.append("visibility", "public");
       formData.append("file", file);
 
       const authHeaders = this.buildAuthHeaders(accessToken);
@@ -64,6 +69,7 @@ export class IPFSService {
         method: "POST",
         headers: { ...authHeaders },
         body: formData,
+        credentials: "same-origin",
       });
 
       if (!response.ok) {

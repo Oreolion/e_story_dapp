@@ -392,15 +392,13 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={async () => {
-                const enabled = await registerForPushNotifications(true);
+                const registration = await registerForPushNotifications();
                 Toast.show({
-                  type: enabled ? "success" : "info",
-                  text1: enabled
+                  type: registration.enabled ? "success" : "info",
+                  text1: registration.enabled
                     ? "Notifications enabled"
-                    : "Notifications remain disabled",
-                  text2: enabled
-                    ? "You can change this in Android settings."
-                    : "Enable permission in Android settings if you previously denied it.",
+                    : "Push notifications unavailable",
+                  text2: registration.message,
                 });
               }}
               accessibilityRole="button"

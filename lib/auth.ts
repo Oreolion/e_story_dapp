@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { verifyWalletToken } from "./jwt";
+import type { User } from "@supabase/supabase-js";
+import { AuthStoreUnavailable, canonicalUserId, type AuthPrincipal } from "./auth/principal";
+import { runtimeConfiguration } from "./runtime/config";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 function getAdminClient() {
+  runtimeConfiguration();
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -17,7 +21,7 @@ function getAdminClient() {
  * Validate Supabase session cookies (Google/OAuth PKCE users).
  * Server-side only — uses @supabase/ssr to read PKCE cookies.
  */
-async function validateSupabaseCookie(request: NextRequest): Promise<string | null> {
+async function validateSupabaseCookie(request: NextRequest): Promise<User | null> {
   try {
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
@@ -32,7 +36,7 @@ async function validateSupabaseCookie(request: NextRequest): Promise<string | nu
     });
     const { data: { user }, error } = await supabase.auth.getUser();
     if (!error && user) {
-      return user.id;
+      return user;
     }
   } catch {
     // ignore
@@ -50,9 +54,9 @@ async function validateSupabaseCookie(request: NextRequest): Promise<string | nu
  *
  * Returns null if no valid auth found.
  */
-export async function validateAuth(
+export async function authenticatePrincipal(
   request: NextRequest
-): Promise<string | null> {
+): Promise<AuthPrincipal | null> {
   try {
     const authHeader = request.headers.get("Authorization");
     const token = authHeader?.startsWith("Bearer ")
@@ -69,7 +73,7 @@ export async function validateAuth(
         } = await supabase.auth.getUser(token);
 
         if (!error && user) {
-          return user.id;
+          return { kind: "supabase", subject: user.id, user };
         }
       } catch {
         /* Supabase token invalid — fall through to wallet JWT */
@@ -78,7 +82,7 @@ export async function validateAuth(
       // 2. Try custom wallet JWT from Bearer header
       const walletPayload = await verifyWalletToken(token);
       if (walletPayload) {
-        return walletPayload.userId;
+        return { kind: "wallet", subject: walletPayload.userId, wallet: walletPayload.wallet };
       }
     }
 
@@ -87,21 +91,21 @@ export async function validateAuth(
     if (cookieToken) {
       const cookiePayload = await verifyWalletToken(cookieToken);
       if (cookiePayload) {
-        return cookiePayload.userId;
+        return { kind: "wallet", subject: cookiePayload.userId, wallet: cookiePayload.wallet };
       }
     }
 
     // 4. Try Supabase session cookies (Google OAuth / PKCE users).
     // Fallback when no Bearer token is sent — the browser sends Supabase
     // auth cookies automatically with same-origin requests.
-    const supabaseUserId = await validateSupabaseCookie(request);
-    if (supabaseUserId) {
-      return supabaseUserId;
+    const user = await validateSupabaseCookie(request);
+    if (user) {
+      return { kind: "supabase", subject: user.id, user };
     }
 
     return null;
   } catch (err) {
-    console.warn("[AUTH] validateAuth unexpected error:", (err as Error)?.message);
+    console.warn("[AUTH] Principal verification unavailable");
     return null;
   }
 }
@@ -113,7 +117,12 @@ export async function validateAuth(
 export async function validateAuthOrReject(
   request: NextRequest
 ): Promise<string | NextResponse> {
-  const userId = await validateAuth(request);
+  let userId: string | null;
+  try { userId = await validateAuth(request); }
+  catch (error) {
+    if (error instanceof AuthStoreUnavailable) return NextResponse.json({ error: "Authentication temporarily unavailable" }, { status: 503 });
+    throw error;
+  }
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -150,41 +159,42 @@ export async function validateWalletOwnership(
  * For wallet JWT users, the ID already points at the users table row
  * (no Supabase auth user indirection). For Supabase OAuth users,
  * the auth uid usually matches the users table ID directly.
- * Falls back to wallet_address lookup if there's an ID mismatch.
+ * validateAuth resolves verified principals before returning a domain ID.
+ * This compatibility helper must not remap a domain ID a second time.
  */
 export async function resolveUserId(
   authenticatedUserId: string
 ): Promise<string> {
-  const supabase = getAdminClient();
-
-  // Fast path: ID directly matches a users row
-  const { data: directUser } = await supabase
-    .from("users")
-    .select("id")
-    .eq("id", authenticatedUserId)
-    .maybeSingle();
-
-  if (directUser) return directUser.id;
-
-  // Slow path: look up via wallet_address from Supabase auth user metadata
-  try {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.admin.getUserById(authenticatedUserId);
-    const walletAddress = authUser?.user_metadata?.wallet_address;
-    if (walletAddress) {
-      const { data: walletUser } = await supabase
-        .from("users")
-        .select("id")
-        .eq("wallet_address", walletAddress.toLowerCase())
-        .maybeSingle();
-      if (walletUser) return walletUser.id;
-    }
-  } catch {
-    // getUserById failed — return original ID
-  }
-
   return authenticatedUserId;
+}
+
+/** OAuth proof must never fall back to a wallet cookie. */
+export async function authenticateSupabasePrincipal(request: NextRequest): Promise<Extract<AuthPrincipal, { kind: "supabase" }> | null> {
+  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  if (token) {
+    try {
+      const { data, error } = await getAdminClient().auth.getUser(token);
+      if (!error && data.user) return { kind: "supabase", subject: data.user.id, user: data.user };
+    } catch { return null; }
+    return null;
+  }
+  const user = await validateSupabaseCookie(request);
+  return user ? { kind: "supabase", subject: user.id, user } : null;
+}
+
+export async function resolvePrincipalId(principal: AuthPrincipal): Promise<string> {
+  return canonicalUserId(async subject => {
+    const { data, error } = await getAdminClient().from("auth_identity_links").select("user_id").eq("auth_user_id", subject).maybeSingle();
+    if (error) throw new AuthStoreUnavailable();
+    if (!data) return null;
+    if (typeof data.user_id !== "string" || !/^[a-f0-9-]{36}$/i.test(data.user_id)) throw new AuthStoreUnavailable();
+    return data.user_id;
+  }, principal);
+}
+
+export async function validateAuth(request: NextRequest): Promise<string | null> {
+  const principal = await authenticatePrincipal(request);
+  return principal ? resolvePrincipalId(principal) : null;
 }
 
 /**

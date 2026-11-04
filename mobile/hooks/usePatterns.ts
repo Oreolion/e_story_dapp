@@ -1,12 +1,11 @@
 // usePatterns - Phase 2 Patterns & Discovery hook (mobile)
 // Fetches stories with metadata via API and computes theme/domain groupings
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { apiGet } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import type {
   StoryWithMetadata,
-  StoryDataType,
   ThemeGroup,
   DomainGroup,
   MonthlySummary,
@@ -27,12 +26,20 @@ interface UsePatternData {
 
 export function usePatterns(): UsePatternData {
   const { isAuthenticated, user } = useAuthStore();
-  const [stories, setStories] = useState<StoryWithMetadata[]>([]);
+  const ownerKey = isAuthenticated ? user?.id ?? "" : "";
+  const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
+  const sequence = useRef(0);
+  const [dataOwner, setDataOwner] = useState(ownerKey);
+  const [cachedStories, setStories] = useState<StoryWithMetadata[]>([]);
+  const stories = dataOwner === ownerKey ? cachedStories : [];
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchPatterns = useCallback(async () => {
+    const request = ++sequence.current;
+    const isCurrent = () => request === sequence.current && currentOwner.current === ownerKey;
     if (!isAuthenticated || !user) {
+      setStories([]);
       setIsLoading(false);
       return;
     }
@@ -41,27 +48,32 @@ export function usePatterns(): UsePatternData {
     setError(null);
 
     try {
-      const res = await apiGet<{ stories: StoryDataType[] }>("/api/stories");
-      if (res.ok && res.data?.stories) {
-        // Filter to user's own stories and cast with metadata
-        const userStories: StoryWithMetadata[] = res.data.stories
-          .filter((s) => s.author.wallet_address === user.wallet_address)
-          .map((s) => ({
-            ...s,
-            story_metadata: (s as any).story_metadata || (s as any).metadata || null,
-          }));
-        setStories(userStories);
+      const collected: StoryWithMetadata[] = [];
+      let offset: number | null = 0;
+      for (let page = 0; page < 20 && offset !== null; page++) {
+        const res: { ok: boolean; data?: { stories: StoryWithMetadata[]; nextOffset?: number | null }; error?: string } = await apiGet(`/api/stories?limit=100&offset=${offset}`);
+        if (!isCurrent()) return;
+        if (!res.ok || !res.data?.stories) throw new Error(res.error || "Failed to fetch patterns");
+        collected.push(...res.data.stories);
+        offset = res.data.nextOffset ?? null;
       }
+      if (offset !== null) throw new Error("Library is too large to calculate all patterns in this view");
+      if (!isCurrent()) return;
+      setDataOwner(ownerKey);
+      setStories(Array.from(new Map(collected.map(story => [story.id, story])).values()));
     } catch (err) {
-      console.error("[usePatterns] Fetch failed:", err);
+      if (!isCurrent()) return;
+      setStories([]);
+      console.error("[usePatterns] Fetch failed");
       setError(err instanceof Error ? err.message : "Failed to fetch patterns");
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, ownerKey]);
 
   useEffect(() => {
-    fetchPatterns();
+    void fetchPatterns();
+    return () => { sequence.current++; };
   }, [fetchPatterns]);
 
   // Compute theme groups

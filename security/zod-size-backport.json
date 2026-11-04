@@ -1,0 +1,254 @@
+{
+  "advisory": "GHSA-mrhx-c7xc-m3w5",
+  "upstreamFix": "https://github.com/colinhacks/zod/commit/a0ebf970f2d752e5f58527cd2942ff48be4f46bd",
+  "reviewedOn": "2026-11-04",
+  "scope": "Web only. Leading declared upper bounds; no implicit bound on unconstrained schemas. Version numbers and raw npm findings remain unchanged.",
+  "packages": [
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod",
+      "version": "3.25.76",
+      "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==",
+      "packageJsonSha256": "70eedbe34fd52385a4ae2f3e5759b19682189f0118ea73a6e7c32c677f61668e"
+    },
+    {
+      "path": "node_modules/@reown/appkit-wallet/node_modules/zod",
+      "version": "3.22.4",
+      "integrity": "sha512-iC+8Io04lddc+mVqQ9AZ7OQ2MrUKGN+oIQyq1vemgt46jwCwLfhq7/pwnBnNXXXZb8VTVLKwp9EDkx+ryxIWmg==",
+      "packageJsonSha256": "838f0403f9ce1f2fc976273f55e0bfc2d9dcc81ad9125c6b015199ddb77c2967"
+    },
+    {
+      "path": "node_modules/zod",
+      "version": "4.6.7",
+      "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==",
+      "packageJsonSha256": "c2d190d9ee4e0bdb60332aaa2130a6a98d65ddb903fe1d29248b15de57832c45"
+    }
+  ],
+  "next": {
+    "version": "15.5.28",
+    "integrity": "sha512-JjhLBBY1PNnuwPtcZ7t8yxVeJVYvD2Jyp633J+gRCNbzSt7N0E+xqCf6uQiff3+3qmUkwcF/ksfSsK1xsZ76Tw=="
+  },
+  "files": [
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v3/helpers/partialUtil.ts",
+      "kind": "fixed",
+      "originalSha256": "68848db44869461bc20373abdcd002e32cb3759e2d5801ba3d9894d2c23db0b1",
+      "patchedSha256": "68848db44869461bc20373abdcd002e32cb3759e2d5801ba3d9894d2c23db0b1"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v3/types.ts",
+      "kind": "v3",
+      "originalSha256": "70309a0877c35d036842e291fe7c8a4439d5db49411d233f8a22bf8a59c41419",
+      "patchedSha256": "d7a78029966cc9770f63ece1587aab5d2815c56ed0a5f130643b78519698a420"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v4/classic/schemas.ts",
+      "kind": "fixed",
+      "originalSha256": "f6856027f9db1203568f4bee15f3ef0a3b9248b6b5e47de2d94bdb4695580ddf",
+      "patchedSha256": "f6856027f9db1203568f4bee15f3ef0a3b9248b6b5e47de2d94bdb4695580ddf"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v4/core/api.ts",
+      "kind": "fixed",
+      "originalSha256": "b3a902d6da03bcba163aeaa3fdcba08810f5d7f049db70fbf71a6181c674abda",
+      "patchedSha256": "b3a902d6da03bcba163aeaa3fdcba08810f5d7f049db70fbf71a6181c674abda"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v4/core/function.ts",
+      "kind": "fixed",
+      "originalSha256": "6f6ca716a34ad66e3861d9a1371014c3669b5b2216cbf84376bbffdd971ef905",
+      "patchedSha256": "6f6ca716a34ad66e3861d9a1371014c3669b5b2216cbf84376bbffdd971ef905"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v4/core/schemas.ts",
+      "kind": "v4-ts",
+      "originalSha256": "5910d2a181b6570189730578df0ff7c90bd7b2cda6ae1064026d236a47fb687d",
+      "patchedSha256": "7ac42bd4c774ddb917bde2de4897ddd0e2e79ad89bc310cc4c1d5b3a78d9484d"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/src/v4/mini/schemas.ts",
+      "kind": "fixed",
+      "originalSha256": "1e36571e7e5dfed9f2ec9818c28e785450adf095a35065e018fe886b32020b6b",
+      "patchedSha256": "1e36571e7e5dfed9f2ec9818c28e785450adf095a35065e018fe886b32020b6b"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v3/types.cjs",
+      "kind": "v3",
+      "originalSha256": "06487cc05ed45c5dd29789bf0aa75734d1ce06592a7f2665ba4ca90a68e8a3e1",
+      "patchedSha256": "80d75875cb811ccd6db48a9cfde866f1a1d8098214c33a5079e7062e24929a61"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v3/types.js",
+      "kind": "v3",
+      "originalSha256": "9763a2938f0e7f983363ef4bf6530e7583e3f2d54f8a4a6684efad58febc6e8e",
+      "patchedSha256": "3327b5d098b4f1ad5ab2fdc3cd5307bc8535068ab693e56c2b5010945288aa86"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/classic/schemas.cjs",
+      "kind": "fixed",
+      "originalSha256": "5dc0fa909b88a21c0f7b7e2e23256dc8c28237388e50e12f6fb3d2dd857e4dd7",
+      "patchedSha256": "5dc0fa909b88a21c0f7b7e2e23256dc8c28237388e50e12f6fb3d2dd857e4dd7"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/classic/schemas.js",
+      "kind": "fixed",
+      "originalSha256": "28b3d92b54eb416e445d53355e9a179b066e8ce113e59b9ea110308040054c6c",
+      "patchedSha256": "28b3d92b54eb416e445d53355e9a179b066e8ce113e59b9ea110308040054c6c"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/core/function.cjs",
+      "kind": "fixed",
+      "originalSha256": "55000849f332f06efca6ed87a7acf932f32900de07dee33a08f8a1aa493d2be3",
+      "patchedSha256": "55000849f332f06efca6ed87a7acf932f32900de07dee33a08f8a1aa493d2be3"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/core/function.js",
+      "kind": "fixed",
+      "originalSha256": "bb5e86228aa80d2d11c1585b7e3ef4c4b8628fbcfef43b4bc7ab2d22665057e5",
+      "patchedSha256": "bb5e86228aa80d2d11c1585b7e3ef4c4b8628fbcfef43b4bc7ab2d22665057e5"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/core/schemas.cjs",
+      "kind": "v4",
+      "originalSha256": "f5d17a7db487c943c9d07cc624010ebb6d93683eabd14339846f4912cc88b51f",
+      "patchedSha256": "7904c36f157788009cbcbdca82af114ed89d059f06e3d78db924f02744a6457e"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/core/schemas.js",
+      "kind": "v4",
+      "originalSha256": "d466582c022b08a3f9eb1a65d5970d8ca25064d73a5a838d76414ae36440a76b",
+      "patchedSha256": "2a4c70ccd10faa7f2a3fd4e26913256e329afe6e51afc7293911c227c4e4c53a"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/mini/schemas.cjs",
+      "kind": "fixed",
+      "originalSha256": "bc620eb1f56fd316da6ffc00d53df3f5d3d5809ab0cfd6e367f7f63de1e68cc5",
+      "patchedSha256": "bc620eb1f56fd316da6ffc00d53df3f5d3d5809ab0cfd6e367f7f63de1e68cc5"
+    },
+    {
+      "path": "node_modules/@base-org/account/node_modules/zod/v4/mini/schemas.js",
+      "kind": "fixed",
+      "originalSha256": "6d5ca49631a07a7da3624743b0977ea3e3a32b2a9319183bd58f5f31a3f4cfab",
+      "patchedSha256": "6d5ca49631a07a7da3624743b0977ea3e3a32b2a9319183bd58f5f31a3f4cfab"
+    },
+    {
+      "path": "node_modules/@reown/appkit-wallet/node_modules/zod/lib/index.mjs",
+      "kind": "v3",
+      "originalSha256": "261f684c8d43538f73fd03d02fb063e10c5a378ed4c5ec654377b9d3bf2eb159",
+      "patchedSha256": "3566837d068de9f4965f57878259039c38091dd895b15aa85032a954ca13832d"
+    },
+    {
+      "path": "node_modules/@reown/appkit-wallet/node_modules/zod/lib/index.umd.js",
+      "kind": "v3",
+      "originalSha256": "091773df10e773fcf5eee91628e8664cb6d447022e594b678624254300aee4cf",
+      "patchedSha256": "0d95d7c1e7382685b530817f886a5b3d990e07cf0c9a774972a94ea4408255d3"
+    },
+    {
+      "path": "node_modules/@reown/appkit-wallet/node_modules/zod/lib/types.js",
+      "kind": "v3",
+      "originalSha256": "a6d505f69c7206366c02c5a219060eaa31c068753456d5cc00048dbd871ea937",
+      "patchedSha256": "3792c1f92858f47b685d9fe42045f0d33b1def59b69787585dd9f611fb5cf807"
+    },
+    {
+      "path": "node_modules/zod/src/v3/helpers/partialUtil.ts",
+      "kind": "fixed",
+      "originalSha256": "68848db44869461bc20373abdcd002e32cb3759e2d5801ba3d9894d2c23db0b1",
+      "patchedSha256": "68848db44869461bc20373abdcd002e32cb3759e2d5801ba3d9894d2c23db0b1"
+    },
+    {
+      "path": "node_modules/zod/src/v3/types.ts",
+      "kind": "v3",
+      "originalSha256": "73b9529564a34fc028a5a62c17e09148747b737039b78b124e84254cb886411a",
+      "patchedSha256": "12ff8eb280a436dc04c6cca285a086626fd6f53da1aaba12f65dfc93810bfb8a"
+    },
+    {
+      "path": "node_modules/zod/src/v4/classic/deep-partial.ts",
+      "kind": "fixed",
+      "originalSha256": "1062f37dcd0689481c69d6af005eb05299818f1383e8c524fdd877d3b12dd6bd",
+      "patchedSha256": "1062f37dcd0689481c69d6af005eb05299818f1383e8c524fdd877d3b12dd6bd"
+    },
+    {
+      "path": "node_modules/zod/src/v4/classic/schemas.ts",
+      "kind": "fixed",
+      "originalSha256": "95b134b255f29fe5ac4dda3f64f85eaabd73a6476910abb175e59de1440fc16e",
+      "patchedSha256": "95b134b255f29fe5ac4dda3f64f85eaabd73a6476910abb175e59de1440fc16e"
+    },
+    {
+      "path": "node_modules/zod/src/v4/core/api.ts",
+      "kind": "fixed",
+      "originalSha256": "9ad4da853ced907f2e5764e5a390f087c0bc8633638a993c50699f0827a5bf5d",
+      "patchedSha256": "9ad4da853ced907f2e5764e5a390f087c0bc8633638a993c50699f0827a5bf5d"
+    },
+    {
+      "path": "node_modules/zod/src/v4/core/json-schema-processors.ts",
+      "kind": "fixed",
+      "originalSha256": "298cce21323ecf8d60a936df8b67e244ceff3e2cc3f0d3003d3afe8658d5730c",
+      "patchedSha256": "298cce21323ecf8d60a936df8b67e244ceff3e2cc3f0d3003d3afe8658d5730c"
+    },
+    {
+      "path": "node_modules/zod/src/v4/core/schemas.ts",
+      "kind": "fixed",
+      "originalSha256": "9a495df5c8e614f1435f8f79618e768e9f3e5a2bc76d784b2c060f51c8e0312e",
+      "patchedSha256": "9a495df5c8e614f1435f8f79618e768e9f3e5a2bc76d784b2c060f51c8e0312e"
+    },
+    {
+      "path": "node_modules/zod/src/v4/mini/schemas.ts",
+      "kind": "fixed",
+      "originalSha256": "0564e616637aa02917854cb0ee22bbc64172c78a111cb422ba1f577d556432ee",
+      "patchedSha256": "0564e616637aa02917854cb0ee22bbc64172c78a111cb422ba1f577d556432ee"
+    },
+    {
+      "path": "node_modules/zod/v3/types.cjs",
+      "kind": "v3",
+      "originalSha256": "7a2f06d88e280bdd198c60e0d292ed7f1e3993e877be4415de07e6abc7746dd1",
+      "patchedSha256": "44fdc596200a44d5648ad86a652d55471bd20ec336db771d9b76917f42acc99f"
+    },
+    {
+      "path": "node_modules/zod/v3/types.js",
+      "kind": "v3",
+      "originalSha256": "d7214e1dacf9e6e70c9ca80247717b4be13b240510428fef132b7da3260d1a32",
+      "patchedSha256": "16505cadefb214bdf95261d591967d2bb590f95d000704dcc38f9d8ec496bf5b"
+    },
+    {
+      "path": "node_modules/zod/v4/classic/schemas.cjs",
+      "kind": "fixed",
+      "originalSha256": "c1870a72d6809d462a90ee1d2bcb67f7f6beea4a504ae56c28b95df50074c4b2",
+      "patchedSha256": "c1870a72d6809d462a90ee1d2bcb67f7f6beea4a504ae56c28b95df50074c4b2"
+    },
+    {
+      "path": "node_modules/zod/v4/classic/schemas.js",
+      "kind": "fixed",
+      "originalSha256": "2bf4a631a18f734a9a7ab7fc11bcf919214774d2235a312dcec0dd53d0324c32",
+      "patchedSha256": "2bf4a631a18f734a9a7ab7fc11bcf919214774d2235a312dcec0dd53d0324c32"
+    },
+    {
+      "path": "node_modules/zod/v4/core/schemas.cjs",
+      "kind": "fixed",
+      "originalSha256": "7e35563b275bcc457a6d8ae0f5e1354b3c499ddd38401439f16bed1b8f357e41",
+      "patchedSha256": "7e35563b275bcc457a6d8ae0f5e1354b3c499ddd38401439f16bed1b8f357e41"
+    },
+    {
+      "path": "node_modules/zod/v4/core/schemas.js",
+      "kind": "fixed",
+      "originalSha256": "0ee56e8afbae28eeb1060a162ad7e56f0675ee6fb83f0ae56bea2e088f6cdbc0",
+      "patchedSha256": "0ee56e8afbae28eeb1060a162ad7e56f0675ee6fb83f0ae56bea2e088f6cdbc0"
+    },
+    {
+      "path": "node_modules/zod/v4/mini/schemas.cjs",
+      "kind": "fixed",
+      "originalSha256": "06fc34c10fb14cb50b09c525822886593fd501d9d9e964dec8f2dfc67c58f399",
+      "patchedSha256": "06fc34c10fb14cb50b09c525822886593fd501d9d9e964dec8f2dfc67c58f399"
+    },
+    {
+      "path": "node_modules/zod/v4/mini/schemas.js",
+      "kind": "fixed",
+      "originalSha256": "5614339bbec6b9be13ed1809e1215fe44d78e99f5f0eee848c0bb3b25dc1c9b6",
+      "patchedSha256": "5614339bbec6b9be13ed1809e1215fe44d78e99f5f0eee848c0bb3b25dc1c9b6"
+    },
+    {
+      "path": "node_modules/next/dist/compiled/zod/index.cjs",
+      "kind": "next-v3",
+      "originalSha256": "9b5ddc6cc0aa15c059069c452e4311d4732565d4c28173868c8d661723e52ab4",
+      "patchedSha256": "f3047658d23cd1bb4de29c2158ab499c961d8d459020b48c4bdf37e69fb9920c"
+    }
+  ]
+}

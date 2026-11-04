@@ -147,7 +147,7 @@ export async function GET(
       .order("created_at", { ascending: false });
 
     return NextResponse.json({
-      story: { ...story, author, parentStory },
+      story: { ...story, author, parentStory, hasAudio: !!story.has_audio, comments: story.comments_count, paywallAmount: story.paywall_amount, timestamp: story.created_at },
       comments: (comments || []).filter(
         (comment) => !blockedUserIds.has(comment.author_id)
       ),

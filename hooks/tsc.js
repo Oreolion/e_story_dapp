@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { resolve } from 'path';
+import { fileURLToPath } from 'url';
 
 async function main() {
   console.error("🔧 EDIT HOOK TRIGGERED");
@@ -34,7 +35,7 @@ async function main() {
   console.error("🔍 Running TypeScript compiler...");
   
   // Run TypeScript compiler
-  exec('npx tsc --noEmit', { cwd: resolve(__dirname, '..') }, (error, stdout, stderr) => {
+  exec('npx tsc --noEmit', { cwd: resolve(fileURLToPath(new URL('..', import.meta.url))) }, (error, stdout, stderr) => {
     if (error) {
       // Type errors found
       const errors = stderr || stdout || error.message;

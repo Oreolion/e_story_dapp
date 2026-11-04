@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthProvider";
-import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api";
+import { apiFetch, apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api";
 import { supabaseClient } from "@/app/utils/supabase/supabaseClient";
 import { queryKeys } from "./keys";
 
@@ -28,21 +28,20 @@ export function useUserProfile() {
 }
 
 export function useProfileData(userId: string) {
-  const supabase = supabaseClient;
+  const { getAccessToken, isLoading: isAuthLoading } = useAuth();
   return useQuery({
     queryKey: queryKeys.user.profile(userId),
     queryFn: async () => {
-      if (!supabase) throw new Error("Supabase not available");
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", userId)
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAccessToken();
+      const result = await apiFetch<{ user: { id: string } }>(token, "/api/user/profile", {
+        headers: { "x-profile-owner-id": userId },
+      });
+      if (result.user.id !== userId) throw new Error("Profile identity changed");
+      return result.user;
     },
-    enabled: !!userId,
+    enabled: !!userId && !isAuthLoading,
     staleTime: 30_000,
+    retry: (count, error) => !(error instanceof ApiError && [401,403,404,409].includes(error.status)) && count < 2,
   });
 }
 

@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import WaitlistEmail from "@/components/emails/WaitlistEmail";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { buildEmailUnsubscribeUrl } from "@/lib/unsubscribeToken";
+import { assertEmailRecipient } from "@/lib/runtime/config";
 
 let _resend: Resend | null = null;
 function getResend() {
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
     // Send confirmation email (best-effort — don't fail the request)
     try {
       if (process.env.RESEND_API_KEY) {
+        assertEmailRecipient(email);
         const unsubscribeUrl = buildEmailUnsubscribeUrl(email, "waitlist");
         const { error: emailError } = await getResend().emails.send({
           from: "EStories <noreply@estories.app>",

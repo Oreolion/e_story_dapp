@@ -81,12 +81,12 @@ const plans = [
     badge: "Most Popular",
     features: [
       "Everything in Free, plus:",
-      "Unlimited AI story analyses",
+      "AI story analyses with usage and capacity limits",
       "Actionable AI advice per story",
       "Story collections & continuations",
       "Storytelling craft feedback",
       "Weekly AI reflections",
-      "Priority CRE verification",
+      "On-chain verification (coming soon)",
       "Advanced theme & pattern tracking",
       "Monthly storytelling progress report",
     ],
@@ -127,17 +127,17 @@ const faqs = [
   {
     question: "What can I write about on eStories?",
     answer:
-      "Anything you're passionate about! eStories is a storytelling platform, not just a journal. Write personal reflections, historical narratives, geopolitical analysis, cultural stories, creative non-fiction, memoirs, travel writing, or anything else. Private stories stay encrypted in your vault; public stories can be shared with the community.",
+      "Write personal reflections, historical narratives, cultural stories, memoirs, travel writing, and more. Choose a private cloud entry, the separate local vault, or public publishing. Public stories can be shared with the community.",
   },
   {
     question: "How does the AI analysis help me become a better writer?",
     answer:
-      "Every story you write gets analyzed for narrative coherence, emotional depth, thematic consistency, and significance. The AI provides a brief insight about your story's meaning and actionable advice on how to improve. Over time, you can track your storytelling progress as your scores improve. Think of it as a writing coach that learns your patterns.",
+      "Eligible stories can receive AI-generated themes, emotional interpretations, and a brief insight. Paid plans include suggested next steps. These interpretations can be inaccurate; review them against your own experience. Processing is subject to usage and service capacity limits.",
   },
   {
     question: "Is my data private and secure?",
     answer:
-      "Yes. Private stories are encrypted with AES-256-GCM in your browser before storage — we literally cannot read them. Your encryption key is derived from your PIN and never leaves your device. For public stories, Chainlink CRE provides verifiable AI analysis without exposing your raw data on-chain. Only cryptographic proofs go to the blockchain.",
+      "Private cloud entries are stored by the service and are not end-to-end encrypted. Requesting AI processing sends text to the AI provider; transcription sends audio to the transcription provider. The separate browser Local Vault encrypts data on your device with your PIN. Public publishing makes content publicly accessible. Private cloud audio storage is not available yet.",
   },
   {
     question: "Do I need a crypto wallet to use eStories?",
@@ -150,14 +150,14 @@ const faqs = [
       "$STORY is an ERC-20 token on Base (Ethereum L2) being developed for the creator economy — tipping, paywalled stories, and NFT minting. It is currently on testnet and will launch on mainnet once the platform reaches critical adoption. You don't need tokens to use eStories today.",
   },
   {
-    question: "What is CRE-verified quality?",
+    question: "Is on-chain verification available?",
     answer:
-      "Chainlink CRE (Compute Runtime Environment) runs AI analysis across multiple independent nodes inside encrypted enclaves. The nodes reach consensus, and a cryptographic proof is written on-chain. This means quality ratings on paywalled stories are verifiable and tamper-proof — readers can trust the quality score before purchasing.",
+      "On-chain verification is coming soon. Testnet CRE verification is parked while its proof and delivery guarantees are reviewed. Current AI insights are interpretations, not attestations or proof of authorship.",
   },
   {
     question: "Can I publish stories about history, politics, or culture?",
     answer:
-      "Absolutely — that's a core use case. eStories is designed for all forms of storytelling. Historical essays, geopolitical analysis, and cultural narratives are especially well-suited for public publishing with paywalls. The on-chain provenance proves a human wrote the story at a specific time, which has archival and journalistic value.",
+      "Yes. You can publish historical essays, political analysis, and cultural narratives. You are responsible for checking sources, respecting others' rights, and reviewing AI output before sharing. On-chain verification is coming soon.",
   },
   {
     question: "How do story collections work?",
@@ -167,12 +167,12 @@ const faqs = [
   {
     question: "Can I switch plans or cancel anytime?",
     answer:
-      "Yes. You can upgrade, downgrade, or cancel your plan at any time. If you cancel, you keep access until the end of your billing period. Your stories are always yours — they stay in your encrypted vault regardless of your plan.",
+      "Subscription access lasts until the recorded expiry date. Your cloud entries remain separate from the optional Local Vault. Check your current plan and expiry in your account before making another payment.",
   },
   {
     question: "What happens to my stories if eStories shuts down?",
     answer:
-      "Your private stories live in your browser's encrypted local vault — they exist on your device, not our servers. Public stories published on-chain have permanent blockchain provenance. Audio files are stored on IPFS (decentralized storage). eStories is designed so your content survives independent of the platform.",
+      "Cloud entries depend on the service, so keep your own copies of important stories. The optional Local Vault is stored in your browser; clearing browser data can remove it. Public IPFS content may remain accessible elsewhere, but long-term availability is not guaranteed.",
   },
 ];
 
@@ -493,13 +493,13 @@ export default function PricingPageClient() {
               },
               {
                 icon: Shield,
-                title: "Truly Private",
-                desc: "AES-256-GCM encryption. Your PIN, your data. We can't read your stories.",
+                title: "Local Vault",
+                desc: "Optional encryption on your device, separate from private cloud entries.",
               },
               {
                 icon: Lock,
-                title: "Blockchain Provenance",
-                desc: "Prove your story is authentically yours with tamper-proof on-chain proofs.",
+                title: "Verification — Coming soon",
+                desc: "Testnet verification is parked. AI insights are not on-chain attestations.",
               },
             ].map((item) => (
               <Card

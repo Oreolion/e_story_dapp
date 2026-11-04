@@ -1,7 +1,8 @@
+import { runEditing } from "@/lib/ai/tasks";
+import { createTextGenerator, inferenceErrorStatus } from "@/lib/ai/provider";
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { consumeApiQuota } from "@/lib/apiQuota";
+import { admitTextInference } from "@/lib/ai/admission";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 
 const MAX_TEXT_LENGTH = 50000;
@@ -19,8 +20,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const { text } = await req.json();
+    let body;
+    try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
+    const { text, task = "enhancement" } = body ?? {};
+    if (!["enhancement", "tracker"].includes(task)) return NextResponse.json({ error: "Unsupported editing task" }, { status: 400 });
 
     if (typeof text !== "string" || text.trim().length === 0) {
       return NextResponse.json({ error: "No text provided" }, { status: 400 });
@@ -34,11 +37,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const quota = await consumeApiQuota(createSupabaseAdminClient(), userId, {
-      action: "ai_enhance_day",
-      maxRequests: 30,
-      windowSeconds: 24 * 60 * 60,
-    });
+    const quota = await admitTextInference(createSupabaseAdminClient(), userId, task);
     if (!quota.allowed) {
       return NextResponse.json(
         {
@@ -53,30 +52,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    const prompt = `
-      You are an expert storytelling editor. Please enhance the following journal entry.
-      - Fix grammar and spelling errors.
-      - Improve the flow and vocabulary while keeping the original personal tone.
-      - Do not change the underlying meaning or add fictional events.
-      - Return ONLY the enhanced text. Do not include quotes around the result.
-
-      Original Text:
-      "${text}"
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const enhancedText = response.text();
+    const enhancedText = await runEditing(text, task, createTextGenerator(25_000, undefined, task));
 
     return NextResponse.json({ text: enhancedText });
 
   } catch (error: unknown) {
-    console.error("Enhancement error:", error);
+    console.error("Enhancement failed");
     return NextResponse.json(
       { error: "Failed to enhance text" },
-      { status: 500 }
+      { status: inferenceErrorStatus(error) }
     );
   }
 }

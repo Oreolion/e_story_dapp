@@ -54,39 +54,11 @@ export async function verifyNonce(
   const admin = getAdmin();
   const normalizedAddress = address.toLowerCase();
 
-  // Fetch and delete atomically (select then delete to consume)
-  const { data: entry, error: fetchErr } = await admin
-    .from("auth_nonces")
-    .select("nonce, created_at")
-    .eq("address", normalizedAddress)
-    .maybeSingle();
-
-  if (fetchErr) {
-    console.error("[NONCE] verify fetch error:", fetchErr);
-    return { valid: false, error: "Nonce verification failed. Please try again." };
-  }
-
-  if (!entry) {
-    return { valid: false, error: "No nonce found. Please request a new one." };
-  }
-
-  // Check expiry
-  const createdAt = new Date(entry.created_at).getTime();
-  if (Date.now() - createdAt > NONCE_EXPIRY_MS) {
-    // Consume expired nonce
-    await admin.from("auth_nonces").delete().eq("address", normalizedAddress);
-    return { valid: false, error: "Nonce expired. Please request a new one." };
-  }
-
-  // Verify nonce is in the signed message
-  if (!message.includes(`Nonce: ${entry.nonce}`)) {
-    return { valid: false, error: "Invalid nonce in signed message." };
-  }
-
-  // Consume the nonce (one-time use)
-  await admin.from("auth_nonces").delete().eq("address", normalizedAddress);
-
-  return { valid: true };
+  const nonces = [...message.matchAll(/^Nonce: ([0-9a-f-]{36})\r?$/gim)];
+  if (nonces.length !== 1) return { valid: false, error: "Invalid nonce in signed message." };
+  const { data, error } = await admin.rpc("consume_wallet_nonce", { p_address: normalizedAddress, p_nonce: nonces[0][1] });
+  if (error) return { valid: false, error: "Nonce verification unavailable. Please try again." };
+  return data === true ? { valid: true } : { valid: false, error: "Nonce expired or already used. Please request a new one." };
 }
 
 export { NONCE_EXPIRY_MS };

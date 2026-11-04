@@ -1,6 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { z } from "zod";
+
+const profileUpdate = z.strictObject({
+  name: z.string().trim().max(100),
+  username: z.string().trim().regex(/^(?:[a-zA-Z0-9_]{3,20})?$/),
+  bio: z.string().trim().max(500),
+  location: z.string().trim().max(120),
+  website: z.string().trim().max(2048).refine(value => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password;
+    } catch { return false; }
+  }),
+  avatar: z.string().max(2048),
+  // Contact email is never identity/linking authority.
+  email: z.string().trim().max(254).pipe(z.union([z.literal(""), z.email()])),
+  notification_preferences: z.strictObject({
+    email_notifications: z.boolean(), public_profile: z.boolean(),
+    ai_enhancement: z.boolean(), re_engagement_emails: z.boolean(),
+  }),
+}).partial().refine(value => Object.keys(value).length > 0);
+
+class ProfileBodyTooLarge extends Error {}
+async function readProfileJson(request: NextRequest): Promise<unknown> {
+  const limit = 32 * 1024;
+  if (Number(request.headers.get("content-length")) > limit) throw new ProfileBodyTooLarge();
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error("Missing profile update");
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > limit) {
+        await reader.cancel().catch(() => undefined);
+        throw new ProfileBodyTooLarge();
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return JSON.parse(text + decoder.decode());
+  } finally { reader.releaseLock(); }
+}
 
 function detectAvatarType(buffer: Buffer): { contentType: string; extension: string } | null {
   if (buffer.length < 12) return null;
@@ -103,6 +149,10 @@ export async function GET(request: NextRequest) {
     const authResult = await validateAuthOrReject(request);
     if (isAuthError(authResult)) return authResult;
     const authenticatedUserId = await resolveUserId(authResult);
+    const expectedOwner = request.headers.get("x-profile-owner-id");
+    if (expectedOwner && expectedOwner !== authenticatedUserId) {
+      return NextResponse.json({ error: "Account changed. Reload before loading this profile." }, { status: 409 });
+    }
 
     const admin = createSupabaseAdminClient();
 
@@ -132,6 +182,10 @@ export async function GET(request: NextRequest) {
       avatar: user.avatar,
       wallet_address: user.wallet_address,
       bio: user.bio || null,
+      location: user.location ?? null,
+      website: user.website ?? null,
+      created_at: user.created_at,
+      notification_preferences: user.notification_preferences ?? null,
       badges: user.badges || [],
       auth_provider: user.auth_provider,
       is_onboarded: user.is_onboarded,
@@ -168,28 +222,21 @@ export async function PUT(request: NextRequest) {
     if (isAuthError(authResult)) return authResult;
     const authenticatedUserId = await resolveUserId(authResult);
 
-    const updates = await request.json();
-
-    // Validate and sanitize updates — only allow safe fields
-    const allowedFields = ['name', 'bio', 'avatar'];
-    const validUpdates: Record<string, string> = {};
-
-    for (const key of Object.keys(updates)) {
-      if (allowedFields.includes(key) && typeof updates[key] === "string") {
-        if (key === "avatar") {
-          if (!isOwnedAvatarUrl(updates[key], authenticatedUserId)) {
-            return NextResponse.json({ error: "Invalid avatar URL" }, { status: 400 });
-          }
-          validUpdates.avatar = updates[key];
-        } else {
-          const maxLength = key === "name" ? 100 : 500;
-          validUpdates[key] = updates[key].trim().slice(0, maxLength);
-        }
-      }
+    // This header is a stale-account precondition, never an authority source.
+    const expectedOwner = request.headers.get("x-profile-owner-id");
+    if (expectedOwner && expectedOwner !== authenticatedUserId) {
+      return NextResponse.json({ error: "Account changed. Reload before saving." }, { status: 409 });
     }
-
-    if (Object.keys(validUpdates).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    let raw: unknown;
+    try { raw = await readProfileJson(request); }
+    catch (error) {
+      return NextResponse.json({ error: error instanceof ProfileBodyTooLarge ? "Profile update exceeds 32 KB" : "Invalid profile update" }, { status: error instanceof ProfileBodyTooLarge ? 413 : 400 });
+    }
+    const parsed = profileUpdate.safeParse(raw);
+    if (!parsed.success) return NextResponse.json({ error: "Invalid profile update" }, { status: 400 });
+    const validUpdates = parsed.data;
+    if (validUpdates.avatar && !isOwnedAvatarUrl(validUpdates.avatar, authenticatedUserId)) {
+      return NextResponse.json({ error: "Invalid avatar URL" }, { status: 400 });
     }
 
     const admin = createSupabaseAdminClient();
@@ -202,8 +249,9 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("[PROFILE] Update error:", error);
-      return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+      if (error.code === "23505") return NextResponse.json({ error: "Profile details are already in use" }, { status: 409 });
+      console.error("[PROFILE] Update failed:", error.code ?? "database_error");
+      return NextResponse.json({ error: "Profile update unavailable" }, { status: 503 });
     }
 
     return NextResponse.json({
@@ -213,7 +261,7 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error updating profile:', error);
+    console.error('Unexpected profile update failure');
     return NextResponse.json(
       { error: 'Failed to update profile' },
       { status: 500 }

@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { safeCompare } from "@/lib/crypto";
 import ReEngagementEmail from "@/components/emails/ReEngagementEmail";
 import { buildUnsubscribeUrl } from "@/lib/unsubscribeToken";
+import { runtimeConfiguration } from "@/lib/runtime/config";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (runtimeConfiguration().environment !== "production") {
+      return NextResponse.json({ status: "disabled", sent: 0 });
+    }
     const admin = createSupabaseAdminClient();
 
     // Find users who:

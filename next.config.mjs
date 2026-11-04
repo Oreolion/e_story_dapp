@@ -1,4 +1,9 @@
 import { withSentryConfig } from "@sentry/nextjs";
+import { verifyDecoder } from "./scripts/decoder-compat.mjs";
+import { verifyZod } from "./scripts/zod-size-backport.mjs";
+
+verifyDecoder();
+verifyZod();
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -79,6 +84,7 @@ const nextConfig = {
       {
         source: "/(.*)",
         headers: [
+          ...(process.env.APP_ENV === "staging" ? [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }] : []),
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",

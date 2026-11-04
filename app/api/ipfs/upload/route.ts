@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { externalMediaEnabled } from "@/lib/runtime/config";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_MIME_PREFIXES = ["image/", "audio/", "application/json"];
@@ -18,6 +19,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file or metadata provided" }, { status: 400 });
     }
 
+    const visibility = data.get("visibility");
+    // IPFS is public and content-addressed. Legacy story metadata already
+    // carries explicit intent; missing intent must never imply public consent.
+    if ((visibility !== null && visibility !== "public") || (file && metadata) ||
+        (file !== null && !(file instanceof Blob)) || (metadata !== null && typeof metadata !== "string")) {
+      return NextResponse.json({ error: "Explicit public publication is required" }, { status: 400 });
+    }
+    if (metadata) {
+      if (Buffer.byteLength(metadata, "utf8") > 1024 * 1024) return NextResponse.json({ error: "Metadata exceeds 1MB" }, { status: 413 });
+      let parsed: unknown;
+      try { parsed = JSON.parse(metadata); } catch { return NextResponse.json({ error: "Invalid metadata JSON" }, { status: 400 }); }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Invalid metadata object" }, { status: 400 });
+      }
+      const intent = "is_public" in parsed ? parsed.is_public : undefined;
+      // Old recording tabs always call this endpoint before saving to the DB,
+      // even for a private story. A nullable result lets that save proceed,
+      // honestly recording that no immutable/public copy was created.
+      if (visibility === null && intent === false) {
+        return NextResponse.json({ hash: null, url: null, published: false }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (visibility !== "public" && intent !== true) {
+        return NextResponse.json({ error: "Explicit public publication is required" }, { status: 400 });
+      }
+      const isPrivate = (value: unknown): boolean => {
+        if (!value || typeof value !== "object") return false;
+        if (!Array.isArray(value) && "is_public" in value && value.is_public === false) return true;
+        return Object.values(value).some(isPrivate);
+      };
+      if (isPrivate(parsed)) {
+        return NextResponse.json({ error: "Private metadata cannot be published" }, { status: 400 });
+      }
+    } else if (visibility !== "public") {
+      return NextResponse.json({ error: "Explicit public publication is required" }, { status: 400 });
+    }
+
+    if (!externalMediaEnabled()) return NextResponse.json({ error: "Public IPFS upload is unavailable in this environment" }, { status: 503 });
     const pinataJWT = process.env.PINATA_JWT;
     if (!pinataJWT) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
@@ -86,7 +124,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: unknown) {
-    console.error("IPFS Upload Error:", error);
+    console.error("IPFS upload failed");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

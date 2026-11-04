@@ -34,6 +34,7 @@ export function usePatterns(): UsePatternData {
 
   const fetchPatterns = useCallback(async () => {
     if (!authInfo?.id || !supabase) {
+      setStories([]);
       setIsLoading(false);
       return;
     }
@@ -79,7 +80,7 @@ export function usePatterns(): UsePatternData {
       // Format stories with metadata
       const formattedStories: StoryWithMetadata[] = (data || []).map((s) => ({
         ...formatStory(s),
-        story_metadata: s.story_metadata?.[0] || s.story_metadata || null,
+        story_metadata: (() => { const meta = s.story_metadata?.[0] || s.story_metadata || null; return meta?.source_revision === 0 || meta?.source_revision != null && meta.source_revision !== s.revision ? null : meta; })(),
       }));
 
       setStories(formattedStories);

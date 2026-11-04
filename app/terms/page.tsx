@@ -140,9 +140,9 @@ export default function TermsOfServicePage() {
           review all AI output before publishing.
         </p>
         <p>
-          Verifiable AI metrics are processed through Chainlink CRE and attested
-          on-chain. These attestations represent the AI&apos;s analysis at a
-          point in time and should not be interpreted as editorial endorsement.
+          On-chain verification is coming soon. Testnet CRE verification is
+          parked. Current AI insights are interpretations and are not on-chain
+          attestations, proof of authorship, or editorial endorsement.
         </p>
       </section>
 

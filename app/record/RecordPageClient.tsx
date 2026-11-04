@@ -354,11 +354,13 @@ export default function RecordPage() {
       const backdatedStoryDate = new Date(storyDate).toISOString(); // User selected time
 
       try {
+        if (audioBlob && !isPublic) toast("Private entry saves text only. Cloud audio is currently available for public stories.");
         // A. Upload Audio via API route (bypasses RLS, works for wallet & OAuth users)
         if (audioBlob) {
           const uploadForm = new FormData();
           uploadForm.append("file", audioBlob, "recording.webm");
           uploadForm.append("userId", userId);
+          uploadForm.append("visibility", "public");
           const uploadHeaders = await getAuthHeaders();
           const uploadRes = await fetch("/api/audio/upload", {
             method: "POST",
@@ -371,6 +373,7 @@ export default function RecordPage() {
           }
         }
 
+        if (isPublic) {
         // B. Upload Content to IPFS (Immutable Record)
         // NEW: We include the custom 'storyDate', 'isPublic' and real timestamp in metadata
         const ipfsMetadata = {
@@ -386,9 +389,11 @@ export default function RecordPage() {
         };
 
         const token = await getAccessToken();
-        const ipfsResult = await ipfsService.uploadMetadata(ipfsMetadata, token);
+        const ipfsResult = await ipfsService.uploadMetadata(ipfsMetadata, token, { visibility: "public" });
         ipfsHash = ipfsResult.hash;
         console.log("Story pinned to IPFS:", ipfsHash);
+
+        }
 
         // C. Save to Supabase via API route (bypasses RLS, works for both wallet & OAuth users)
         const storyData: Record<string, unknown> = {
@@ -461,27 +466,7 @@ export default function RecordPage() {
           console.warn("[VAULT] Local save failed (non-blocking):", vaultErr);
         }
 
-        // Trigger AI analysis in background (fire-and-forget)
-        // Only analyze stories with enough content (API requires >= 50 chars)
-        if (insertedStory?.id && transcribedText.trim().length >= 50) {
-          const analyzeHeaders = await getAuthHeaders();
-          fetch("/api/ai/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...analyzeHeaders },
-            body: JSON.stringify({
-              storyId: insertedStory.id,
-              storyText: transcribedText,
-              storyType,
-            }),
-            keepalive: true,
-          }).catch((err) => console.warn("Analysis trigger failed:", err));
-        } else if (insertedStory?.id && transcribedText.trim().length < 50) {
-          toast("Story saved! Write more to unlock AI insights.", {
-            icon: "\u{1F4DD}",
-            duration: 4000,
-          });
-        }
-
+        // Analysis is enqueued transactionally by the story insert trigger.
         trackCustomEvent("StoryRecorded", {
           story_id: insertedStory?.id,
           story_type: storyType,
@@ -489,14 +474,14 @@ export default function RecordPage() {
           has_audio: !!audioBlob && !!audioUrl,
           content_length: transcribedText.length,
         });
-        return { message: "Story saved & pinned to IPFS!", storyId: insertedStory?.id };
+        return { message: isPublic ? "Public story saved" : "Private story saved", storyId: insertedStory?.id };
       } catch (err: any) {
         throw new Error(err.message || "Save failed");
       }
     };
 
     toast.promise(promiseToSave(), {
-      loading: "Saving to Database & IPFS...",
+      loading: isPublic ? "Publishing public story..." : "Saving private story...",
       success: (result) => {
         setIsSaving(false);
         setTranscribedText("");
@@ -743,11 +728,16 @@ export default function RecordPage() {
               <Label className="text-sm font-medium text-gray-500">
                 Visibility
               </Label>
-              <div
+              <button
+                type="button"
+                role="switch"
+                aria-label="Publish story publicly"
+                aria-checked={isPublic}
+                disabled={isBusy}
                 className={`flex items-center justify-between px-3 py-2 rounded-md border cursor-pointer transition-colors ${isPublic ? 'bg-[hsl(var(--growth-500)/0.1)] border-[hsl(var(--growth-500)/0.3)]' : 'bg-[hsl(var(--void-light))] border-gray-200 dark:border-gray-700'}`}
                 onClick={() => !isBusy && setIsPublic(!isPublic)}
               >
-                <div className="flex items-center gap-2">
+                <span className="flex items-center gap-2">
                   {isPublic ? (
                     <Unlock className="w-4 h-4 text-[hsl(var(--growth-500))]" />
                   ) : (
@@ -756,8 +746,8 @@ export default function RecordPage() {
                   <span className={`text-sm font-medium ${isPublic ? 'text-[hsl(var(--growth-600))]' : 'text-gray-600 dark:text-gray-400'}`}>
                     {isPublic ? 'Public' : 'Private'}
                   </span>
-                </div>
-              </div>
+                </span>
+              </button>
             </div>
 
           </div>
@@ -947,6 +937,9 @@ export default function RecordPage() {
               {isPublic ? 'Publish & Save' : 'Save Privately'}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Eligible saved entries are sent for AI analysis. Transcription sends audio to its provider. Private cloud entries are not end-to-end encrypted; use Local Vault for storage on this device. Public publishing makes content publicly accessible. Private cloud audio is not saved yet.
+          </p>
           <p className="text-xs text-muted-foreground text-right">
             <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Ctrl+Enter</kbd> to save
           </p>

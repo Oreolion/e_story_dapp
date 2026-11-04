@@ -1,0 +1,56 @@
+name: Verify exact staging candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit deployed to staging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # Workflow code must come from the protected default branch. Candidate code
+    # is never checked out or executed with environment credentials.
+    if: github.ref == 'refs/heads/master'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify source, environment and indexing isolation
+        env:
+          EXPECTED_SHA: ${{ inputs.candidate_sha }}
+          STAGING_ORIGIN: ${{ vars.STAGING_ORIGIN }}
+          PRODUCTION_ORIGIN: ${{ vars.PRODUCTION_APP_ORIGIN }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const sha = process.env.EXPECTED_SHA;
+          if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('A full lowercase commit SHA is required');
+          const origin = new URL(process.env.STAGING_ORIGIN);
+          const production = new URL(process.env.PRODUCTION_ORIGIN || 'https://estories.app');
+          if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || origin.hostname === production.hostname || origin.hostname.endsWith(`.${production.hostname}`)) throw new Error('Unsafe staging origin');
+          const response = await fetch(new URL(`/api/health?candidate=${sha}`, origin), { redirect: 'error', signal: AbortSignal.timeout(15000), headers: { 'Cache-Control': 'no-cache' } });
+          if (!response.ok) throw new Error('Staging health unavailable');
+          const data = await response.json();
+          const robots = response.headers.get('x-robots-tag') ?? '';
+          if (data.status !== 'ok' || data.commitSha !== sha || data.environment !== 'staging' || !robots.includes('noindex') || !robots.includes('nofollow')) throw new Error('Staging source or isolation mismatch');
+          fs.writeFileSync('staging-binding.json', JSON.stringify({ observedAt: new Date().toISOString(), origin: origin.origin, expectedCommit: sha, observedCommit: data.commitSha, environment: data.environment, robots }, null, 2));
+          console.log('Exact staging commit and HTTP isolation verified; authenticated acceptance remains a separate gate.');
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staging-binding-${{ github.run_id }}
+          path: staging-binding.json
+          if-no-files-found: error

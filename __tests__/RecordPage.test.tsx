@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ipfsService } from "../app/utils/ipfsService";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RecordPage from "../app/record/RecordPageClient";
@@ -97,6 +98,7 @@ vi.mock("../components/AuthProvider", () => ({
     signOut: vi.fn(),
     completeOnboarding: vi.fn(),
     refreshProfile: vi.fn(),
+    getAccessToken: vi.fn().mockResolvedValue("synthetic-record-token"),
   }),
 }));
 
@@ -183,5 +185,29 @@ describe("RecordPage", () => {
   it("shows save button", () => {
     renderWithProviders(<RecordPage />);
     expect(screen.getByText("Save Privately")).toBeInTheDocument();
+  });
+  it.each([false, true])("saves the intended visibility and publishes only when public=%s", async isPublic => {
+    sessionStorage.clear();
+    const outbound = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url !== "/api/stories") throw new Error("Unexpected publication or inference destination");
+      const body = JSON.parse(String(init?.body));
+      expect(body.is_public).toBe(isPublic);
+      expect(body.ipfs_hash).toBe(isPublic ? "QmMockHash123" : null);
+      return new Response(JSON.stringify({ story: { id: "synthetic-story" } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", outbound);
+    try {
+      renderWithProviders(<RecordPage />);
+      fireEvent.change(screen.getByPlaceholderText("Give your story a title..."), { target: { value: "Synthetic private note" } });
+      fireEvent.change(screen.getByPlaceholderText(/What happened today/i), { target: { value: "This synthetic entry contains no real private data." } });
+      const visibility = screen.getByRole("switch", { name: "Publish story publicly" });
+      expect(visibility).toHaveAttribute("aria-checked", "false");
+      if (isPublic) fireEvent.click(visibility);
+      fireEvent.click(screen.getByRole("button", { name: isPublic ? /Publish.*Save/ : "Save Privately" }));
+      await waitFor(() => expect(outbound).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByPlaceholderText("Give your story a title...")).toHaveValue(""));
+      expect(ipfsService.uploadMetadata).toHaveBeenCalledTimes(isPublic ? 1 : 0);
+      if (isPublic) expect(ipfsService.uploadMetadata).toHaveBeenCalledWith(expect.objectContaining({ is_public: true }), "synthetic-record-token", { visibility: "public" });
+    } finally { vi.unstubAllGlobals(); }
   });
 });

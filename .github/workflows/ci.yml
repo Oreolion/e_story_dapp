@@ -2,21 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [master]
-    paths-ignore:
-      - "mobile/**"
-      - "mobile/docs/**"
-      - ".github/workflows/claude*.yml"
-      - "**.md"
+    branches: [master, 'feature/**']
   pull_request:
     branches: [master]
-    paths-ignore:
-      - "mobile/**"
-      - "mobile/docs/**"
-      - ".github/workflows/claude*.yml"
-      - "**.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  APP_ENV: ci
   NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
   NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
   NEXT_PUBLIC_PROJECT_ID: placeholder-walletconnect-id
@@ -28,6 +26,36 @@ env:
   NEXT_PUBLIC_APP_URL: http://localhost:3000
 
 jobs:
+  dependency-audit:
+    name: Runtime dependency security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --legacy-peer-deps --ignore-scripts
+      - name: Install and verify the reviewed runtime security adaptations
+        run: |
+          node scripts/install-runtime-compat.mjs
+      - name: Reject unresolved high or critical runtime advisories
+        run: npm run audit:runtime
+      - name: Preserve raw advisories and verified backport evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-dependency-security
+          path: output/dependency-security/
+          if-no-files-found: error
+          retention-days: 14
+
+  ai-evaluations:
+    name: AI and migration correctness
+    uses: ./.github/workflows/ai-evaluations.yml
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -84,17 +112,19 @@ jobs:
 
       - name: Rehearse production feature migration on PostgreSQL 17
         run: |
-          docker run -d --name istory-migration019-rehearsal-20261014 --network none --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+          docker run -d --name istory-migration019-rehearsal-20261014 --label istory.rehearsal=runtime --network none --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
           for attempt in $(seq 1 30); do
             if docker exec istory-migration019-rehearsal-20261014 pg_isready -U postgres; then break; fi
             sleep 1
           done
           node scripts/test-migration019.mjs
+          node scripts/test-runtime-concurrency.mjs
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, ai-evaluations]
+    timeout-minutes: 30
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
@@ -111,6 +141,32 @@ jobs:
 
       - name: Build Next.js
         run: npm run build
+
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Accept public journeys on the production build
+        env:
+          EVAL_BASE_URL: http://127.0.0.1:3001
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3001 > /tmp/istory-acceptance-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:3001/api/health > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then echo '::error::Local production build did not start'; exit 1; fi
+          npm run eval:ai:e2e
+
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-production-browser-results
+          path: output/playwright/evaluation-results/
+          if-no-files-found: ignore
 
   contracts:
     name: Compile Contracts
@@ -129,3 +185,24 @@ jobs:
 
       - name: Compile Solidity
         run: npx hardhat compile
+
+  release-checks:
+    name: Release checks
+    if: ${{ always() }}
+    needs: [dependency-audit, lint, typecheck, test, ai-evaluations, build, contracts]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every prerequisite to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          const results = JSON.parse(process.env.RESULTS);
+          const failed = Object.entries(results).filter(([, job]) => job.result !== 'success').map(([name]) => name);
+          if (!/^[a-f0-9]{40}$/.test(process.env.CANDIDATE_SHA) || failed.length) {
+            console.error('Release prerequisites failed, were skipped, or were cancelled:', failed.join(', '));
+            process.exit(1);
+          }
+          console.log('All repository checks passed for', process.env.CANDIDATE_SHA);
+          NODE

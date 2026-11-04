@@ -1,0 +1,40 @@
+{
+  "package": "decode-uri-component",
+  "version": "0.5.1",
+  "metadataUrl": "https://registry.npmjs.org/decode-uri-component/0.5.1",
+  "archiveUrl": "https://registry.npmjs.org/decode-uri-component/-/decode-uri-component-0.5.1.tgz",
+  "archiveBytes": 3632,
+  "expectedIntegrity": "sha512-vWHQkXgg2cE3BB4rR0c+PYw9BCQzLoNIRMI7AunIkZst74tw/vpPp7VLoYtsR/cy1f55g3XDWUslfeCZjiZJyA==",
+  "actualIntegrity": "sha512-vWHQkXgg2cE3BB4rR0c+PYw9BCQzLoNIRMI7AunIkZst74tw/vpPp7VLoYtsR/cy1f55g3XDWUslfeCZjiZJyA==",
+  "sha256": "68747a955bbb6a700d758155cf5ff15595c0dfa38504d385abdb249c688bfb15",
+  "gitHead": "58ed85f5adc7cfaee5e49e4d52b067f172d0bcb6",
+  "type": "module",
+  "exports": {
+    "types": "./index.d.ts",
+    "default": "./index.js"
+  },
+  "files": [
+    {
+      "name": "index.js",
+      "url": "https://raw.githubusercontent.com/SamVerschueren/decode-uri-component/58ed85f5adc7cfaee5e49e4d52b067f172d0bcb6/index.js",
+      "bytes": 3761,
+      "sha256": "6a86ac891edf15c5efa0841ebb31935e3669d58b98318b57d7b08a4530317cb0",
+      "npmSha256": "6a86ac891edf15c5efa0841ebb31935e3669d58b98318b57d7b08a4530317cb0"
+    },
+    {
+      "name": "license",
+      "url": "https://raw.githubusercontent.com/SamVerschueren/decode-uri-component/58ed85f5adc7cfaee5e49e4d52b067f172d0bcb6/license",
+      "bytes": 1139,
+      "sha256": "ed7a9a0f74e43951b2520efe1a4349cb9ed5f3dff0b0f268e2e51a4d38df7ea4",
+      "npmSha256": "ed7a9a0f74e43951b2520efe1a4349cb9ed5f3dff0b0f268e2e51a4d38df7ea4"
+    },
+    {
+      "name": "test.js",
+      "url": "https://raw.githubusercontent.com/SamVerschueren/decode-uri-component/58ed85f5adc7cfaee5e49e4d52b067f172d0bcb6/test.js",
+      "bytes": 8746,
+      "sha256": "acb81f2173ef208c173465fa98f054923c1ca78b7aa09e1493ee5936b963acba",
+      "npmSha256": null
+    }
+  ],
+  "preservation": "Original upstream bytes; source preservation only. Tests are not executed by this copy operation."
+}

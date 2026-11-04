@@ -191,7 +191,7 @@ export default function LoginScreen() {
               </AnimatedListItem>
               <AnimatedListItem index={1}>
                 <Text style={{ marginTop: 8, textAlign: "center", fontSize: 15, color: "#94a3b8", lineHeight: 22 }}>
-                  AI-powered sovereign storytelling.{"\n"}Your stories, on-chain forever.
+                  Write, reflect, and share your stories.{"\n"}On-chain verification coming soon.
                 </Text>
               </AnimatedListItem>
             </LinearGradient>

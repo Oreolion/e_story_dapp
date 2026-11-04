@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useStoryMetadata, type UseStoryMetadataReturn } from "@/app/hooks/useStoryMetadata";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "react-hot-toast";
-import { StoryMetadata, EmotionalTone, LifeDomain, AnalysisStatus } from "@/app/types";
 import {
   Sparkles,
   Loader2,
@@ -32,133 +31,18 @@ import { Crown } from "lucide-react";
 interface StoryInsightsProps {
   storyId: string;
   storyText: string;
+  state?: UseStoryMetadataReturn;
 }
 
-export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
-  const { getAccessToken, profile } = useAuth();
-  const isPaidPlan = !!profile && profile.subscription_plan !== "free";
-  const [metadata, setMetadata] = useState<StoryMetadata | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // AbortController ref for cleanup on unmount
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const fetchMetadata = useCallback(async () => {
-    // Abort any existing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new AbortController for this request
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    try {
-      setIsLoading(true);
-      setFetchError(null);
-
-      const res = await fetch(`/api/stories/${storyId}/metadata`, { signal });
-
-      if (!res.ok) {
-        if (res.status === 404) {
-          // No metadata yet, not an error
-          setMetadata(null);
-          return;
-        }
-        throw new Error("Failed to fetch metadata");
-      }
-
-      const data = await res.json();
-      setMetadata(data.metadata);
-    } catch (error) {
-      // Ignore abort errors (component unmounted)
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      console.error("Error fetching metadata:", error);
-
-      // Determine error type
-      if (error instanceof TypeError && error.message.includes("fetch")) {
-        setFetchError("Network error. Please check your connection.");
-      } else {
-        setFetchError("Unable to load insights. Please try again.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [storyId]);
-
-  // Fetch metadata on mount and cleanup on unmount
-  useEffect(() => {
-    fetchMetadata();
-
-    return () => {
-      // Cleanup: abort any pending requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchMetadata]);
-
+export function StoryInsights({ storyId, storyText, state }: StoryInsightsProps) {
+  const localState = useStoryMetadata(state ? null : storyId);
+  const { profile } = useAuth();
+  const isPaidPlan = !!profile && profile.subscription_plan !== "free" && Date.parse(profile.subscription_expires_at ?? "") > Date.now();
+  const { metadata, analysis, isLoading, isScheduling: isAnalyzing, error: fetchError, refetch: handleRetry, queueAnalysis, canRetry } = state ?? localState;
   const generateInsights = async () => {
-    // Create AbortController for this request
-    const controller = new AbortController();
-
-    try {
-      setIsAnalyzing(true);
-      setFetchError(null);
-
-      const token = await getAccessToken();
-      const res = await fetch("/api/ai/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ storyId, storyText }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        if (error.code === "PLAN_LIMIT_REACHED") {
-          toast.error(`Free plan limit reached (${error.usage?.used}/${error.usage?.limit} this month). Upgrade for unlimited analyses.`);
-          return;
-        }
-        throw new Error(error.error || "Analysis failed");
-      }
-
-      const data = await res.json();
-      setMetadata(data.metadata);
-      toast.success("Insights generated!");
-    } catch (error: unknown) {
-      // Ignore abort errors
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      console.error("Analysis error:", error);
-
-      // Determine error type
-      if (error instanceof TypeError && error.message.includes("fetch")) {
-        toast.error("Network error. Please check your connection.");
-      } else {
-        const message = error instanceof Error ? error.message : "Failed to generate insights";
-        toast.error(message);
-      }
-    } finally {
-      setIsAnalyzing(false);
-    }
+    if (await queueAnalysis(analysis.status === "failed")) toast.success("Analysis requested. Insights appear after processing finishes.");
   };
-
-  const handleRetry = () => {
-    setFetchError(null);
-    fetchMetadata();
-  };
-
+  if (analysis.status === "cancelled") return null;
   // Loading state
   if (isLoading) {
     return (
@@ -183,7 +67,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Connection Error
+              Insights unavailable
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {fetchError}
@@ -203,7 +87,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
   }
 
   // Pending state - analysis is queued
-  if (metadata?.analysis_status === 'pending') {
+  if (["queued", "retry_wait"].includes(analysis.status)) {
     return (
       <Card className="card-elevated rounded-xl bg-[hsl(var(--story-500)/0.05)] border-[hsl(var(--story-500)/0.2)]">
         <CardContent className="py-8 text-center space-y-4">
@@ -215,7 +99,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
               Analysis Queued
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Your story is waiting to be analyzed. This usually takes a few moments.
+              Your story is saved and analysis is queued. You can leave this page and return later.
             </p>
           </div>
         </CardContent>
@@ -224,7 +108,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
   }
 
   // Processing state - analysis is in progress
-  if (metadata?.analysis_status === 'processing') {
+  if (analysis.status === "running") {
     return (
       <Card className="card-elevated rounded-xl bg-[hsl(var(--memory-500)/0.05)] border-[hsl(var(--memory-500)/0.2)]">
         <CardContent className="py-8 text-center space-y-4">
@@ -245,7 +129,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
   }
 
   // Failed state - analysis failed, show retry button
-  if (metadata?.analysis_status === 'failed') {
+  if (analysis.status === "failed") {
     return (
       <Card className="card-elevated rounded-xl bg-[hsl(var(--tone-anxious)/0.05)] border-[hsl(var(--tone-anxious)/0.2)]">
         <CardContent className="py-8 text-center space-y-4">
@@ -262,7 +146,7 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
           </div>
           <Button
             onClick={generateInsights}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || !canRetry}
             variant="outline"
             className="border-[hsl(var(--tone-anxious)/0.3)] text-[hsl(var(--tone-anxious))] hover:bg-[hsl(var(--tone-anxious)/0.1)]"
           >
@@ -296,18 +180,18 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
               AI Insights Available
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Let AI analyze your story to extract themes, emotions, and patterns.
+              {storyText.trim().length < 50 ? "Write at least 50 characters to request insights." : "Request an analysis of the themes and patterns in this story."}
             </p>
           </div>
           <Button
             onClick={generateInsights}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || storyText.trim().length < 50}
             className="bg-gradient-to-r from-[hsl(var(--insight-600))] to-[hsl(var(--memory-600))] hover:from-[hsl(var(--insight-700))] hover:to-[hsl(var(--memory-700))]"
           >
             {isAnalyzing ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Analyzing...
+                Requesting...
               </>
             ) : (
               <>
@@ -338,8 +222,9 @@ export function StoryInsights({ storyId, storyText }: StoryInsightsProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={generateInsights}
-              disabled={isAnalyzing}
+              onClick={handleRetry}
+              aria-label="Refresh insights"
+              disabled={isAnalyzing || storyText.trim().length < 50}
               className="text-gray-500 hover:text-[hsl(var(--insight-500))]"
             >
               {isAnalyzing ? (

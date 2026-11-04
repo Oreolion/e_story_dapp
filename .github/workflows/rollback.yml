@@ -1,65 +1,75 @@
-name: Rollback Production
+name: Prepare Production Rollback
 
 on:
   workflow_dispatch:
     inputs:
-      method:
-        description: "Rollback method"
+      commit_to_revert:
+        description: "Exact 40-character commit SHA to revert (single-parent commit)"
         required: true
-        default: "git-revert"
-        type: choice
-        options:
-          - git-revert
-          - vercel-previous
+        type: string
       reason:
-        description: "Reason for rollback"
+        description: "Incident and reason for preparing a rollback candidate"
         required: true
-        default: "Smoke tests failed after deploy"
         type: string
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+# Preparation only: cannot push, publish, promote or create issues.
+permissions:
+  contents: read
 
 jobs:
-  rollback:
-    name: Rollback
+  prepare:
+    name: Prepare reviewable rollback patch
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Git Revert Last Commit
-        if: ${{ github.event.inputs.method == 'git-revert' }}
+      - name: Prepare exact revert without changing production
+        env:
+          REVERT_SHA: ${{ inputs.commit_to_revert }}
+          BASE_SHA: ${{ github.sha }}
+          ROLLBACK_REASON: ${{ inputs.reason }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git revert HEAD --no-edit
-          git push origin master
-          echo "Reverted HEAD on master. Vercel will auto-deploy the previous version."
-
-      - name: Promote Previous Vercel Deployment
-        if: ${{ github.event.inputs.method == 'vercel-previous' }}
-        run: |
-          # Requires VERCEL_TOKEN secret. See docs/DEPLOYMENT.md for setup.
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "::error::VERCEL_TOKEN secret is not configured. Cannot use Vercel rollback."
-            exit 1
+          set -euo pipefail
+          if [[ ! "$REVERT_SHA" =~ ^[a-fA-F0-9]{40}$ ]]; then
+            echo '::error::An exact commit SHA is required'; exit 1
           fi
-          npm install -g vercel@latest
-          vercel rollback --yes --token ${{ secrets.VERCEL_TOKEN }} --scope ${{ secrets.VERCEL_ORG_ID || 'abami-tech' }}
+          git cat-file -e "${REVERT_SHA}^{commit}"
+          git merge-base --is-ancestor "$REVERT_SHA" "$BASE_SHA"
+          if [ "$(git rev-list --parents -n 1 "$REVERT_SHA" | wc -w)" -ne 2 ]; then
+            echo '::error::Merge/root commits require a separately reviewed rollback plan'; exit 1
+          fi
+          git revert --no-commit "$REVERT_SHA"
+          mkdir -p rollback-candidate
+          git diff --cached --binary > rollback-candidate/revert.patch
+          if [ ! -s rollback-candidate/revert.patch ]; then
+            echo '::error::Revert produced no candidate changes'; exit 1
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync('rollback-candidate/review.json', JSON.stringify({
+            baseSha: process.env.BASE_SHA,
+            revertedSha: process.env.REVERT_SHA.toLowerCase(),
+            reason: process.env.ROLLBACK_REASON,
+            status: 'UNTESTED_CANDIDATE_ONLY',
+            required: [
+              'Review retained database schema, in-flight jobs and payment receipt compatibility',
+              'Apply patch on a short-lived feature branch and run all release checks',
+              'Run the production audit for the exact commit, artifact and environment',
+              'Merge through protected master only after the release gate clears',
+              'Verify the delivered artifact and affected user journeys'
+            ]
+          }, null, 2));
+          NODE
 
-      - name: Log Rollback
-        uses: actions/github-script@v7
+      - uses: actions/upload-artifact@v4
         with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `⚠️ Production rollback executed — ${new Date().toISOString()}`,
-              body: `**Method:** ${{ github.event.inputs.method }}\n**Reason:** ${{ github.event.inputs.reason }}\n**Triggered by:** @${{ github.actor }}\n\n[View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
-              labels: ['incident', 'rollback', 'production']
-            });
+          name: rollback-candidate-${{ github.sha }}
+          path: rollback-candidate/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/app/utils/supabase/supabaseServer";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 
@@ -17,7 +16,13 @@ export async function GET(
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const actor = await validateAuthOrReject(req);
+    if (isAuthError(actor)) return actor;
+    const ownerId = await resolveUserId(actor);
+    const supabase = createSupabaseAdminClient();
+    const { data: story, error: storyError } = await supabase.from("stories").select("author_id, revision").eq("id", storyId).maybeSingle();
+    if (storyError) return NextResponse.json({ error: "Metadata unavailable" }, { status: 503 });
+    if (!story || story.author_id !== ownerId) return NextResponse.json({ error: "Story not found" }, { status: 404 });
 
     // Fetch metadata for the story
     const { data, error } = await supabase
@@ -44,9 +49,10 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
-      metadata: data, // Will be null if no metadata exists
-    });
+    const stale = data?.source_revision === 0 || data?.source_revision != null && data.source_revision !== story.revision;
+    const { data: job } = await supabase.from("ai_jobs").select("status,error_code,attempts").eq("story_id", storyId).eq("source_revision", story.revision).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const visibleMetadata = stale ? null : data;
+    return NextResponse.json({ metadata: visibleMetadata, analysis: job ?? { status: visibleMetadata ? "succeeded" : "unavailable" } }, { headers: { "Cache-Control": "no-store" } });
 
   } catch (error: unknown) {
     console.error("[METADATA] Fetch error:", error);

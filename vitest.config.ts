@@ -8,7 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './__tests__/setup.ts',
-    exclude: ['node_modules', 'cre/**/node_modules/**', 'e2e/**/*', 'mobile/**/*', '.next', 'out', 'dist'],
+    // These dependency security tests use node:test and run in the required audit job.
+    exclude: ['node_modules', 'cre/**/node_modules/**', 'e2e/**/*', 'evals/**/*', 'mobile/**/*', 'scripts/**/*.test.mjs', '.next', 'out', 'dist'],
     alias: {
       '@': path.resolve(__dirname, './'),
     },

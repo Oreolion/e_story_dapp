@@ -433,7 +433,7 @@ export default function RecordScreen() {
           content,
           mood: selectedMood,
           tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-          hasAudio: !!recordingUri,
+          hasAudio: !!audioUrl,
           is_public: isPublic,
           story_date: storyDate,
           ...(audioUrl && { audio_url: audioUrl }),
@@ -976,6 +976,9 @@ export default function RecordScreen() {
                 disabled={isBusy || !title.trim() || !hasContent}
                 loading={step === "saving"}
               />
+              <Text style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, lineHeight: 17 }}>
+                Eligible saved text is sent for AI analysis. Transcription sends audio to its provider. Private cloud entries are not end-to-end encrypted. Private cloud audio is not saved yet; public publishing makes content publicly accessible.
+              </Text>
             </View>
           </AnimatedListItem>
         )}

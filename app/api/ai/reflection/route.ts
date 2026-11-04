@@ -1,7 +1,9 @@
+import { runReflection } from "@/lib/ai/tasks";
+import { createTextGenerator, inferenceErrorStatus } from "@/lib/ai/provider";
+import { admitTextInference } from "@/lib/ai/admission";
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
-import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 
 // ============================================================================
 // Configuration Constants
@@ -11,147 +13,35 @@ const REFLECTION_COOLDOWN_DAYS = 7; // 1 reflection per week
 const MAX_STORIES_TO_ANALYZE = 20; // Limit stories for context window
 const CANONICAL_WEIGHT_MULTIPLIER = 2.0; // Canonical stories count 2x
 
-// Valid values for validation
-const VALID_EMOTIONAL_TONES = [
-  'reflective', 'joyful', 'anxious', 'hopeful', 'melancholic',
-  'grateful', 'frustrated', 'peaceful', 'excited', 'uncertain', 'neutral'
-] as const;
-
-const VALID_LIFE_DOMAINS = [
-  'work', 'relationships', 'health', 'identity', 'growth',
-  'creativity', 'spirituality', 'family', 'adventure', 'learning', 'general'
-] as const;
-
-const REFLECTION_PROMPT = `You are a compassionate life coach analyzing a week of personal journal entries.
-Write a thoughtful, empathetic reflection that helps the user understand patterns in their life.
-
-Journal Entries from the Past Week:
-"""
-{STORIES_TEXT}
-"""
-
-Write a 2-3 paragraph reflection that:
-1. Identifies dominant themes and emotional patterns across the entries
-2. Notes any significant life moments or recurring concerns
-3. Offers gentle, supportive insights about what you observe
-4. Encourages continued journaling and self-reflection
-
-Return ONLY valid JSON (no markdown, no code blocks) in this exact structure:
-{
-  "reflection_text": "Your 2-3 paragraph reflection here. Use complete sentences and a warm, supportive tone.",
-  "themes_identified": ["theme1", "theme2", "theme3"],
-  "dominant_tone": "one of: reflective, joyful, anxious, hopeful, melancholic, grateful, frustrated, peaceful, excited, uncertain, neutral",
-  "dominant_domain": "one of: work, relationships, health, identity, growth, creativity, spirituality, family, adventure, learning, general"
-}
-
-Guidelines:
-- Be warm and encouraging, not clinical
-- Focus on patterns, not individual events
-- Offer perspective without being prescriptive
-- If entries are sparse or brief, acknowledge this gently
-- Maximum 500 words for reflection_text`;
-
-const EMPTY_WEEK_PROMPT = `You are a compassionate life coach. The user has not recorded any journal entries this week.
-Write an encouraging message to motivate them to start journaling.
-
-Return ONLY valid JSON:
-{
-  "reflection_text": "A warm, encouraging 1-2 paragraph message about the value of journaling and self-reflection. Don't be preachy.",
-  "themes_identified": [],
-  "dominant_tone": "hopeful",
-  "dominant_domain": "growth"
-}`;
-
-// ============================================================================
 // Helper Functions
 // ============================================================================
 
 function getWeekBounds(): { weekStart: Date; weekEnd: Date } {
   const now = new Date();
-  const dayOfWeek = now.getDay();
+  const dayOfWeek = now.getUTCDay();
 
   // Week starts on Sunday (day 0)
   const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - dayOfWeek);
-  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setUTCDate(now.getUTCDate() - dayOfWeek);
+  weekStart.setUTCHours(0, 0, 0, 0);
 
   const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  weekEnd.setUTCHours(23, 59, 59, 999);
 
   return { weekStart, weekEnd };
 }
-
-function cleanGeminiResponse(text: string): string {
-  return text
-    .replace(/```json\s*/gi, '')
-    .replace(/```\s*/gi, '')
-    .trim();
-}
-
-function parseAndValidateReflection(
-  responseText: string
-): { reflection_text: string; themes_identified: string[]; dominant_tone: string; dominant_domain: string } | null {
-  let textToParse = cleanGeminiResponse(responseText);
-
-  const jsonMatch = textToParse.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    textToParse = jsonMatch[0];
-  }
-
-  try {
-    const data = JSON.parse(textToParse);
-    return {
-      reflection_text: typeof data.reflection_text === 'string' ? data.reflection_text.slice(0, 2000) : '',
-      themes_identified: Array.isArray(data.themes_identified)
-        ? data.themes_identified.slice(0, 5).map((t: unknown) => String(t).toLowerCase())
-        : [],
-      dominant_tone: VALID_EMOTIONAL_TONES.includes(data.dominant_tone as typeof VALID_EMOTIONAL_TONES[number])
-        ? data.dominant_tone
-        : 'neutral',
-      dominant_domain: VALID_LIFE_DOMAINS.includes(data.dominant_domain as typeof VALID_LIFE_DOMAINS[number])
-        ? data.dominant_domain
-        : 'general',
-    };
-  } catch {
-    // Try fixing common JSON issues
-    try {
-      const fixedText = textToParse
-        .replace(/,\s*}/g, '}')
-        .replace(/,\s*]/g, ']');
-      const data = JSON.parse(fixedText);
-      return {
-        reflection_text: typeof data.reflection_text === 'string' ? data.reflection_text.slice(0, 2000) : '',
-        themes_identified: Array.isArray(data.themes_identified)
-          ? data.themes_identified.slice(0, 5).map((t: unknown) => String(t).toLowerCase())
-          : [],
-        dominant_tone: VALID_EMOTIONAL_TONES.includes(data.dominant_tone as typeof VALID_EMOTIONAL_TONES[number])
-          ? data.dominant_tone
-          : 'neutral',
-        dominant_domain: VALID_LIFE_DOMAINS.includes(data.dominant_domain as typeof VALID_LIFE_DOMAINS[number])
-          ? data.dominant_domain
-          : 'general',
-      };
-    } catch {
-      console.error("Failed to parse reflection JSON:", responseText.slice(0, 200));
-      return null;
-    }
-  }
-}
-
-// ============================================================================
-// GET Handler - Fetch existing reflections
-// ============================================================================
 
 export async function GET(req: NextRequest) {
   try {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
 
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId") || authenticatedUserId;
-    const limit = parseInt(searchParams.get("limit") || "5");
+    const limit = Number(searchParams.get("limit") || "5");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) return NextResponse.json({ error: "Invalid limit" }, { status: 400 });
 
     // Users can only fetch their own reflections
     if (userId !== authenticatedUserId) {
@@ -166,7 +56,7 @@ export async function GET(req: NextRequest) {
     // Subscription check — weekly reflections require storyteller+ plan
     const { data: userRow } = await supabase
       .from("users")
-      .select("subscription_plan, subscription_expires_at")
+      .select("wallet_address, subscription_plan, subscription_expires_at")
       .eq("id", authenticatedUserId)
       .single();
 
@@ -233,13 +123,13 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
-    const authenticatedUserId = authResult;
+    const authenticatedUserId = await resolveUserId(authResult);
 
     // Subscription check — weekly reflections require storyteller+ plan
     const adminClient = createSupabaseAdminClient();
     const { data: postUserRow } = await adminClient
       .from("users")
-      .select("subscription_plan, subscription_expires_at")
+      .select("wallet_address, subscription_plan, subscription_expires_at")
       .eq("id", authenticatedUserId)
       .single();
 
@@ -269,15 +159,9 @@ export async function POST(req: NextRequest) {
 
     // Parse request body
     const body = await req.json();
-    const { userWallet } = body;
+    const userWallet = postUserRow?.wallet_address ?? "";
+    if (body.userWallet && postUserRow?.wallet_address && body.userWallet.toLowerCase() !== postUserRow.wallet_address.toLowerCase()) return NextResponse.json({ error: "Wallet mismatch" }, { status: 403 });
     const userId = authenticatedUserId;
-
-    if (!userWallet) {
-      return NextResponse.json(
-        { error: "Missing required field: userWallet" },
-        { status: 400 }
-      );
-    }
 
     const supabase = adminClient; // reuse client from subscription check
     const { weekStart, weekEnd } = getWeekBounds();
@@ -297,7 +181,7 @@ export async function POST(req: NextRequest) {
 
     if (existingReflections && existingReflections.length > 0) {
       const nextAvailable = new Date(weekStart);
-      nextAvailable.setDate(nextAvailable.getDate() + REFLECTION_COOLDOWN_DAYS);
+      nextAvailable.setUTCDate(nextAvailable.getUTCDate() + REFLECTION_COOLDOWN_DAYS);
 
       return NextResponse.json(
         {
@@ -311,16 +195,16 @@ export async function POST(req: NextRequest) {
 
     // Fetch stories from the past 7 days with metadata
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
 
     const { data: stories, error: storiesError } = await supabase
       .from("stories")
       .select(`
         id, title, content, created_at, mood,
-        story_metadata (themes, emotional_tone, life_domain, is_canonical, significance_score)
+        story_metadata (themes, emotional_tone, life_domain, is_canonical, significance_score, ai_readable)
       `)
       .eq("author_id", userId)
-      .gte("created_at", sevenDaysAgo.toISOString())
+      .gte("created_at", sevenDaysAgo.toISOString()).lte("created_at", new Date().toISOString())
       .order("created_at", { ascending: false })
       .limit(MAX_STORIES_TO_ANALYZE);
 
@@ -333,57 +217,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Initialize Gemini
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    let prompt: string;
-    const storyIds: string[] = [];
-    let canonicalWeight = 0;
-
-    if (!stories || stories.length === 0) {
-      // No stories this week - generate encouraging message
-      prompt = EMPTY_WEEK_PROMPT;
-    } else {
-      // Format stories for the prompt
-      // Weight canonical stories higher by repeating their content
-      const storiesText = stories.map((story) => {
-        const metadata = story.story_metadata?.[0] || story.story_metadata;
-        const isCanonical = metadata?.is_canonical === true;
-        const storyDate = new Date(story.created_at).toLocaleDateString();
-
-        if (isCanonical) {
-          canonicalWeight += CANONICAL_WEIGHT_MULTIPLIER;
-        }
-
-        storyIds.push(story.id);
-
-        // Format: include date, title, mood, and content
-        let storyEntry = `[${storyDate}] ${story.title || "Untitled"}\nMood: ${story.mood || "not specified"}\n${story.content}`;
-
-        // For canonical stories, add emphasis
-        if (isCanonical) {
-          storyEntry = `**KEY MOMENT**\n${storyEntry}`;
-        }
-
-        return storyEntry;
-      }).join("\n\n---\n\n");
-
-      prompt = REFLECTION_PROMPT.replace("{STORIES_TEXT}", storiesText);
-    }
-
-    // Generate reflection
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const responseText = response.text();
-
-    // Parse and validate
-    const parsedReflection = parseAndValidateReflection(responseText);
-    if (!parsedReflection) {
-      return NextResponse.json(
-        { error: "AI returned invalid response format" },
-        { status: 500 }
-      );
-    }
+    const sources = (stories ?? []).filter(story => {
+      const metadata = Array.isArray(story.story_metadata) ? story.story_metadata[0] : story.story_metadata;
+      return metadata?.ai_readable !== false;
+    }).map(story => {
+      const metadata = Array.isArray(story.story_metadata) ? story.story_metadata[0] : story.story_metadata;
+      return { id: story.id, title: story.title, content: story.content, created_at: story.created_at, mood: story.mood, isCanonical: metadata?.is_canonical === true };
+    });
+    const quota = await admitTextInference(supabase, userId, "reflection");
+    if (!quota.allowed) return NextResponse.json({ error: "Reflection usage limit reached" }, { status: quota.unavailable ? 503 : 429, headers: { "Retry-After": String(quota.retryAfter) } });
+    const parsedReflection = await runReflection(sources, createTextGenerator(25_000, undefined, "reflection"));
+    const storyIds = sources.map(story => story.id);
+    const canonicalWeight = sources.filter(story => story.isCanonical).length * CANONICAL_WEIGHT_MULTIPLIER;
 
     // Save to database
     const reflectionData = {
@@ -405,35 +250,12 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (saveError) {
-      // If table doesn't exist, return the reflection without saving
-      if (saveError.code === "42P01" || saveError.message?.includes("does not exist")) {
-        return NextResponse.json({
-          success: true,
-          reflection: {
-            ...reflectionData,
-            id: "temp-" + Date.now(),
-            created_at: new Date().toISOString(),
-          },
-          message: "Reflection generated but not saved - table not yet created. Please run migration.",
-          migration_required: true
-        });
-      }
-      throw saveError;
-    }
+    if (saveError || !savedReflection) return NextResponse.json({ error: "Reflection generated but could not be saved" }, { status: 503 });
 
-    return NextResponse.json({
-      success: true,
-      reflection: savedReflection,
-      storiesAnalyzed: storyIds.length,
-      canonicalWeight
-    });
 
-  } catch (error: unknown) {
-    console.error("Error generating reflection:", error);
-    return NextResponse.json(
-      { error: "Failed to generate reflection" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, reflection: savedReflection, storiesAnalyzed: storyIds.length, canonicalWeight });
+  } catch (error) {
+    console.error("Reflection generation failed");
+    return NextResponse.json({ error: "Failed to generate reflection" }, { status: inferenceErrorStatus(error) });
   }
 }

@@ -4,6 +4,15 @@ import { StoryInsights } from "@/components/StoryInsights";
 import { StoryMetadata, AnalysisStatus } from "@/app/types";
 
 // --- MOCK SETUP ---
+vi.mock("@/components/AuthProvider", () => ({
+  useAuth: () => ({ profile: { id: "owner-123", subscription_plan: "free" }, getAccessToken: async () => null }),
+}));
+
+function metadataPayload(metadata: StoryMetadata | null) {
+  const legacy = metadata?.analysis_status;
+  const status = legacy === "pending" ? "queued" : legacy === "processing" ? "running" : legacy === "failed" ? "failed" : metadata ? "succeeded" : "unavailable";
+  return { metadata, analysis: { status, attempts: status === "failed" ? 1 : 0 } };
+}
 
 // Mock framer-motion to avoid animation issues in tests
 vi.mock("framer-motion", () => ({
@@ -67,7 +76,7 @@ function setupFetchMock(options: {
       }
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(options.metadataResponse ?? { metadata: null }),
+        json: () => Promise.resolve(metadataPayload(options.metadataResponse?.metadata ?? null)),
       });
     }
 
@@ -149,7 +158,7 @@ describe("StoryInsights", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/Let AI analyze your story to extract themes, emotions, and patterns/)
+          screen.getByText(/Request an analysis of the themes and patterns/)
         ).toBeInTheDocument();
       });
     });
@@ -360,7 +369,7 @@ describe("StoryInsights", () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               storyId: "story-456",
-              storyText: "This is a meaningful story about my journey through life.",
+              retry: false,
             }),
           })
         );
@@ -397,7 +406,7 @@ describe("StoryInsights", () => {
       fireEvent.click(generateButton);
 
       await waitFor(() => {
-        expect(screen.getByText("Analyzing...")).toBeInTheDocument();
+        expect(screen.getByText("Requesting...")).toBeInTheDocument();
       });
 
       // Resolve to clean up
@@ -422,11 +431,12 @@ describe("StoryInsights", () => {
       fireEvent.click(screen.getByText("Generate Insights"));
 
       await waitFor(() => {
-        expect(mockToastSuccess).toHaveBeenCalledWith("Insights generated!");
+        expect(mockToastSuccess).toHaveBeenCalledWith("Analysis requested. Insights appear after processing finishes.");
+        expect(mockToastSuccess).not.toHaveBeenCalledWith("Insights generated!");
       });
     });
 
-    it("shows error toast on failed analysis", async () => {
+    it("shows a recoverable error when scheduling fails", async () => {
       setupFetchMock({
         metadataResponse: { metadata: null },
         analyzeError: { error: "Analysis failed" },
@@ -441,7 +451,8 @@ describe("StoryInsights", () => {
       fireEvent.click(screen.getByText("Generate Insights"));
 
       await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith("Analysis failed");
+        expect(screen.getByText("Analysis could not be queued. Please try again later.")).toBeInTheDocument();
+        expect(mockToastSuccess).not.toHaveBeenCalled();
       });
     });
 
@@ -457,20 +468,12 @@ describe("StoryInsights", () => {
         expect(screen.getByText("AI Insights")).toBeInTheDocument();
       });
 
-      // Find and click refresh button (ghost button with RefreshCw icon)
-      const buttons = screen.getAllByRole("button");
-      const refreshButton = buttons.find((btn) => btn.className.includes("ghost"));
-
-      if (refreshButton) {
-        fireEvent.click(refreshButton);
-
-        await waitFor(() => {
-          expect(mockFetch).toHaveBeenCalledWith(
-            "/api/ai/analyze",
-            expect.any(Object)
-          );
-        });
-      }
+      mockFetch.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Refresh insights" }));
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith("/api/stories/story-456/metadata", expect.any(Object));
+      });
+      expect(mockFetch.mock.calls.some(([url]) => url === "/api/ai/analyze")).toBe(false);
     });
   });
 
@@ -655,7 +658,7 @@ describe("StoryInsights", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Analysis Queued")).toBeInTheDocument();
-        expect(screen.getByText(/waiting to be analyzed/)).toBeInTheDocument();
+        expect(screen.getByText(/analysis is queued/)).toBeInTheDocument();
       });
     });
 
@@ -743,7 +746,7 @@ describe("StoryInsights", () => {
         if (url.includes("/metadata")) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ metadata: metadataFailed }),
+            json: () => Promise.resolve(metadataPayload(metadataFailed)),
           });
         }
         if (url.includes("/analyze")) {

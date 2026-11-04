@@ -1,4 +1,5 @@
 // app/api/stories/route.ts
+import { parseJournalInput } from "@/lib/stories/contracts";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
@@ -14,19 +15,29 @@ export async function GET(req: NextRequest) {
     const userId = await resolveUserId(authResult);
 
     const admin = createSupabaseAdminClient();
+    const offset = Number(req.nextUrl.searchParams.get("offset") ?? 0);
+    const limit = Number(req.nextUrl.searchParams.get("limit") ?? 100);
+    if (!Number.isInteger(offset) || offset < 0 || offset > 100000 || !Number.isInteger(limit) || limit < 1 || limit > 100) return NextResponse.json({ error: "Invalid pagination" }, { status: 400 });
+    const { data: profile, error: profileError } = await admin.from("users").select("id, name, username, avatar, wallet_address, badges, followers_count").eq("id", userId).single();
+    if (profileError || !profile) return NextResponse.json({ error: "Unable to load author" }, { status: 503 });
 
     const { data, error } = await admin
       .from("stories")
-      .select("*")
+      .select("id, title, content, author_id, author_wallet, has_audio, audio_url, mood, tags, is_public, story_date, created_at, parent_story_id, likes, comments_count, shares, paywall_amount, revision, story_metadata(*)")
       .eq("author_id", userId)
-      .order("story_date", { ascending: false });
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + limit - 1);
 
     if (error) {
       console.error("[API /stories GET] fetch error:", error);
       return NextResponse.json({ error: "Failed to fetch stories" }, { status: 500 });
     }
 
-    return NextResponse.json({ stories: data || [] });
+    const stories = (data ?? []).map(row => ({
+      ...row, author: { id: profile.id, name: profile.name, username: profile.username, avatar: profile.avatar, wallet_address: profile.wallet_address, badges: profile.badges ?? [], followers: profile.followers_count ?? 0, isFollowing: false },
+      hasAudio: row.has_audio, comments: row.comments_count, paywallAmount: row.paywall_amount, timestamp: row.created_at, isLiked: false,
+      story_metadata: (() => { const meta = Array.isArray(row.story_metadata) ? row.story_metadata[0] ?? null : row.story_metadata; return meta?.source_revision === 0 || meta?.source_revision != null && meta.source_revision !== row.revision ? null : meta; })(),
+    }));
+    return NextResponse.json({ stories, nextOffset: stories.length === limit ? offset + limit : null });
   } catch (err: unknown) {
     console.error("[API /stories GET] unexpected error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -40,7 +51,9 @@ export async function POST(req: NextRequest) {
     if (isAuthError(authResult)) return authResult;
     const authenticatedUserId = authResult;
 
-    const body = await req.json();
+    const rawBody = await req.json();
+    let body;
+    try { body = { ...rawBody, ...parseJournalInput(rawBody) }; } catch { return NextResponse.json({ error: "Invalid story fields" }, { status: 400 }); }
 
     const {
       author_id,
@@ -99,7 +112,7 @@ export async function POST(req: NextRequest) {
 
     const insertData: Record<string, unknown> = {
       author_id,
-      author_wallet: author_wallet?.toLowerCase() ?? userRow.wallet_address ?? null,
+      author_wallet: userRow.wallet_address?.toLowerCase() ?? null,
       title,
       content,
       has_audio: !!has_audio,
@@ -109,7 +122,7 @@ export async function POST(req: NextRequest) {
       shares: 0,
       tags: tags ?? [],
       mood: mood ?? "neutral",
-      ipfs_hash: ipfs_hash ?? null,
+      ipfs_hash: is_public === true ? ipfs_hash ?? null : null,
       is_public: typeof is_public === "boolean" ? is_public : false,
     };
 
@@ -133,6 +146,9 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
+      const { data: parent, error: parentError } = await admin.from("stories").select("author_id").eq("id", parent_story_id).maybeSingle();
+      if (parentError) return NextResponse.json({ error: "Unable to verify parent" }, { status: 503 });
+      if (!parent || parent.author_id !== resolvedUserId) return NextResponse.json({ error: "Parent story not found" }, { status: 404 });
       insertData.parent_story_id = parent_story_id;
     }
 
@@ -143,6 +159,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (insertError) {
+      if (insertError.message === "Story write quota exceeded") return NextResponse.json({ error: "Daily story write limit reached" }, { status: 429 });
       console.error("[API /stories] insert error:", insertError);
       return NextResponse.json(
         { error: "Failed to save story" },
