@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { encryptedExport, exportStages, isOutsideRepository, projectRef, prepareEncryption } from './recovery-export.mjs';
+import { encryptedExport, exportStages, isOutsideRepository, projectRef, prepareEncryption, classifyExportFailure } from './recovery-export.mjs';
 
 const gpg = process.env.TEST_GPG_EXECUTABLE ?? 'gpg';
 const syntheticPhrase = 'synthetic-test-phrase-not-used-for-any-real-backup';
@@ -30,7 +30,8 @@ function decrypt(directory, input, phrase) {
 test('streams a real encrypted UTF-8 export, validates decryption and detects tampering', async () => {
   const f = fixture();
   // Test-only fd 0 prefix avoids passing a secret in argv/environment and works
-  // with Windows MSYS GPG as well as native GPG. Live mode uses local pinentry.
+  // with Windows MSYS GPG as well as native GPG. Live mode privately prefixes
+  // the passphrase through a separate PowerShell-to-Node pipe.
   const result = await encryptedExport({ ...f, source: { command: process.execPath, args: ['-e', `process.stdout.write(${JSON.stringify(syntheticPhrase + '\n' + text)})`] }, timeoutMs: 20000 });
   assert.equal(result.bytes, fs.statSync(f.output).size);
   assert.match(result.sha256, /^[a-f0-9]{64}$/);
@@ -90,6 +91,34 @@ test('live encryption setup works with no default GPG home and a separate privat
 
 test('missing GPG fails preflight before an export can start', () => {
   assert.throws(() => prepareEncryption(path.join(os.tmpdir(), 'istory-nonexistent-gpg-executable')), /GPG preflight failed/);
+});
+
+test('source failures expose fixed categories and exit codes without diagnostic contents', async () => {
+  const f = fixture();
+  const diagnostic = 'pg_dumpall: password authentication failed for user postgres; postgresql://postgres:synthetic-private-value@example.invalid/postgres';
+  await assert.rejects(encryptedExport({ ...f, source: { command: process.execPath,
+    args: ['-e', `process.stdout.write(${JSON.stringify(syntheticPhrase + '\n')}); process.stderr.write(${JSON.stringify(diagnostic)}); process.exitCode=2;`] } }), error => {
+    assert.equal(error.code, 'DATABASE_AUTHENTICATION');
+    assert.equal(error.sourceExit, 2);
+    assert.equal(error.message.includes('synthetic-private-value'), false);
+    assert.equal(error.message.includes('postgresql://'), false);
+    return true;
+  });
+  assert.equal(fs.existsSync(f.output), false);
+});
+
+test('safe diagnostics distinguish CLI, login, Docker, tool image and network failures', () => {
+  const examples = [
+    ['unknown flag: --synthetic', 'CLI_ARGUMENTS'],
+    ['Access token not provided. Run supabase login.', 'CLI_LOGIN_REQUIRED'],
+    ['Cannot connect to the Docker daemon', 'DOCKER_UNAVAILABLE'],
+    ['failed to resolve reference public.ecr.aws/example', 'TOOL_IMAGE_UNAVAILABLE'],
+    ['connect ECONNREFUSED', 'DATABASE_NETWORK'],
+    ['IPv6 is not supported on your current network', 'DATABASE_IPV6'],
+    ['no space left on device', 'DISK_FULL'],
+    ['unrecognized private diagnostic', 'SOURCE_EXPORT_FAILED'],
+  ];
+  for (const [message, expected] of examples) assert.equal(classifyExportFailure(message), expected);
 });
 
 test('Windows operator wrapper privately pipes a Unicode passphrase through all five synthetic exports', { skip: process.platform !== 'win32' }, () => {

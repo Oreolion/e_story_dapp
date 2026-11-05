@@ -23,6 +23,50 @@ export const exportStages = [
   ['migration-data', ['--schema', 'supabase_migrations', '--data-only', '--use-copy']],
 ];
 
+const failureMessages = {
+  CLI_ARGUMENTS: 'The installed CLI rejected an export argument.',
+  CLI_CONFIGURATION: 'The isolated CLI configuration was rejected.',
+  CLI_LOGIN_REQUIRED: 'The CLI could not use its saved Supabase login. Sign in locally; do not send an access token through chat.',
+  DATABASE_AUTHENTICATION: 'The database rejected authentication. Check the existing database password locally; do not reset it for this export.',
+  DATABASE_PERMISSION: 'The database denied the export role access. Do not grant extra permissions without reviewing the cause.',
+  DATABASE_NETWORK: 'The database connection failed. Check network reachability and project availability.',
+  DATABASE_IPV6: 'The direct database connection requires an IPv4 pooler fallback that was unavailable.',
+  DOCKER_UNAVAILABLE: 'The CLI could not reach Docker. Start Docker Desktop and wait until its engine is ready.',
+  TOOL_IMAGE_UNAVAILABLE: 'The CLI could not obtain its PostgreSQL export tool image. Check the registry connection and available disk space.',
+  DISK_FULL: 'The export process reported insufficient disk space.',
+  SOURCE_START_FAILED: 'The export program could not start.',
+  SOURCE_EXPORT_FAILED: 'The database export command failed; the available diagnostic did not match a known safe category.',
+  ENCRYPTION_FAILED: 'The encryption process failed after preflight.',
+  STREAM_FAILED: 'The encrypted export stream did not complete.',
+  EXPORT_TIMEOUT: 'The export exceeded its time limit and was stopped.',
+};
+
+// Inspect a bounded diagnostic internally and expose only a fixed category.
+// Never print/save arbitrary stderr, connection strings, SQL or credentials.
+export function classifyExportFailure(diagnostic) {
+  const cases = [
+    ['CLI_ARGUMENTS', /unknown flag|unrecognized option|unexpected argument/i],
+    ['CLI_CONFIGURATION', /failed to parse config|invalid config|error (?:parsing|decoding) config|unsupported postgres version/i],
+    ['CLI_LOGIN_REQUIRED', /access token (?:not provided|not found|is required)|not logged in|supabase login|failed to (?:retrieve|load|read).*access token/i],
+    ['DATABASE_AUTHENTICATION', /password authentication failed|28P01|SASL.*authentication failed/i],
+    ['DATABASE_PERMISSION', /permission denied|must be superuser|insufficient privilege/i],
+    ['DISK_FULL', /no space left on device|not enough space on the disk/i],
+    ['DATABASE_IPV6', /IPv6 is not supported|network is unreachable.*IPv6/i],
+    ['DOCKER_UNAVAILABLE', /cannot connect to the docker|docker daemon|dockerDesktopLinuxEngine|is the docker engine running|docker.*executable file not found/i],
+    ['TOOL_IMAGE_UNAVAILABLE', /failed to pull|pull access denied|manifest unknown|failed to resolve reference|failed to fetch.*manifest/i],
+    ['DATABASE_NETWORK', /ECONNREFUSED|ENETUNREACH|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|could not (?:connect|translate host)|connection (?:refused|timed out)|network is unreachable/i],
+  ];
+  return cases.find(([, pattern]) => pattern.test(diagnostic))?.[0] ?? 'SOURCE_EXPORT_FAILED';
+}
+
+class ExportFailure extends Error {
+  constructor(code, sourceExit) {
+    super(failureMessages[code]);
+    this.code = code;
+    this.sourceExit = Number.isInteger(sourceExit) ? sourceExit : null;
+  }
+}
+
 function plumbing() {
   return Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'HOME']
     .filter(name => process.env[name]).map(name => [name, process.env[name]]));
@@ -88,6 +132,9 @@ export async function encryptedExport({ source, encryption, output, timeoutMs = 
   let cipher;
   let timer;
   let timedOut = false;
+  let diagnostic = '';
+  let sourceExit;
+  let encryptionExit;
   try {
     cipher = spawn(encryption.command, encryption.args, {
       cwd: encryption.cwd, env: encryption.env ?? plumbing(), windowsHide: !encryption.interactive,
@@ -96,8 +143,9 @@ export async function encryptedExport({ source, encryption, output, timeoutMs = 
     const cipherExit = exited(cipher);
     producer = spawn(source.command, source.args, {
       cwd: source.cwd, env: source.env ?? plumbing(), windowsHide: true,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    producer.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk.toString('utf8')).slice(-65536); });
     const producerExit = exited(producer);
     const abort = () => { stop(producer); stop(cipher); };
     timer = setTimeout(() => { timedOut = true; abort(); }, timeoutMs);
@@ -108,10 +156,13 @@ export async function encryptedExport({ source, encryption, output, timeoutMs = 
         for await (const chunk of producer.stdout) yield chunk;
       })()) : producer.stdout, cipher.stdin)),
       guarded(pipeline(cipher.stdout, destination)),
-      producerExit.then(code => { if (code !== 0) { abort(); throw new Error('Export process failed'); } }),
-      cipherExit.then(code => { if (code !== 0) { abort(); throw new Error('Encryption process failed'); } }),
+      producerExit.then(code => { sourceExit = code; if (code !== 0) { abort(); throw new Error('Export process failed'); } }),
+      cipherExit.then(code => { encryptionExit = code; if (code !== 0) { abort(); throw new Error('Encryption process failed'); } }),
     ]);
-    if (timedOut || results.some(result => result.status === 'rejected')) throw new Error('Export/encryption did not complete. Partial files are not backups.');
+    if (timedOut) throw new ExportFailure('EXPORT_TIMEOUT', sourceExit);
+    if (sourceExit !== 0) throw new ExportFailure(sourceExit === -1 ? 'SOURCE_START_FAILED' : classifyExportFailure(diagnostic), sourceExit);
+    if (encryptionExit !== 0) throw new ExportFailure('ENCRYPTION_FAILED', sourceExit);
+    if (results.some(result => result.status === 'rejected')) throw new ExportFailure('STREAM_FAILED', sourceExit);
     if (fs.statSync(partial).size === 0) throw new Error('Empty encrypted output.');
     // An exclusive link publishes only a completed file and cannot replace an
     // existing file, even if another process created it while export was running.
@@ -124,6 +175,7 @@ export async function encryptedExport({ source, encryption, output, timeoutMs = 
     clearTimeout(timer);
     stop(producer); stop(cipher);
     destination.destroy();
+    diagnostic = '';
   }
 }
 
@@ -179,5 +231,8 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(() => { console.error('Recovery export failed. Do not upload partial output or treat it as a backup. No credentials or SQL were printed.'); process.exitCode = 1; });
+  main().catch(error => {
+    if (error instanceof ExportFailure) console.error(JSON.stringify({ error: error.code, sourceExit: error.sourceExit, message: error.message }));
+    console.error('Recovery export failed. Do not upload partial output or treat it as a backup. No credentials or SQL were printed.'); process.exitCode = 1;
+  });
 }
