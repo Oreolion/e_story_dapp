@@ -2,16 +2,16 @@
 
 The user selected a private Google Drive folder on Nov5. Its link is kept out of this public repository. Folder permissions and upload have not been verified: there is no Drive connector, and computer use currently has no native pipe or browser surface.
 
-The operator export uses the existing database password entered **locally**, then streams each SQL export directly into GnuPG AES256 encryption. No plaintext SQL file is created. The password is not placed in command arguments, source, env files or the manifest. GPG handles the separate backup passphrase through its local prompt. Do not send either value through chat or put the recovery passphrase in the Drive folder.
+The operator export uses the existing database password entered **locally**, then streams each SQL export directly into GnuPG AES256 encryption. No plaintext SQL file is created. The password is not placed in command arguments, source, env files or the manifest. PowerShell privately prompts for and confirms the separate backup passphrase, delivering it to Node/GPG through anonymous pipes, never command arguments, environment variables or files. Do not send either value through chat or put the recovery passphrase in the Drive folder.
 
 ## What is implemented and tested
 
-- `scripts/recovery-export.ps1` privately prompts for the existing database password, restores its process environment afterward and starts the reviewed exporter. Do not reset the production password for this task.
+- `scripts/recovery-export.ps1` first verifies the local CLI and a synthetic encryption/decryption round trip, without connecting to production or asking for passwords. It then privately prompts for the backup passphrase twice and the existing database password, restores its process environment afterward and starts the reviewed exporter. Do not reset the production password for this task.
 - `scripts/recovery-export.mjs` pins Supabase CLI **2.120.0**, project `qfwhtsmqndnocfidhdhy` and PostgreSQL major **17**. It uses a clean temporary CLI workdir, avoiding implicit reads of the app's env files. Supplying the existing password avoids temporary-login setup and its retry-side effects.
 - SQL stdout goes directly to GPG, whose output is written to exclusive `.partial` files outside the repository. Only successful producer/encryption exits publish a final encrypted file. A manifest records ciphertext lengths/hashes and explicit completion limits. Failures, timeouts and existing outputs cannot become a successful backup.
-- Five synthetic Node tests passed locally: UTF-8 encryption/decryption, wrong-passphrase/tamper rejection, producer/encryption failure, timeout/non-overwrite behavior, export inventory and repository destination protection. The PowerShell script parsed successfully. No real export, restore or upload has occurred.
+- Eight synthetic Node tests passed on Windows: UTF-8 encryption/decryption, wrong-passphrase/tamper rejection, producer/encryption failure, timeout/non-overwrite behavior, export inventory, repository destination protection, the real isolated GPG setup, missing-GPG rejection and all five stages through the PowerShell wrapper with a Unicode passphrase. Windows CI runs the wrapper test; Linux runs the portable cases. The PowerShell script parsed successfully.
 
-These are backup-pipeline tests, not evidence of a recoverable production snapshot. The local passphrase prompt still needs operator acceptance; do not automate a credential dialog or enter secrets in an agent tool.
+These are backup-pipeline tests, not evidence of a recoverable production snapshot. The first owner-run attempt failed during encryption because Windows' default GPG home was unavailable; no successful export, restore or upload has been established. The repaired live path initializes an isolated GPG home using a relative path, matching the tested MSYS setup, and does not require a GPG popup. Do not enter real secrets in an agent tool.
 
 ## Operator step: export privately
 
@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Force -Path $taskBackupRoot | Out-Null
   -GpgExecutable 'C:\Program Files\Git\usr\bin\gpg.exe'
 ```
 
-Run from the repository root. The output parent must already exist. Enter the current Supabase **database password**, not the service-role/API key, at the private PowerShell prompt. GPG then asks for the archive passphrase. Use the same strong, owner-managed passphrase for this backup set, save it in your existing password manager and keep it separately from Drive. The exporter may prompt once per part. If a prompt is unavailable or a process fails, stop; do not weaken encryption or treat partial files as complete.
+Run from the repository root. The output parent must already exist. Wait for **`Local encryption and CLI preflight passed`**. Then enter your chosen backup passphrase, confirm it, and enter the current Supabase **database password**, not the service-role/API key. All prompts are in PowerShell; no GPG popup is expected. The script uses the same passphrase for all five parts. Keep it on securely stored paper or in a password manager, separately from Drive. If preflight or an export fails, stop; do not weaken encryption or treat partial files as complete. Each retry creates a fresh backup directory; do not upload the previous failed attempt's `.partial` files.
 
 Expected final status: **`EXPORTED_NOT_RESTORE_VERIFIED`**. The five encrypted parts are roles, schema, data, migration schema and migration data, plus a metadata-only `manifest.json`. Never upload `.partial` files or raw SQL. The manifest and ciphertext hashes are safe to inspect for verification; SQL/customer records, credentials and passphrases are not needed in the conversation.
 

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { encryptedExport, exportStages, isOutsideRepository, projectRef } from './recovery-export.mjs';
+import { encryptedExport, exportStages, isOutsideRepository, projectRef, prepareEncryption } from './recovery-export.mjs';
 
 const gpg = process.env.TEST_GPG_EXECUTABLE ?? 'gpg';
 const syntheticPhrase = 'synthetic-test-phrase-not-used-for-any-real-backup';
@@ -70,4 +70,70 @@ test('repository output guard rejects descendants including names beginning with
   assert.equal(isOutsideRepository(path.join(root, 'output'), root), false);
   assert.equal(isOutsideRepository(path.join(root, '..backup'), root), false);
   assert.equal(isOutsideRepository(path.resolve(root, '..', 'private-backups'), root), true);
+});
+
+test('live encryption setup works with no default GPG home and a separate private passphrase prefix', async () => {
+  const encryption = prepareEncryption(gpg);
+  const prefix = Buffer.from(syntheticPhrase + '\n');
+  try {
+    const output = path.join(encryption.cwd, 'live-path-fixture.gpg');
+    const unicode = '日本語 café';
+    const result = await encryptedExport({ encryption: { ...encryption, prefix }, output,
+      source: { command: process.execPath, args: ['-e', `process.stdout.write(${JSON.stringify(text + unicode)})`] }, timeoutMs: 20000 });
+    assert.ok(result.bytes > 0);
+    assert.equal(decrypt(encryption.cwd, output, syntheticPhrase).stdout, text + unicode);
+    assert.equal(fs.readFileSync(output).includes(prefix), false);
+    assert.deepEqual(encryption.args.slice(0, 2), ['--homedir', '.']);
+    assert.equal(encryption.interactive, undefined);
+  } finally { prefix.fill(0); encryption.close(); }
+});
+
+test('missing GPG fails preflight before an export can start', () => {
+  assert.throws(() => prepareEncryption(path.join(os.tmpdir(), 'istory-nonexistent-gpg-executable')), /GPG preflight failed/);
+});
+
+test('Windows operator wrapper privately pipes a Unicode passphrase through all five synthetic exports', { skip: process.platform !== 'win32' }, () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'istory-operator-test-'));
+  const cli = path.join(directory, 'synthetic-cli.cjs');
+  const driver = path.join(directory, 'synthetic-operator.ps1');
+  fs.writeFileSync(cli, `if (process.argv.includes('--version')) { console.log('2.120.0'); }
+else { if (process.env.SUPABASE_DB_PASSWORD !== 'synthetic-database-password') process.exit(3); process.stdout.write(${JSON.stringify(text)}); }`);
+  fs.writeFileSync(driver, `param($Wrapper, $OutputDirectory, $Cli, $NodeExecutable, $GpgExecutable)
+function Read-Host { param($Prompt, [switch]$AsSecureString)
+  $value = if ($Prompt -like 'Existing Supabase*') { 'synthetic-database-password' } else { 'synthetic café 日本語 backup phrase' }
+  ConvertTo-SecureString $value -AsPlainText -Force
+}
+& $Wrapper -OutputDirectory $OutputDirectory -SupabaseCli $Cli -NodeExecutable $NodeExecutable -GpgExecutable $GpgExecutable
+`, 'utf8');
+  const run = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', driver,
+    '-Wrapper', path.resolve('scripts/recovery-export.ps1'), '-OutputDirectory', directory, '-Cli', cli,
+    '-NodeExecutable', process.execPath, '-GpgExecutable', gpg], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /Local encryption and CLI preflight passed/);
+  assert.equal((run.stdout + run.stderr).includes('synthetic-database-password'), false);
+  assert.equal((run.stdout + run.stderr).includes('synthetic café 日本語 backup phrase'), false);
+  const backup = fs.readdirSync(directory).find(name => name.startsWith('istory-db-backup-'));
+  assert.ok(backup);
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, backup, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.status, 'EXPORTED_NOT_RESTORE_VERIFIED');
+  assert.equal(manifest.parts.length, 5);
+  const f = fixture();
+  for (const part of manifest.parts) {
+    const copied = path.join(f.directory, part.file);
+    fs.copyFileSync(path.join(directory, backup, part.file), copied);
+    const restored = decrypt(f.directory, copied, 'synthetic café 日本語 backup phrase');
+    assert.equal(restored.status, 0);
+    assert.equal(restored.stdout, text);
+  }
+  // A broken local GPG setup must fail before Read-Host or any db dump starts.
+  fs.writeFileSync(driver, `param($Wrapper, $OutputDirectory, $Cli, $NodeExecutable, $GpgExecutable)
+function Read-Host { throw 'UNEXPECTED_SECRET_PROMPT' }
+& $Wrapper -OutputDirectory $OutputDirectory -SupabaseCli $Cli -NodeExecutable $NodeExecutable -GpgExecutable $GpgExecutable
+`);
+  const failed = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', driver,
+    '-Wrapper', path.resolve('scripts/recovery-export.ps1'), '-OutputDirectory', directory, '-Cli', cli,
+    '-NodeExecutable', process.execPath, '-GpgExecutable', path.join(directory, 'missing-gpg.exe')], { encoding: 'utf8', timeout: 30000, windowsHide: true });
+  assert.notEqual(failed.status, 0);
+  assert.match(failed.stdout + failed.stderr, /Local preflight failed/);
+  assert.equal((failed.stdout + failed.stderr).includes('UNEXPECTED_SECRET_PROMPT'), false);
 });

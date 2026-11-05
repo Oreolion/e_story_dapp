@@ -192,10 +192,25 @@ jobs:
       - name: Verify encrypted backup pipeline with synthetic data
         run: node --test scripts/recovery-export.test.mjs
 
+  recovery-windows:
+    name: Windows recovery export
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify local prompts and encrypted pipeline with synthetic inputs
+        shell: pwsh
+        env:
+          TEST_GPG_EXECUTABLE: C:/Program Files/Git/usr/bin/gpg.exe
+        run: node --test scripts/recovery-export.test.mjs
+
   release-checks:
     name: Release checks
     if: ${{ always() }}
-    needs: [dependency-audit, lint, typecheck, test, ai-evaluations, build, contracts]
+    needs: [dependency-audit, lint, typecheck, test, ai-evaluations, build, contracts, recovery-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Require every prerequisite to succeed
