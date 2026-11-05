@@ -94,6 +94,19 @@
     "zod": "4.6.7"
   },
   "overrides": {
+    "hardhat": {
+      "adm-zip": "0.6.1",
+      "undici": "6.29.1"
+    },
+    "@nomicfoundation/hardhat-verify": {
+      "undici": "6.29.1"
+    },
+    "mocha": {
+      "serialize-javascript": "7.1.4"
+    },
+    "solc": {
+      "tmp": "0.2.7"
+    },
     "decode-uri-component": "0.5.1",
     "proxy-addr": "2.0.8",
     "postcss": "8.5.25",

@@ -4,6 +4,8 @@
 
 Objective: repair the application and produce evidence sufficient for a production review while preserving supported wallet flows, existing user data and private inference. This is the implementation plan accepted by the user. On 2026-11-02 the user authorized a direct push to master after the required verification, replacing the proposed external PR-approval requirement. Production safety gates still apply because a master push can trigger Vercel. No production database migration or manual release promotion is authorized by that reply.
 
+**Scope update, 2026-11-05:** the user authorized the scoped production Vercel settings, authenticated worker provisioning and migrations 020–023 in [the cutover runbook](PRODUCTION_CUTOVER_RUNBOOK.md), conditional on passing recovery, compatibility and release gates. Do not request this authority again. The user confirmed no verified restore exists; establish recovery first. The free-tier/no-paid-inference/no-mainnet-test-payment constraints remain. Staging stays deferred until after the verified production checkpoint.
+
 The current phases below are **pending verification**. Existing code, previous test results and the historical milestone record do not by themselves satisfy these acceptance conditions. Mark a step complete only when its evidence identifies the source, environment and artifact actually tested.
 
 ### Decisions and constraints

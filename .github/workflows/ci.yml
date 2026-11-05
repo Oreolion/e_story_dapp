@@ -186,6 +186,12 @@ jobs:
       - name: Compile Solidity
         run: npx hardhat compile
 
+      - name: Verify patched compiler tooling consumer APIs
+        run: node --test scripts/tooling-compat.test.mjs
+
+      - name: Verify encrypted backup pipeline with synthetic data
+        run: node --test scripts/recovery-export.test.mjs
+
   release-checks:
     name: Release checks
     if: ${{ always() }}
