@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { CopyCounter, catalogSql, validateCatalog } from './recovery-format.mjs';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function isOutsideRepository(directory, root = repository) {
@@ -67,7 +68,7 @@ class ExportFailure extends Error {
   }
 }
 
-function plumbing() {
+export function plumbing() {
   return Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'HOME']
     .filter(name => process.env[name]).map(name => [name, process.env[name]]));
 }
@@ -90,10 +91,10 @@ export function prepareEncryption(command) {
   fs.writeFileSync(path.join(cwd, 'synthetic.gpg'), encrypted.stdout, { mode: 0o600 });
   const decrypted = spawnSync(command, [...args, '--decrypt', 'synthetic.gpg'], { cwd, env, input: `${phrase}\n`, timeout: 15000, maxBuffer: 128 * 1024, windowsHide: true });
   if (decrypted.status !== 0 || !decrypted.stdout.equals(fixture)) { close(); throw new Error('GPG preflight failed; no database export started.'); }
-  return { command, cwd, env, args: [...args, '--symmetric', '--cipher-algo', 'AES256', '--compress-algo', 'none', '--output', '-'], close };
+  return { command, cwd, env, decryptArgs: [...args, '--decrypt'], args: [...args, '--symmetric', '--cipher-algo', 'AES256', '--compress-algo', 'none', '--output', '-'], close };
 }
 
-async function readPassphrase() {
+export async function readPassphrase() {
   const chunks = [];
   let size = 0;
   for await (const chunk of process.stdin) {
@@ -108,14 +109,14 @@ async function readPassphrase() {
     return Buffer.from(`${passphrase}\n`, 'utf8');
   } finally { input.fill(0); chunks.forEach(chunk => chunk.fill(0)); }
 }
-function stop(child) {
+export function stop(child) {
   if (!child?.pid || child.exitCode !== null) return;
   if (process.platform === 'win32') {
     const task = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
     task.on('error', () => child.kill('SIGKILL'));
   } else child.kill('SIGKILL');
 }
-function exited(child) {
+export function exited(child) {
   return new Promise(resolve => {
     child.once('error', () => resolve(-1));
     child.once('close', code => resolve(code));
@@ -141,20 +142,26 @@ export async function encryptedExport({ source, encryption, output, timeoutMs = 
       stdio: ['pipe', 'pipe', encryption.interactive ? 'inherit' : 'ignore'],
     });
     const cipherExit = exited(cipher);
-    producer = spawn(source.command, source.args, {
-      cwd: source.cwd, env: source.env ?? plumbing(), windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    producer.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk.toString('utf8')).slice(-65536); });
-    const producerExit = exited(producer);
+    let plaintext;
+    let producerExit = Promise.resolve(0);
+    if (source.bytes) plaintext = Readable.from([source.bytes]);
+    else {
+      producer = spawn(source.command, source.args, {
+        cwd: source.cwd, env: source.env ?? plumbing(), windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      producer.stderr.on('data', chunk => { diagnostic = (diagnostic + chunk.toString('utf8')).slice(-65536); });
+      producerExit = exited(producer);
+      plaintext = producer.stdout;
+    }
     const abort = () => { stop(producer); stop(cipher); };
     timer = setTimeout(() => { timedOut = true; abort(); }, timeoutMs);
     const guarded = promise => promise.catch(() => { abort(); throw new Error('Stream failed'); });
     const results = await Promise.allSettled([
-      guarded(pipeline(encryption.prefix ? Readable.from((async function* () {
-        yield encryption.prefix;
-        for await (const chunk of producer.stdout) yield chunk;
-      })()) : producer.stdout, cipher.stdin)),
+      guarded(pipeline(Readable.from((async function* () {
+        if (encryption.prefix) yield encryption.prefix;
+        for await (const chunk of plaintext) { source.observe?.(chunk); yield chunk; }
+      })()), cipher.stdin)),
       guarded(pipeline(cipher.stdout, destination)),
       producerExit.then(code => { sourceExit = code; if (code !== 0) { abort(); throw new Error('Export process failed'); } }),
       cipherExit.then(code => { encryptionExit = code; if (code !== 0) { abort(); throw new Error('Encryption process failed'); } }),
@@ -184,7 +191,7 @@ async function main() {
   const allowed = new Set(['--output', '--supabase-cli', '--gpg']);
   const options = {};
   for (let index = 0; index < args.length; index += 2) {
-    if (args[index] === '--preflight') { options.preflight = true; index -= 1; continue; }
+    if (['--preflight', '--restore'].includes(args[index])) { options[args[index].slice(2)] = true; index -= 1; continue; }
     if (!allowed.has(args[index]) || !args[index + 1] || options[args[index]]) throw new Error('Usage: recovery-export.mjs --output ABSOLUTE_PRIVATE_DIRECTORY --supabase-cli ABSOLUTE_CLI_JS [--gpg GPG_EXECUTABLE]');
     options[args[index]] = args[index + 1];
   }
@@ -203,36 +210,53 @@ async function main() {
   const encryption = prepareEncryption(options['--gpg'] ?? 'gpg');
   let prefix;
   try {
+    if (options.restore) (await import('./recovery-restore.mjs')).checkRestoreEngine();
     if (options.preflight) { console.log('Local encryption and CLI preflight passed. No database connection was made.'); return; }
     if (!process.env.SUPABASE_DB_PASSWORD) throw new Error('Use recovery-export.ps1 to enter the existing database password privately.');
     prefix = await readPassphrase();
+    console.log('Reading schema and privilege metadata; no customer records will be displayed.');
+    const metadata = spawnSync(process.execPath, [options['--supabase-cli'], 'db', 'query', '--linked', '--project-ref', projectRef, '--workdir', workdir, '--output', 'json', catalogSql], {
+      cwd: workdir, env: safeEnv, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true,
+    });
+    if (metadata.status !== 0) throw new ExportFailure(classifyExportFailure(metadata.stderr ?? ''), metadata.status);
+    const rows = JSON.parse(metadata.stdout);
+    if (!Array.isArray(rows) || rows.length !== 1) throw new Error('Invalid catalog result.');
+    const catalog = validateCatalog(rows[0].recovery_catalog);
+    const counter = new CopyCounter();
     const directory = fs.mkdtempSync(path.join(parent, 'istory-db-backup-'));
     fs.chmodSync(directory, 0o700);
-    const manifest = { projectRef, cliVersion, startedAt: new Date().toISOString(), status: 'INCOMPLETE', parts: [],
+    const manifest = { formatVersion: 2, projectRef, cliVersion, startedAt: new Date().toISOString(), status: 'INCOMPLETE', parts: [],
       encryption: 'GnuPG symmetric AES256; operator-managed passphrase',
-      limits: ['Database export only: media object bytes and external provider configuration are not included.', 'Platform-managed schema customizations and Vault/encryption-root recovery require separate verification.', 'A completed export is not a verified restore or off-site delivery.'] };
+      limits: ['Database export only: media object bytes, role passwords and external provider configuration are not included.', 'Vault/encryption-root recovery and CLI-excluded event triggers require separate coverage.', 'Export parts use separate snapshots; a completed export is not a verified restore or off-site delivery.'] };
     const saveManifest = () => fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
     saveManifest();
     console.log(`Local encrypted backup directory: ${directory}`);
     console.log('Using the passphrase entered privately in PowerShell; keep it separate from the backup folder.');
-    for (const [stage, flags] of exportStages) {
+    for (const [stage, originalFlags] of exportStages) {
+      const flags = stage === 'schema' ? ['--schema', catalog.schemaNames.join(',')] : originalFlags;
       console.log(`Exporting encrypted ${stage}; SQL and diagnostics will not be printed.`);
       const part = await encryptedExport({
         source: { command: process.execPath, args: [options['--supabase-cli'], 'db', 'dump', '--linked', '--project-ref', projectRef, '--workdir', workdir, ...flags], cwd: workdir,
-          env: { ...safeEnv, SUPABASE_DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD } },
+          env: { ...safeEnv, SUPABASE_DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD }, observe: ['data', 'migration-data'].includes(stage) ? chunk => counter.write(chunk) : undefined },
         encryption: { ...encryption, prefix },
         output: path.join(directory, `${stage}.sql.gpg`),
       });
       manifest.parts.push(part); saveManifest();
     }
+    const catalogBytes = Buffer.from(JSON.stringify({ formatVersion: 2, projectRef, catalog, copyCounts: counter.finish() }), 'utf8');
+    try {
+      manifest.parts.push(await encryptedExport({ source: { bytes: catalogBytes }, encryption: { ...encryption, prefix }, output: path.join(directory, 'catalog.json.gpg') }));
+    } finally { catalogBytes.fill(0); }
     manifest.status = 'EXPORTED_NOT_RESTORE_VERIFIED'; manifest.finishedAt = new Date().toISOString(); saveManifest();
     console.log(JSON.stringify({ directory, projectRef, status: manifest.status, encryptedParts: manifest.parts.length }));
+    if (options.restore) await (await import('./recovery-restore.mjs')).restoreBackup({ directory, gpg: options['--gpg'] ?? 'gpg', prefix });
   } finally { prefix?.fill(0); encryption.close(); }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error => {
     if (error instanceof ExportFailure) console.error(JSON.stringify({ error: error.code, sourceExit: error.sourceExit, message: error.message }));
-    console.error('Recovery export failed. Do not upload partial output or treat it as a backup. No credentials or SQL were printed.'); process.exitCode = 1;
+    else if (error?.code === 'LOCAL_RESTORE_FAILURE') console.error(JSON.stringify({ error: error.category }));
+    console.error('Recovery operation failed. Retain completed encrypted files; partial files and an unverified restore are not recovery proof. No credentials or SQL were printed.'); process.exitCode = 1;
   });
 }

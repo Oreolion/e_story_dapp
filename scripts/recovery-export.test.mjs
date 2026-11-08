@@ -9,6 +9,7 @@ import { encryptedExport, exportStages, isOutsideRepository, projectRef, prepare
 const gpg = process.env.TEST_GPG_EXECUTABLE ?? 'gpg';
 const syntheticPhrase = 'synthetic-test-phrase-not-used-for-any-real-backup';
 const text = 'Synthetic journal fixture. Unicode: café 日本語.\nNo customer data.\n';
+const syntheticCatalog = { schemaNames: ['auth', 'public', 'storage'], roles: [], memberships: [], extensions: [], authMigrations: [], storageMigrations: [], integrity: { invalidIndexes: 0, unvalidatedConstraints: 0 }, security: { policies: [], tables: [] } };
 const ownedDirectories = [];
 afterEach(() => {
   for (const directory of ownedDirectories.splice(0)) {
@@ -121,11 +122,12 @@ test('safe diagnostics distinguish CLI, login, Docker, tool image and network fa
   for (const [message, expected] of examples) assert.equal(classifyExportFailure(message), expected);
 });
 
-test('Windows operator wrapper privately pipes a Unicode passphrase through all five synthetic exports', { skip: process.platform !== 'win32' }, () => {
+test('Windows operator wrapper privately pipes a Unicode passphrase through five SQL exports and the encrypted catalog', { skip: process.platform !== 'win32' }, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'istory-operator-test-'));
   const cli = path.join(directory, 'synthetic-cli.cjs');
   const driver = path.join(directory, 'synthetic-operator.ps1');
   fs.writeFileSync(cli, `if (process.argv.includes('--version')) { console.log('2.120.0'); }
+else if (process.argv.includes('query')) { console.log(${JSON.stringify(JSON.stringify([{ recovery_catalog: syntheticCatalog }]))}); }
 else { if (process.env.SUPABASE_DB_PASSWORD !== 'synthetic-database-password') process.exit(3); process.stdout.write(${JSON.stringify(text)}); }`);
   fs.writeFileSync(driver, `param($Wrapper, $OutputDirectory, $Cli, $NodeExecutable, $GpgExecutable)
 function Read-Host { param($Prompt, [switch]$AsSecureString)
@@ -145,14 +147,20 @@ function Read-Host { param($Prompt, [switch]$AsSecureString)
   assert.ok(backup);
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, backup, 'manifest.json'), 'utf8'));
   assert.equal(manifest.status, 'EXPORTED_NOT_RESTORE_VERIFIED');
-  assert.equal(manifest.parts.length, 5);
+  assert.equal(manifest.formatVersion, 2);
+  assert.equal(manifest.parts.length, 6);
   const f = fixture();
   for (const part of manifest.parts) {
     const copied = path.join(f.directory, part.file);
     fs.copyFileSync(path.join(directory, backup, part.file), copied);
     const restored = decrypt(f.directory, copied, 'synthetic café 日本語 backup phrase');
     assert.equal(restored.status, 0);
-    assert.equal(restored.stdout, text);
+    if (part.file === 'catalog.json.gpg') {
+      const catalog = JSON.parse(restored.stdout);
+      assert.equal(catalog.formatVersion, 2);
+      assert.deepEqual(catalog.catalog.schemaNames, syntheticCatalog.schemaNames);
+      assert.deepEqual(catalog.copyCounts, []);
+    } else assert.equal(restored.stdout, text);
   }
   // A broken local GPG setup must fail before Read-Host or any db dump starts.
   fs.writeFileSync(driver, `param($Wrapper, $OutputDirectory, $Cli, $NodeExecutable, $GpgExecutable)
@@ -165,4 +173,21 @@ function Read-Host { throw 'UNEXPECTED_SECRET_PROMPT' }
   assert.notEqual(failed.status, 0);
   assert.match(failed.stdout + failed.stderr, /Local preflight failed/);
   assert.equal((failed.stdout + failed.stderr).includes('UNEXPECTED_SECRET_PROMPT'), false);
+});
+
+test('Windows restore flag reaches preflight as one argument and failure stops before private prompts', { skip: process.platform !== 'win32' }, () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'istory-restore-flag-test-'));
+  const driver = path.join(directory, 'synthetic-preflight.ps1');
+  fs.writeFileSync(driver, `param($Wrapper,$Directory)
+function Invoke-SyntheticNode { Write-Output (ConvertTo-Json -InputObject @($args) -Compress); $global:LASTEXITCODE=1 }
+function Read-Host { throw 'UNEXPECTED_SECRET_PROMPT' }
+try { & $Wrapper -OutputDirectory $Directory -SupabaseCli 'synthetic-cli.cjs' -NodeExecutable Invoke-SyntheticNode -VerifyRestore }
+catch { if ($_.Exception.Message -notlike 'Local preflight failed*') { throw }; Write-Output 'EXPECTED_PREFLIGHT_STOP' }
+`);
+  const run = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', driver, '-Wrapper', path.resolve('scripts/recovery-export.ps1'), '-Directory', directory], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /EXPECTED_PREFLIGHT_STOP/);
+  assert.equal((run.stdout + run.stderr).includes('UNEXPECTED_SECRET_PROMPT'), false);
+  const args = JSON.parse(run.stdout.split(/\r?\n/).find(line => line.startsWith('[')));
+  assert.deepEqual(args.slice(-2), ['--preflight', '--restore']);
 });

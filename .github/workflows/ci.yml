@@ -171,6 +171,7 @@ jobs:
   contracts:
     name: Compile Contracts
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -189,8 +190,13 @@ jobs:
       - name: Verify patched compiler tooling consumer APIs
         run: node --test scripts/tooling-compat.test.mjs
 
-      - name: Verify encrypted backup pipeline with synthetic data
-        run: node --test scripts/recovery-export.test.mjs
+      - name: Fetch the exact reviewed recovery database image
+        run: docker pull public.ecr.aws/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706
+
+      - name: Verify encrypted export and isolated restore with synthetic data
+        env:
+          TEST_RECOVERY_DOCKER: '1'
+        run: node --test scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-restore.test.mjs
 
   recovery-windows:
     name: Windows recovery export
@@ -205,7 +211,7 @@ jobs:
         shell: pwsh
         env:
           TEST_GPG_EXECUTABLE: C:/Program Files/Git/usr/bin/gpg.exe
-        run: node --test scripts/recovery-export.test.mjs
+        run: node --test scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-restore.test.mjs
 
   release-checks:
     name: Release checks
