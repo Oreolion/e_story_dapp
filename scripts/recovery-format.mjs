@@ -63,6 +63,15 @@ export function validateCatalog(catalog) {
     !catalog.integrity || ['invalidIndexes', 'unvalidatedConstraints'].some(k => !Number.isSafeInteger(catalog.integrity[k]) || catalog.integrity[k] < 0) ||
     !catalog.security || !list(catalog.security.policies, 10000) || !list(catalog.security.tables, 10000) ||
     new Set(catalog.extensions.map(e => e.name)).size !== catalog.extensions.length) throw new Error('Invalid recovery catalog.');
+  const privileges = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']);
+  if (catalog.security.tables.some(t => !t || !identifier(t.schema) || !identifier(t.table) || !identifier(t.owner) ||
+    !catalog.schemaNames.includes(t.schema) || typeof t.rls !== 'boolean' || typeof t.forceRls !== 'boolean' || !list(t.acl) ||
+    t.acl.some(a => !a || !identifier(a.grantor) || !identifier(a.grantee) || !privileges.has(a.privilege) || typeof a.grantable !== 'boolean')) ||
+    catalog.security.policies.some(p => !p || !identifier(p.schemaname) || !identifier(p.tablename) || !identifier(p.policyname) ||
+      !list(p.roles) || p.roles.some(r => !identifier(r)) || !['PERMISSIVE', 'RESTRICTIVE'].includes(p.permissive) ||
+      !['ALL', 'SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(p.cmd) || ['qual', 'with_check'].some(k => p[k] !== null && (typeof p[k] !== 'string' || p[k].length > 65536))) ||
+    new Set(catalog.security.tables.map(t => JSON.stringify([t.schema, t.table]))).size !== catalog.security.tables.length ||
+    new Set(catalog.security.policies.map(p => JSON.stringify([p.schemaname, p.tablename, p.policyname]))).size !== catalog.security.policies.length) throw new Error('Invalid recovery security metadata.');
   return catalog;
 }
 

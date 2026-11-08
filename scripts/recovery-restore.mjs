@@ -7,6 +7,7 @@ import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { prepareEncryption, plumbing, stop, exited, readPassphrase, projectRef, isOutsideRepository } from './recovery-export.mjs';
 import { catalogSql, validateCatalog, quoteIdentifier as qi, quoteLiteral as ql } from './recovery-format.mjs';
+import { canonical, securityDifferenceSummary, extensionSecuritySql } from './recovery-security.mjs';
 
 export const restoreImage = 'public.ecr.aws/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706';
 const files = ['roles.sql.gpg', 'schema.sql.gpg', 'data.sql.gpg', 'migration-schema.sql.gpg', 'migration-data.sql.gpg', 'catalog.json.gpg'];
@@ -165,14 +166,25 @@ export async function restoreBackup({ directory, gpg = 'gpg', prefix }) {
       const actual = JSON.parse(targetQuery(target, `SELECT jsonb_build_array(${batch.map(t => `(SELECT count(*)::text FROM ${qi(t.schema)}.${qi(t.table)})`).join(',')});`));
       if (actual.some((count, index) => count !== String(batch[index].rows))) throw failure('RESTORE_ROW_COUNT_MISMATCH');
     }
-    const actualCatalog = JSON.parse(targetQuery(target, catalogSql));
-    const canonical = value => JSON.stringify(Array.isArray(value) ? value.map(canonical).sort() : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value);
-    for (const key of ['schemaNames', 'roles', 'memberships', 'extensions', 'authMigrations', 'storageMigrations', 'integrity', 'security']) {
+    let actualCatalog = JSON.parse(targetQuery(target, catalogSql));
+    for (const key of ['schemaNames', 'roles', 'memberships', 'extensions', 'authMigrations', 'storageMigrations', 'integrity']) {
       if (canonical(actualCatalog[key]) !== canonical(data.catalog[key])) throw failure('RESTORE_CATALOG_MISMATCH_' + key.toUpperCase());
+    }
+    const members = JSON.parse(targetQuery(target, `SELECT coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'table',c.relname,'kind',c.relkind,'extension',e.extname,'hasColumnAcl',EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attacl IS NOT NULL))), '[]') FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_class c ON c.oid=d.objid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid WHERE d.classid='pg_class'::regclass AND d.refclassid='pg_extension'::regclass AND d.deptype='e' AND c.relkind IN ('r','p','v','m','f');`));
+    let extensionSecurity;
+    try { extensionSecurity = extensionSecuritySql(data.catalog, actualCatalog.security, members); }
+    catch { throw failure('RESTORE_EXTENSION_SECURITY_UNSUPPORTED'); }
+    if (extensionSecurity.sql) {
+      targetQuery(target, extensionSecurity.sql);
+      actualCatalog = JSON.parse(targetQuery(target, catalogSql));
+    }
+    if (canonical(actualCatalog.security) !== canonical(data.catalog.security)) {
+      console.error(JSON.stringify({ error: 'RESTORE_SECURITY_DIFFERENCES', differences: securityDifferenceSummary(data.catalog.security, actualCatalog.security) }));
+      throw failure('RESTORE_CATALOG_MISMATCH_SECURITY');
     }
     const integrity = actualCatalog.integrity;
     const result = { status: 'DATABASE_RESTORE_VERIFIED', projectRef, startedAt, finishedAt: new Date().toISOString(), image: restoreImage, parts: manifest.parts, checkedTables: checks.length,
-      checkedRows: checks.reduce((sum, t) => sum + t.rows, 0), integrity, limits: ['Database import, COPY row counts and catalog comparison only; application/hosted acceptance and production migration cutover are separate gates.', 'Media bytes, role passwords, Vault root keys and external provider configuration are not restored.', 'CLI-excluded internal data, event triggers, role settings and publication configuration require separate review.'] };
+      checkedRows: checks.reduce((sum, t) => sum + t.rows, 0), integrity, restoredExtensionSecurityObjects: extensionSecurity.changedObjects, limits: ['Database import, COPY row counts and catalog comparison only; application/hosted acceptance and production migration cutover are separate gates.', 'Media bytes, role passwords, Vault root keys and external provider configuration are not restored.', 'CLI-excluded internal data, event triggers, role settings and publication configuration require separate review.'] };
     // Publish success evidence only after plaintext database disposal succeeds.
     stopRestoreTarget(target); target = undefined;
     console.log('Stopped this run\'s temporary restore database; encrypted backup files were retained.');
@@ -192,6 +204,7 @@ async function main() {
   const options = {};
   for (let n = 2; n < process.argv.length; n += 2) {
     const key = process.argv[n];
+    if (key === '--preflight' && !options.preflight) { options.preflight = true; n--; continue; }
     if (!['--directory', '--gpg'].includes(key) || !process.argv[n + 1] || options[key]) throw failure('RESTORE_INVALID_ARGUMENTS');
     options[key] = process.argv[n + 1];
   }
@@ -199,6 +212,8 @@ async function main() {
   const directory = fs.realpathSync(options['--directory']);
   if (!isOutsideRepository(directory)) throw failure('RESTORE_DIRECTORY_MUST_BE_OUTSIDE_GIT');
   await verifyBackupDirectory(directory);
+  checkRestoreEngine();
+  if (options.preflight) { const encryption = prepareEncryption(options['--gpg'] ?? 'gpg'); encryption.close(); console.log('Restore preflight passed. No database connection or backup decryption was made.'); return; }
   const prefix = await readPassphrase();
   try { await restoreBackup({ directory, gpg: options['--gpg'] ?? 'gpg', prefix }); } finally { prefix.fill(0); }
 }

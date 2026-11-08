@@ -21,6 +21,24 @@ test('old exports are rejected before any database target or passphrase operatio
   await assert.rejects(verifyBackupDirectory(directory), /RESTORE_COMPLETE_SCHEMA_EXPORT_REQUIRED/);
 });
 
+test('Windows restore-only wrapper stops at failed preflight before requesting a passphrase', { skip: process.platform !== 'win32' }, () => {
+  const directory = temp();
+  const driver = path.join(directory, 'synthetic-restore-preflight.ps1');
+  fs.writeFileSync(driver, `param($Wrapper,$Directory)
+function Invoke-SyntheticNode { Write-Output (ConvertTo-Json -InputObject @($args) -Compress); $global:LASTEXITCODE=1 }
+function Read-Host { throw 'UNEXPECTED_SECRET_PROMPT' }
+try { & $Wrapper -BackupDirectory $Directory -NodeExecutable Invoke-SyntheticNode }
+catch { if ($_.Exception.Message -notlike 'Restore preflight failed*') { throw }; Write-Output 'EXPECTED_PREFLIGHT_STOP' }
+`);
+  const run = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', driver, '-Wrapper', path.resolve('scripts/recovery-restore.ps1'), '-Directory', directory], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /EXPECTED_PREFLIGHT_STOP/);
+  assert.equal((run.stdout + run.stderr).includes('UNEXPECTED_SECRET_PROMPT'), false);
+  const args = JSON.parse(run.stdout.split(/\r?\n/).find(line => line.startsWith('[')));
+  assert.equal(args.at(-1), '--preflight');
+  assert.equal(args.includes('--supabase-cli'), false);
+});
+
 // Explicit opt-in: the ordinary Windows tests do not need Docker. Linux CI
 // downloads the pinned public image and runs this same synthetic rehearsal.
 test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and migration history; failures never publish evidence',
@@ -35,6 +53,22 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
         GRANT custom_reader TO anon WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
         CREATE SCHEMA auth; CREATE SCHEMA storage; CREATE SCHEMA extensions;
         CREATE EXTENSION pgcrypto WITH SCHEMA extensions VERSION '1.3';
+        SET ROLE postgres;
+        CREATE EXTENSION pg_stat_statements WITH SCHEMA extensions VERSION '1.11';
+        RESET ROLE;
+        GRANT ALL ON extensions.pg_stat_statements,extensions.pg_stat_statements_info TO supabase_admin WITH GRANT OPTION;
+        CREATE SCHEMA vault;
+        CREATE EXTENSION supabase_vault WITH SCHEMA vault VERSION '0.3.1';
+        GRANT SELECT,INSERT,UPDATE,DELETE,REFERENCES,TRIGGER ON vault.secrets TO postgres WITH GRANT OPTION;
+        GRANT SELECT ON vault.decrypted_secrets TO postgres WITH GRANT OPTION;
+        -- Synthetic platform defaults differ from a fresh image's defaults.
+        -- pg_dump omits these initial grants; the encrypted catalog must restore them.
+        UPDATE pg_init_privs i SET initprivs=c.relacl FROM pg_class c JOIN pg_depend d ON d.objid=c.oid
+        WHERE i.objoid=c.oid AND i.classoid='pg_class'::regclass AND i.objsubid=0 AND d.classid='pg_class'::regclass AND d.refclassid='pg_extension'::regclass AND d.deptype='e' AND c.relkind IN ('r','v');
+        INSERT INTO pg_init_privs(objoid,classoid,objsubid,privtype,initprivs)
+        SELECT c.oid,'pg_class'::regclass,0,'e',c.relacl FROM pg_class c JOIN pg_depend d ON d.objid=c.oid
+        WHERE d.classid='pg_class'::regclass AND d.refclassid='pg_extension'::regclass AND d.deptype='e' AND c.relkind IN ('r','v')
+          AND NOT EXISTS(SELECT 1 FROM pg_init_privs i WHERE i.objoid=c.oid AND i.classoid='pg_class'::regclass AND i.objsubid=0);
         CREATE TABLE auth.schema_migrations(version varchar(255) PRIMARY KEY);
         INSERT INTO auth.schema_migrations VALUES ('20260101000000');
         CREATE TABLE storage.migrations(id integer PRIMARY KEY, name varchar(255), hash varchar(255), executed_at timestamp);
@@ -61,7 +95,7 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
       const stages = [
         ['roles.sql.gpg', Buffer.from('CREATE ROLE custom_reader NOLOGIN NOBYPASSRLS;\nRESET ALL;\n')],
         ['schema.sql.gpg', pgDump(['--schema-only', ...catalog.schemaNames.map(n => '--schema=' + n)])],
-        ['data.sql.gpg', pgDump(['--data-only', '--exclude-schema=supabase_migrations', '--exclude-table=auth.schema_migrations', '--exclude-table=storage.migrations'])],
+        ['data.sql.gpg', pgDump(['--data-only', '--exclude-schema=supabase_migrations', '--exclude-schema=vault', '--exclude-table=auth.schema_migrations', '--exclude-table=storage.migrations'])],
         ['migration-schema.sql.gpg', pgDump(['--schema-only', '--schema=supabase_migrations'])],
         ['migration-data.sql.gpg', pgDump(['--data-only', '--schema=supabase_migrations'])],
       ];
@@ -78,6 +112,7 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
       assert.equal(restored.status, 'DATABASE_RESTORE_VERIFIED');
       assert.equal(restored.checkedTables, 3);
       assert.equal(restored.checkedRows, 3);
+      assert.equal(restored.restoredExtensionSecurityObjects, 4);
       const evidence = fs.readFileSync(restored.evidence, 'utf8');
       assert.equal(evidence.includes(privateValue), false);
       assert.equal(evidence.includes(prefix.toString().trim()), false);
@@ -109,6 +144,20 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
         assert.equal((run.stdout + run.stderr).includes(prefix.toString().trim()), false);
         assert.equal((run.stdout + run.stderr).includes('synthetic-database-password'), false);
         assert.equal((run.stdout + run.stderr).includes(privateValue), false);
+        const restoreDriver = path.join(operatorDirectory, 'synthetic-restore-operator.ps1');
+        fs.writeFileSync(restoreDriver, `param($Wrapper,$Directory,$NodeExecutable,$GpgExecutable)
+function Read-Host { param($Prompt,[switch]$AsSecureString)
+  if ($Prompt -ne 'Existing backup passphrase') { throw 'UNEXPECTED_DATABASE_PASSWORD_PROMPT' }
+  ConvertTo-SecureString '${prefix.toString('utf8').trim()}' -AsPlainText -Force
+}
+& $Wrapper -BackupDirectory $Directory -NodeExecutable $NodeExecutable -GpgExecutable $GpgExecutable
+`, 'utf8');
+        const retry = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', restoreDriver, '-Wrapper', path.resolve('scripts/recovery-restore.ps1'),
+          '-Directory', directory, '-NodeExecutable', process.execPath, '-GpgExecutable', gpg], { encoding: 'utf8', timeout: 120000, windowsHide: true });
+        assert.equal(retry.status, 0, retry.stdout + retry.stderr);
+        assert.match(retry.stdout, /Restore preflight passed/); assert.match(retry.stdout, /DATABASE_RESTORE_VERIFIED/);
+        assert.equal((retry.stdout + retry.stderr).includes(prefix.toString().trim()), false);
+        assert.equal((retry.stdout + retry.stderr).includes(privateValue), false);
       }
       await assert.rejects(restoreBackup({ directory, gpg, prefix: Buffer.from('wrong-synthetic-passphrase\n') }), /RESTORE_PASSPHRASE_OR_CATALOG_INVALID/);
       const variant = async (file, bytes) => {
@@ -131,7 +180,11 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
       assert.ok(brokenPolicy !== originalSchema, 'synthetic policy mutation must change the dump');
       const badPolicyDirectory = await variant('schema.sql.gpg', Buffer.from(brokenPolicy));
       await assert.rejects(restoreBackup({ directory: badPolicyDirectory, gpg, prefix }), /RESTORE_CATALOG_MISMATCH_SECURITY/);
-      for (const failedDirectory of [wrongCountDirectory, badSqlDirectory, badPolicyDirectory]) {
+      const brokenGrant = originalSchema.replace('GRANT SELECT ON TABLE "public"."journals" TO "custom_reader";', 'GRANT SELECT ON TABLE "public"."journals" TO "anon";');
+      assert.ok(brokenGrant !== originalSchema, 'synthetic application grant mutation must change the dump');
+      const badGrantDirectory = await variant('schema.sql.gpg', Buffer.from(brokenGrant));
+      await assert.rejects(restoreBackup({ directory: badGrantDirectory, gpg, prefix }), /RESTORE_CATALOG_MISMATCH_SECURITY/);
+      for (const failedDirectory of [wrongCountDirectory, badSqlDirectory, badPolicyDirectory, badGrantDirectory]) {
         assert.equal(fs.readdirSync(path.dirname(failedDirectory)).some(n => n.startsWith(path.basename(failedDirectory) + '.restore-')), false);
       }
       const corrupted = Buffer.from(fs.readFileSync(path.join(directory, 'data.sql.gpg'))); corrupted[corrupted.length - 3] ^= 1;
@@ -143,7 +196,7 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
       saveManifest(directory, manifest);
       await assert.rejects(restoreBackup({ directory, gpg, prefix }));
       const evidenceFiles = fs.readdirSync(path.dirname(directory)).filter(n => n.startsWith(path.basename(directory) + '.restore-'));
-      assert.equal(evidenceFiles.length, 1);
+      assert.equal(evidenceFiles.length, process.platform === 'win32' ? 2 : 1);
       assert.equal(fs.existsSync(path.join(directory, 'data.sql')), false);
     } finally { stopRestoreTarget(source); encryption.close(); }
   });
