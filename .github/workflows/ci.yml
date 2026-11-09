@@ -205,7 +205,13 @@ jobs:
         run: node --test scripts/tooling-compat.test.mjs
 
       - name: Fetch the exact reviewed recovery database image
-        run: docker pull public.ecr.aws/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706
+        run: |
+          for attempt in 1 2 3; do
+            if docker pull public.ecr.aws/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 20)); fi
+          done
+          echo '::error::Pinned recovery image unavailable after three attempts.'
+          exit 1
 
       - name: Verify encrypted export and isolated restore with synthetic data
         env:

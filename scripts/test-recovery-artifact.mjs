@@ -111,7 +111,8 @@ async function rehearse(mode, sha, routes) {
       try { const response = await probe(origin, '/api/health'); if (response.ok) { live = await response.json(); break; } } catch { /* bounded startup only */ }
       await new Promise(resolve => setTimeout(resolve, 250));
     }
-    if (!live || live.commitSha !== sha || live.environment !== 'ci' || live.releaseMode !== expectedMode || live.acceptingTraffic !== (mode === 'active')) throw fail('RECOVERY_ARTIFACT_BINDING_FAILED');
+    if (!live) throw fail('RECOVERY_LIVENESS_UNAVAILABLE');
+    if (live.commitSha !== sha || live.environment !== 'ci' || live.releaseMode !== expectedMode || live.acceptingTraffic !== (mode === 'active')) throw fail('RECOVERY_ARTIFACT_BINDING_FAILED');
     const ready = await probe(origin, '/api/ready');
     if (ready.status !== (mode === 'active' ? 200 : 503) || (await ready.json()).acceptingTraffic !== (mode === 'active')) throw fail('RECOVERY_READINESS_FAILED');
     if (mode === 'active') return { mode: expectedMode, probes: 2 };
