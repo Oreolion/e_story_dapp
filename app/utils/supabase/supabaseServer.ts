@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { assertReleaseActive } from "@/lib/runtime/release";
 
 export const createSupabaseServerClient = async () => {
+  assertReleaseActive();
   const cookieStore = await cookies();
 
   return createServerClient(

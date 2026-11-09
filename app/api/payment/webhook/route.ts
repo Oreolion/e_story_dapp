@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { applyVerifiedReceipt, PaymentUnavailable } from "@/lib/payments/receipts";
+import { rejectPausedRequest } from "@/lib/runtime/releaseResponse";
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
+  const paused = rejectPausedRequest(request);
+  if (paused) return paused;
   const key = process.env.BLOCKRADAR_WEBHOOK_SECRET || process.env.BLOCKRADAR_API_KEY;
   if (!key) return NextResponse.json({ error: "Webhook unavailable" }, { status: 503 });
   const signature = request.headers.get("x-blockradar-signature") ?? "";

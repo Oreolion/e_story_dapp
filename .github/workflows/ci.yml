@@ -160,6 +160,20 @@ jobs:
           if [ "$ready" != true ]; then echo '::error::Local production build did not start'; exit 1; fi
           npm run eval:ai:e2e
 
+      - name: Verify recovery rehearsal isolation and route inventory
+        run: node --test scripts/test-recovery-artifact.test.mjs
+
+      - name: Rehearse traffic admission on the same compiled artifact
+        run: node scripts/test-recovery-artifact.mjs
+
+      - name: Preserve compiled recovery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-build-evidence
+          path: output/release/recovery-build.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Preserve browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

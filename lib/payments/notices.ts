@@ -3,10 +3,12 @@ import { render } from "@react-email/render";
 import SubscriptionEmail from "@/components/emails/SubscriptionEmail";
 import { z } from "zod";
 import { assertEmailRecipient } from "@/lib/runtime/config";
+import { assertReleaseActive } from "@/lib/runtime/release";
 type Admin = ReturnType<typeof createSupabaseAdminClient>;
 const noticeContract = z.object({ payment_id: z.string().uuid(), user_id: z.string().uuid(), plan: z.enum(["storyteller","creator"]), expires_at: z.string(), lease_token: z.string().uuid(), email_payload: z.unknown().optional() });
 const emailContract = z.object({ from: z.string(), to: z.array(z.string().email()).length(1), subject: z.string(), html: z.string().max(100000) }).strict();
 export async function dispatchPaymentNotice(admin: Admin) {
+  assertReleaseActive();
   const { error: creditError } = await admin.rpc("activate_due_payment_credit");
   if (creditError) throw new Error("Deferred payment recovery unavailable");
   const { data, error } = await admin.rpc("claim_payment_notice");

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { rejectPausedRequest } from "./lib/runtime/releaseResponse";
 
 // ============================================================================
 // Rate Limiting Configuration
@@ -154,9 +155,14 @@ function refreshSupabaseSession(request: NextRequest, response: NextResponse): {
 // ============================================================================
 
 export async function middleware(request: NextRequest) {
+  const paused = rejectPausedRequest(request);
+  if (paused) return paused;
   const { pathname } = request.nextUrl;
 
   let response = NextResponse.next({ request });
+  // Image optimization must also stop in paused mode; active image requests
+  // do not need a session refresh.
+  if (pathname === "/_next/image") return response;
 
   // ── Step 1: Refresh Supabase session (page navigations only) ──────
   // Only run session refresh for browser page loads — NOT for API routes.
@@ -231,6 +237,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // API identifiers with image-like suffixes must not bypass the gate.
+    "/api/:path*",
+    "/_next/image",
     // Match all routes EXCEPT static files and images
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],

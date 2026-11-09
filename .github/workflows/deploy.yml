@@ -47,7 +47,7 @@ jobs:
           for attempt in $(seq 1 30); do
             if health=$(curl --fail --silent --show-error --max-time 15 "https://estories.app/api/health?release=${EXPECTED_SHA}"); then
               deployed_version=$(printf '%s' "$health" | jq -r '.commitSha // empty')
-              if [ "$deployed_version" = "$expected_version" ]; then
+              if [ "$deployed_version" = "$expected_version" ] && printf '%s' "$health" | jq -e '.releaseMode == "active" and .acceptingTraffic == true' > /dev/null; then
                 echo "Verified production commit $expected_version"
                 exit 0
               fi
@@ -65,6 +65,10 @@ jobs:
       - name: Smoke Test — Health API
         run: |
           curl -sf https://estories.app/api/health > /dev/null || (echo "Health API failed" && exit 1)
+
+      - name: Verify traffic admission
+        run: |
+          curl --fail --silent --show-error --max-time 15 https://estories.app/api/ready | jq -e '.releaseMode == "active" and .acceptingTraffic == true' > /dev/null
 
       - name: Smoke Test — Library Page
         run: |

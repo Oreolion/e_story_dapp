@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { InferencePrivacyError, TEXT_GENERATION_CONFIG } from "./workflow";
 import type { TextTask } from "./workflow";
 import { runtimeConfiguration, RuntimeConfigurationError } from "@/lib/runtime/config";
+import { assertReleaseActive, ReleasePausedError } from "@/lib/runtime/release";
 
 export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<string, number>) => void, task: TextTask = "analysis") {
   const config = runtimeConfiguration();
@@ -9,6 +10,7 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<st
   if (config.aiMode === "mock") {
     if (config.environment !== "staging" && config.environment !== "test") throw new RuntimeConfigurationError();
     return async (prompt: string) => {
+      assertReleaseActive();
       usage?.({ inputTokens: 0, outputTokens: 0, totalTokens: 0, mockResponses: 1 });
       if (task === "analysis") return JSON.stringify({ themes: ["staging fixture"], emotional_tone: "neutral", life_domain: "general", intensity_score: 0, significance_score: 0, people_mentioned: [], places_mentioned: [], time_references: [], brief_insight: "Staging fixture: no live model analyzed this entry.", actionable_advice: "Use synthetic content to verify this staging workflow." });
       if (task === "reflection") {
@@ -25,6 +27,7 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<st
   if (!key) throw new Error("AI provider is not configured");
   const model = new GoogleGenerativeAI(key).getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: TEXT_GENERATION_CONFIG }, { timeout: Math.max(1, Math.min(25_000, timeoutMs)) });
   return async (prompt: string) => {
+    assertReleaseActive();
     const result = await model.generateContent(prompt);
     const info = result.response.usageMetadata;
     if (info) usage?.({ inputTokens: info.promptTokenCount ?? 0, outputTokens: info.candidatesTokenCount ?? 0, thinkingTokens: "thoughtsTokenCount" in info ? Number(info.thoughtsTokenCount) || 0 : 0, totalTokens: info.totalTokenCount ?? 0 });
@@ -32,5 +35,5 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<st
   };
 }
 export function inferenceErrorStatus(error: unknown): number {
-  return error instanceof InferencePrivacyError || error instanceof RuntimeConfigurationError ? 503 : 502;
+  return error instanceof InferencePrivacyError || error instanceof RuntimeConfigurationError || error instanceof ReleasePausedError ? 503 : 502;
 }

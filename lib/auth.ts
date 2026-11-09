@@ -5,6 +5,8 @@ import { verifyWalletToken } from "./jwt";
 import type { User } from "@supabase/supabase-js";
 import { AuthStoreUnavailable, canonicalUserId, type AuthPrincipal } from "./auth/principal";
 import { runtimeConfiguration } from "./runtime/config";
+import { assertReleaseActive } from "./runtime/release";
+import { rejectPausedRequest } from "./runtime/releaseResponse";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -57,6 +59,7 @@ async function validateSupabaseCookie(request: NextRequest): Promise<User | null
 export async function authenticatePrincipal(
   request: NextRequest
 ): Promise<AuthPrincipal | null> {
+  assertReleaseActive();
   try {
     const authHeader = request.headers.get("Authorization");
     const token = authHeader?.startsWith("Bearer ")
@@ -117,6 +120,8 @@ export async function authenticatePrincipal(
 export async function validateAuthOrReject(
   request: NextRequest
 ): Promise<string | NextResponse> {
+  const paused = rejectPausedRequest(request);
+  if (paused) return paused;
   let userId: string | null;
   try { userId = await validateAuth(request); }
   catch (error) {
@@ -170,6 +175,7 @@ export async function resolveUserId(
 
 /** OAuth proof must never fall back to a wallet cookie. */
 export async function authenticateSupabasePrincipal(request: NextRequest): Promise<Extract<AuthPrincipal, { kind: "supabase" }> | null> {
+  assertReleaseActive();
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
   if (token) {
     try {

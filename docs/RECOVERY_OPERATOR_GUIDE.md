@@ -1,6 +1,6 @@
 # Encrypted recovery export and restore
 
-The owner-run restore of the newer complete-schema backup passed on **Nov9**. The agent independently verified the saved evidence against all six ciphertext hashes and the manifest: **62 tables, 1,730 rows**, matching security metadata and source integrity baseline. The seven-file backup was copied into the selected OneDrive root, and the owner then supplied a downloaded ZIP whose full inventory, ciphertext and manifest hashes independently matched the originals. This establishes retrieved-byte integrity with owner-reported cloud origin; browser download provenance and folder permissions were not independently observed. Production remains held. Private cloud-folder links are kept out of this public repository.
+The owner-run restore and subsequent migration rehearsal of the newer complete-schema backup passed on **Nov9**. The agent independently verified both saved evidence files against all six ciphertext hashes and the manifest: **62 COPY tables, 1,730 rows**, matching security metadata and source integrity baseline. Migrations 020–023 preserved the broader restored set of **73 tables and 1,892 rows**, with effective permissions and synthetic service-role probes passing. The seven-file backup was copied into the selected OneDrive root, and the owner then supplied a downloaded ZIP whose full inventory, ciphertext and manifest hashes independently matched the originals. This establishes retrieved-byte integrity with owner-reported cloud origin; browser download provenance and folder permissions were not independently observed. Production remains held. Private cloud-folder links are kept out of this public repository.
 
 The operator export uses the existing database password entered **locally**, then streams each SQL export directly into GnuPG AES256 encryption. No plaintext SQL file is created. The password is not placed in command arguments, source, env files or the manifest. PowerShell privately prompts for and confirms the separate backup passphrase, delivering it to Node/GPG through anonymous pipes, never command arguments, environment variables or files. Do not send either value through chat or put the recovery passphrase in the cloud backup folder.
 
@@ -55,9 +55,25 @@ Result: **downloaded backup bytes verified against the restored snapshot**, with
 
 The computer-use skill was reread on Nov9. Its required `node_repl` runtime is not exposed in this session, and no OneDrive connector is available. Browser download provenance and sharing/access settings were not independently observed, and no alternate UI automation or secret-file access was used. The owner supplied the ZIP after the website-download instruction; the archive bytes were independently verified as described above.
 
-## Next gate: rehearse migrations on the restored copy
+## Verified migration rehearsal
 
-The Nov9 database restore and downloaded-byte verification above are complete. The next operation uses the same retained encrypted backup and passphrase to restore another isolated copy, then applies **only the reviewed 020–023 files**. This is separate evidence: the real snapshot has not yet passed this migration rehearsal. No new export, database password, hosted connection or upload is needed.
+The owner completed this operation on Nov9 using the same retained encrypted backup and passphrase: another isolated copy was restored and **only the reviewed 020–023 files** were applied. The agent then verified the evidence against the original manifest, every retained ciphertext file, the earlier successful restore and the current reviewed migration files. No passphrase or customer record was read by the agent. No new export, database password or hosted connection was needed.
+
+| Check | Verified evidence |
+| --- | --- |
+| Result | `DATABASE_RESTORE_AND_MIGRATIONS_VERIFIED` / `ISOLATED_MIGRATIONS_VERIFIED` |
+| Evidence file | `istory-db-backup-I9N414.restore-0800da4b-fdee-4120-b9f0-ee135ccd5894.json` |
+| Evidence SHA-256 | `dfa45f17052a1bcecbde1d0c48ad35b272700d8d76b85769c9c0dbe5b4d58ead` |
+| Interval | Nov9 09:30:35.756–09:30:47.736 UTC |
+| Tool duration | 11.980 seconds; not full operational RTO |
+| Restored COPY counters | 62 tables, 1,730 rows |
+| Original-value comparison | 73 ordinary/partitioned tables, 1,892 rows preserved |
+| Permissions and probes | 18 privileged RPC signatures checked; service-role functional probes passed |
+| Integrity | Zero invalid indexes; six originally unvalidated constraints preserved |
+| Tool source | `a973f686f585371aac006a0301e6d8fbebeaabf6`; [all nine CI jobs passed](https://github.com/Oreolion/e_story_dapp/actions/runs/42592553788) |
+| Binding and disposal | All six part identities/sizes/hashes and four canonical migration hashes matched; success evidence is published after the owned temporary database stops |
+
+The original-value comparison includes managed/history tables outside the COPY counter's coverage, so its totals differ. This clears the stated isolated migration compatibility, value-preservation, permission and database-function checks for this snapshot. It does not apply production migrations or establish hosted acceptance, provider capacity, coordinated handler drain or a compatible application recovery artifact. The new evidence JSON was copied beside the backup folder in the already-selected local OneDrive root, with its hash verified; cloud synchronization of that evidence was not observed. Keep the earlier backup, ZIP, evidence and separate passphrase; no repeat is currently requested.
 
 `scripts/recovery-restore.ps1 -VerifyMigrations` validates all six ciphertext hashes, the pinned local PostgreSQL image, GPG and the four migration identities **before prompting**. Migration hashes use LF-normalized UTF-8, matching the [cutover runbook](PRODUCTION_CUTOVER_RUNBOOK.md). Unknown migration history, already-applied migrations or changed files stop the run. It never uses `supabase db push`, fills historical migration gaps or marks production history as deployed.
 
@@ -67,7 +83,7 @@ Effective permission checks cover all 18 privileged RPC signatures, public overl
 
 Transactional synthetic probes run as `service_role` and exercise analysis admission/claim/failure fencing, counters, one-time payment activation and outbox completion, atomic nonce consumption and fresh identity linking/replay rejection. Server write access must survive the client revocations. Probes roll back before the original-row comparison. There are no external AI, payment, email or browser calls. The PostgreSQL session has 20-second statement and 5-second lock limits, with a 30-second process bound. Resource exhaustion or any failure stops the owned temporary database without publishing success evidence.
 
-With Docker running, use this from the repository root:
+For a future authorized repeat, with Docker running, use this from the repository root:
 
 ```powershell
 & '.\scripts\recovery-restore.ps1' `

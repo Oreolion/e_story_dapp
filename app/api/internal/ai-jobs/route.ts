@@ -3,10 +3,13 @@ import { workerAuthorized } from "@/lib/internalWorkerAuth";
 import { runtimeConfiguration } from "@/lib/runtime/config";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { processAnalysisJob } from "@/lib/ai/jobs";
+import { rejectPausedRequest } from "@/lib/runtime/releaseResponse";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 // Scheduler registration and secret provisioning are separate deployment steps.
 export async function POST(request: NextRequest) {
+  const paused = rejectPausedRequest(request);
+  if (paused) return paused;
   const configured = process.env.AI_WORKER_SECRET;
   if (!configured || configured.length < 32) return NextResponse.json({ error: "Worker unavailable" }, { status: 503 });
   if (!workerAuthorized(request, configured)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

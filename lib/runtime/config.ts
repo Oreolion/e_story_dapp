@@ -1,3 +1,5 @@
+import { assertReleaseActive } from "./release";
+
 export type AppEnvironment = "development" | "test" | "ci" | "staging" | "production";
 type EnvironmentValues = Record<string, string | undefined>;
 export class RuntimeConfigurationError extends Error {
@@ -19,6 +21,7 @@ function flag(value: string | undefined): boolean {
   return fail();
 }
 export function runtimeConfiguration(env: EnvironmentValues = process.env) {
+  assertReleaseActive(env);
   const environment = env.APP_ENV ?? (env.CI === "1" ? "ci" : env.NODE_ENV === "test" ? "test" : env.NODE_ENV === "production" ? "production" : "development");
   if (!["development", "test", "ci", "staging", "production"].includes(environment)) return fail();
   const hosted = environment === "staging" || environment === "production";
