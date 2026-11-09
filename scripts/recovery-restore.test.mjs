@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { encryptedExport, prepareEncryption, projectRef, plumbing } from './recovery-export.mjs';
 import { catalogSql, CopyCounter } from './recovery-format.mjs';
 import { createRestoreTarget, stopRestoreTarget, targetQuery, restoreBackup, verifyBackupDirectory } from './recovery-restore.mjs';
+import { installMigrationFixture } from './recovery-migrations-fixture.mjs';
 
 const gpg = process.env.TEST_GPG_EXECUTABLE ?? 'gpg';
 const prefix = Buffer.from('synthetic-restore-phrase-café-日本語\n');
@@ -27,7 +28,7 @@ test('Windows restore-only wrapper stops at failed preflight before requesting a
   fs.writeFileSync(driver, `param($Wrapper,$Directory)
 function Invoke-SyntheticNode { Write-Output (ConvertTo-Json -InputObject @($args) -Compress); $global:LASTEXITCODE=1 }
 function Read-Host { throw 'UNEXPECTED_SECRET_PROMPT' }
-try { & $Wrapper -BackupDirectory $Directory -NodeExecutable Invoke-SyntheticNode }
+try { & $Wrapper -BackupDirectory $Directory -NodeExecutable Invoke-SyntheticNode -VerifyMigrations }
 catch { if ($_.Exception.Message -notlike 'Restore preflight failed*') { throw }; Write-Output 'EXPECTED_PREFLIGHT_STOP' }
 `);
   const run = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', driver, '-Wrapper', path.resolve('scripts/recovery-restore.ps1'), '-Directory', directory], { encoding: 'utf8', timeout: 15000, windowsHide: true });
@@ -37,6 +38,7 @@ catch { if ($_.Exception.Message -notlike 'Restore preflight failed*') { throw }
   const args = JSON.parse(run.stdout.split(/\r?\n/).find(line => line.startsWith('[')));
   assert.equal(args.at(-1), '--preflight');
   assert.equal(args.includes('--supabase-cli'), false);
+  assert.equal(args.filter(arg => arg === '--verify-migrations').length, 1);
 });
 
 // Explicit opt-in: the ordinary Windows tests do not need Docker. Linux CI
@@ -83,6 +85,7 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
         CREATE SCHEMA supabase_migrations;
         CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY);
         INSERT INTO supabase_migrations.schema_migrations VALUES ('019');`);
+      installMigrationFixture(source, 'text');
       const catalog = JSON.parse(targetQuery(source, catalogSql));
       const counter = new CopyCounter();
       const pgDump = args => {
@@ -110,12 +113,18 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
       await verifyBackupDirectory(directory);
       const restored = await restoreBackup({ directory, gpg, prefix });
       assert.equal(restored.status, 'DATABASE_RESTORE_VERIFIED');
-      assert.equal(restored.checkedTables, 3);
-      assert.equal(restored.checkedRows, 3);
+      assert.equal(restored.checkedTables, data.copyCounts.length);
+      assert.equal(restored.checkedRows, data.copyCounts.reduce((sum, t) => sum + t.rows, 0));
       assert.equal(restored.restoredExtensionSecurityObjects, 4);
       const evidence = fs.readFileSync(restored.evidence, 'utf8');
       assert.equal(evidence.includes(privateValue), false);
       assert.equal(evidence.includes(prefix.toString().trim()), false);
+      assert.equal(readManifest(directory).status, 'EXPORTED_NOT_RESTORE_VERIFIED');
+      const rehearsed = await restoreBackup({ directory, gpg, prefix, verifyMigrations: true });
+      assert.equal(rehearsed.status, 'DATABASE_RESTORE_AND_MIGRATIONS_VERIFIED');
+      assert.equal(rehearsed.migrationRehearsal.status, 'ISOLATED_MIGRATIONS_VERIFIED');
+      assert.equal(rehearsed.migrationRehearsal.migrations.length, 4);
+      assert.equal(fs.readFileSync(rehearsed.evidence, 'utf8').includes(privateValue), false);
       assert.equal(readManifest(directory).status, 'EXPORTED_NOT_RESTORE_VERIFIED');
       if (process.platform === 'win32') {
         const operatorDirectory = temp();
@@ -150,12 +159,12 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
   if ($Prompt -ne 'Existing backup passphrase') { throw 'UNEXPECTED_DATABASE_PASSWORD_PROMPT' }
   ConvertTo-SecureString '${prefix.toString('utf8').trim()}' -AsPlainText -Force
 }
-& $Wrapper -BackupDirectory $Directory -NodeExecutable $NodeExecutable -GpgExecutable $GpgExecutable
+& $Wrapper -BackupDirectory $Directory -NodeExecutable $NodeExecutable -GpgExecutable $GpgExecutable -VerifyMigrations
 `, 'utf8');
         const retry = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', restoreDriver, '-Wrapper', path.resolve('scripts/recovery-restore.ps1'),
           '-Directory', directory, '-NodeExecutable', process.execPath, '-GpgExecutable', gpg], { encoding: 'utf8', timeout: 120000, windowsHide: true });
         assert.equal(retry.status, 0, retry.stdout + retry.stderr);
-        assert.match(retry.stdout, /Restore preflight passed/); assert.match(retry.stdout, /DATABASE_RESTORE_VERIFIED/);
+        assert.match(retry.stdout, /Restore preflight passed/); assert.match(retry.stdout, /DATABASE_RESTORE_AND_MIGRATIONS_VERIFIED/);
         assert.equal((retry.stdout + retry.stderr).includes(prefix.toString().trim()), false);
         assert.equal((retry.stdout + retry.stderr).includes(privateValue), false);
       }
@@ -175,6 +184,11 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
       await assert.rejects(restoreBackup({ directory: wrongCountDirectory, gpg, prefix }), /RESTORE_ROW_COUNT_MISMATCH/);
       const badSqlDirectory = await variant('data.sql.gpg', Buffer.from('SELECT * FROM missing_synthetic_table;\n'));
       await assert.rejects(restoreBackup({ directory: badSqlDirectory, gpg, prefix }));
+      const historySql = stages.find(([name]) => name === 'migration-data.sql.gpg')[1].toString();
+      const missing019 = historySql.replace(/^019$/m, '018');
+      assert.notEqual(historySql, missing019);
+      const badHistoryDirectory = await variant('migration-data.sql.gpg', Buffer.from(missing019));
+      await assert.rejects(restoreBackup({ directory: badHistoryDirectory, gpg, prefix, verifyMigrations: true }), /REHEARSAL_HISTORY_FAILED/);
       const originalSchema = stages.find(([name]) => name === 'schema.sql.gpg')[1].toString();
       const brokenPolicy = originalSchema.replace('USING (("id" = 1))', 'USING (true)');
       assert.ok(brokenPolicy !== originalSchema, 'synthetic policy mutation must change the dump');
@@ -184,7 +198,7 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
       assert.ok(brokenGrant !== originalSchema, 'synthetic application grant mutation must change the dump');
       const badGrantDirectory = await variant('schema.sql.gpg', Buffer.from(brokenGrant));
       await assert.rejects(restoreBackup({ directory: badGrantDirectory, gpg, prefix }), /RESTORE_CATALOG_MISMATCH_SECURITY/);
-      for (const failedDirectory of [wrongCountDirectory, badSqlDirectory, badPolicyDirectory, badGrantDirectory]) {
+      for (const failedDirectory of [wrongCountDirectory, badSqlDirectory, badHistoryDirectory, badPolicyDirectory, badGrantDirectory]) {
         assert.equal(fs.readdirSync(path.dirname(failedDirectory)).some(n => n.startsWith(path.basename(failedDirectory) + '.restore-')), false);
       }
       const corrupted = Buffer.from(fs.readFileSync(path.join(directory, 'data.sql.gpg'))); corrupted[corrupted.length - 3] ^= 1;
@@ -196,7 +210,7 @@ function Read-Host { param($Prompt,[switch]$AsSecureString)
       saveManifest(directory, manifest);
       await assert.rejects(restoreBackup({ directory, gpg, prefix }));
       const evidenceFiles = fs.readdirSync(path.dirname(directory)).filter(n => n.startsWith(path.basename(directory) + '.restore-'));
-      assert.equal(evidenceFiles.length, process.platform === 'win32' ? 2 : 1);
+      assert.equal(evidenceFiles.length, process.platform === 'win32' ? 3 : 2);
       assert.equal(fs.existsSync(path.join(directory, 'data.sql')), false);
     } finally { stopRestoreTarget(source); encryption.close(); }
   });

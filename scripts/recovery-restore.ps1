@@ -1,11 +1,13 @@
 param(
   [Parameter(Mandatory = $true)][string]$BackupDirectory,
   [string]$NodeExecutable = 'node',
-  [string]$GpgExecutable = 'gpg'
+  [string]$GpgExecutable = 'gpg',
+  [switch]$VerifyMigrations
 )
 $ErrorActionPreference = 'Stop'
 $taskScript = Join-Path $PSScriptRoot 'recovery-restore.mjs'
-& $NodeExecutable $taskScript --directory $BackupDirectory --gpg $GpgExecutable --preflight
+$taskMigrationFlag = @(if ($VerifyMigrations) { '--verify-migrations' })
+& $NodeExecutable $taskScript --directory $BackupDirectory --gpg $GpgExecutable @taskMigrationFlag --preflight
 if ($LASTEXITCODE -ne 0) { throw 'Restore preflight failed. No passphrase is needed until this is fixed.' }
 Write-Host 'This uses the completed encrypted backup. No database password, export or production connection is needed.'
 $taskPhrase = Read-Host 'Existing backup passphrase' -AsSecureString
@@ -13,7 +15,7 @@ $taskProcess = $null
 try {
   $taskPhraseText = ([Management.Automation.PSCredential]::new('unused', $taskPhrase)).GetNetworkCredential().Password
   if ([string]::IsNullOrEmpty($taskPhraseText) -or $taskPhraseText -match "[\r\n\x00]" -or [Text.Encoding]::UTF8.GetByteCount($taskPhraseText) -gt 1024) { throw 'Use the existing nonempty, single-line backup passphrase.' }
-  $taskArguments = @($taskScript, '--directory', $BackupDirectory, '--gpg', $GpgExecutable)
+  $taskArguments = @($taskScript, '--directory', $BackupDirectory, '--gpg', $GpgExecutable) + $taskMigrationFlag
   if (@($taskArguments | Where-Object { $_.Contains('"') }).Count -gt 0) { throw 'Executable and backup paths cannot contain double quotes.' }
   $taskStart = [Diagnostics.ProcessStartInfo]::new()
   $taskStart.FileName = $NodeExecutable

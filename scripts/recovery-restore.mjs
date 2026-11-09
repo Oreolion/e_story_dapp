@@ -65,9 +65,25 @@ export function stopRestoreTarget(name) {
   // Only this run's ephemeral database is discarded; encrypted backups remain.
 }
 
-export function targetQuery(name, sql) {
+function runTargetQuery(name, sql) {
   const { Id: id } = inspectTarget(name);
-  return requireSuccess(docker(['exec', '-i', id, 'psql', '-X', '-q', '-t', '-A', '-h', '/tmp', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], sql), 'RESTORE_CHECK_FAILED');
+  return docker(['exec', '-i', id, 'psql', '-X', '-q', '-t', '-A', '-h', '/tmp', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], sql);
+}
+
+export function targetQuery(name, sql) {
+  return requireSuccess(runTargetQuery(name, sql), 'RESTORE_CHECK_FAILED');
+}
+
+export function targetMigrationQuery(name, sql) {
+  const result = runTargetQuery(name, sql);
+  if (result.status !== 0) {
+    // Never expose database diagnostics. Only our exact fixed phase markers
+    // can classify failure; arbitrary stdout/stderr is discarded.
+    const phases = new Set(['HISTORY', '020', '021', '022', '023', 'PERMISSIONS', 'PROBES', 'PRESERVATION']);
+    const phase = result.stdout?.trim().split(/\r?\n/).at(-1)?.replace(/^REHEARSAL_STAGE_/, '');
+    throw failure(phases.has(phase) ? 'REHEARSAL_' + phase + '_FAILED' : 'REHEARSAL_MIGRATIONS_FAILED');
+  }
+  return result.stdout;
 }
 
 export function bootstrapSql(catalog) {
@@ -108,7 +124,9 @@ export async function verifyBackupDirectory(directory) {
   return manifest;
 }
 
-export async function restoreBackup({ directory, gpg = 'gpg', prefix }) {
+export async function restoreBackup({ directory, gpg = 'gpg', prefix, verifyMigrations = false }) {
+  if (typeof verifyMigrations !== 'boolean') throw failure('RESTORE_INVALID_ARGUMENTS');
+  if (verifyMigrations) (await import('./recovery-migrations.mjs')).reviewedMigrations();
   directory = fs.realpathSync(directory);
   if (!isOutsideRepository(directory)) throw failure('RESTORE_DIRECTORY_MUST_BE_OUTSIDE_GIT');
   const startedAt = new Date().toISOString();
@@ -182,8 +200,13 @@ export async function restoreBackup({ directory, gpg = 'gpg', prefix }) {
       console.error(JSON.stringify({ error: 'RESTORE_SECURITY_DIFFERENCES', differences: securityDifferenceSummary(data.catalog.security, actualCatalog.security) }));
       throw failure('RESTORE_CATALOG_MISMATCH_SECURITY');
     }
+    let migrationRehearsal;
+    if (verifyMigrations) {
+      console.log('Rehearsing reviewed migrations 020-023 on the isolated copy; original values and effective permissions will be checked.');
+      migrationRehearsal = (await import('./recovery-migrations.mjs')).rehearseMigrations(target);
+    }
     const integrity = actualCatalog.integrity;
-    const result = { status: 'DATABASE_RESTORE_VERIFIED', projectRef, startedAt, finishedAt: new Date().toISOString(), image: restoreImage, parts: manifest.parts, checkedTables: checks.length,
+    const result = { status: verifyMigrations ? 'DATABASE_RESTORE_AND_MIGRATIONS_VERIFIED' : 'DATABASE_RESTORE_VERIFIED', ...(migrationRehearsal ? { migrationRehearsal } : {}), projectRef, startedAt, finishedAt: new Date().toISOString(), image: restoreImage, parts: manifest.parts, checkedTables: checks.length,
       checkedRows: checks.reduce((sum, t) => sum + t.rows, 0), integrity, restoredExtensionSecurityObjects: extensionSecurity.changedObjects, limits: ['Database import, COPY row counts and catalog comparison only; application/hosted acceptance and production migration cutover are separate gates.', 'Media bytes, role passwords, Vault root keys and external provider configuration are not restored.', 'CLI-excluded internal data, event triggers, role settings and publication configuration require separate review.'] };
     // Publish success evidence only after plaintext database disposal succeeds.
     stopRestoreTarget(target); target = undefined;
@@ -205,6 +228,7 @@ async function main() {
   for (let n = 2; n < process.argv.length; n += 2) {
     const key = process.argv[n];
     if (key === '--preflight' && !options.preflight) { options.preflight = true; n--; continue; }
+    if (key === '--verify-migrations' && !options.verifyMigrations) { options.verifyMigrations = true; n--; continue; }
     if (!['--directory', '--gpg'].includes(key) || !process.argv[n + 1] || options[key]) throw failure('RESTORE_INVALID_ARGUMENTS');
     options[key] = process.argv[n + 1];
   }
@@ -212,10 +236,11 @@ async function main() {
   const directory = fs.realpathSync(options['--directory']);
   if (!isOutsideRepository(directory)) throw failure('RESTORE_DIRECTORY_MUST_BE_OUTSIDE_GIT');
   await verifyBackupDirectory(directory);
+  if (options.verifyMigrations) (await import('./recovery-migrations.mjs')).reviewedMigrations();
   checkRestoreEngine();
   if (options.preflight) { const encryption = prepareEncryption(options['--gpg'] ?? 'gpg'); encryption.close(); console.log('Restore preflight passed. No database connection or backup decryption was made.'); return; }
   const prefix = await readPassphrase();
-  try { await restoreBackup({ directory, gpg: options['--gpg'] ?? 'gpg', prefix }); } finally { prefix.fill(0); }
+  try { await restoreBackup({ directory, gpg: options['--gpg'] ?? 'gpg', prefix, verifyMigrations: options.verifyMigrations ?? false }); } finally { prefix.fill(0); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error => { if (error?.code === 'LOCAL_RESTORE_FAILURE') console.error(JSON.stringify({ error: error.category })); console.error('Local restore failed. No SQL or credentials were displayed. Production and encrypted backups were not modified.'); process.exitCode = 1; });

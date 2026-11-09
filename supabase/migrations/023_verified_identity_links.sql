@@ -106,5 +106,6 @@ REVOKE ALL ON FUNCTION public.consume_wallet_nonce(text,text) FROM PUBLIC,anon,a
 GRANT EXECUTE ON FUNCTION public.consume_wallet_nonce(text,text) TO service_role;
 
 -- Identity mutations now go through verified server operations only.
-REVOKE INSERT,UPDATE,DELETE ON public.users FROM PUBLIC,anon,authenticated;
+-- TRUNCATE bypasses RLS and must not survive historical ALL table grants.
+REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON public.users FROM PUBLIC,anon,authenticated;
 COMMIT;

@@ -27,7 +27,8 @@ REVOKE ALL ON public.notifications FROM anon,authenticated;
 GRANT ALL ON public.notifications TO service_role;
 -- Correct the earlier policy whose name said service-role but allowed every role.
 DROP POLICY IF EXISTS "Service role full access on payments" ON public.payments;
-REVOKE INSERT,UPDATE,DELETE ON public.payments FROM anon,authenticated;
+-- RLS does not protect TRUNCATE. Revoke inherited PUBLIC table authority too.
+REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON public.payments FROM PUBLIC,anon,authenticated;
 CREATE FUNCTION public.activate_paid_payment(p_payment_id uuid,p_amount numeric,p_receipt_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE p public.payments; expiry timestamptz; current_expiry timestamptz; current_plan text;

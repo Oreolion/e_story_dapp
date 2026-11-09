@@ -196,7 +196,7 @@ jobs:
       - name: Verify encrypted export and isolated restore with synthetic data
         env:
           TEST_RECOVERY_DOCKER: '1'
-        run: node --test scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-security.test.mjs scripts/recovery-restore.test.mjs
+        run: node --test --test-concurrency=1 scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-security.test.mjs scripts/recovery-restore.test.mjs scripts/recovery-migrations.test.mjs
 
   recovery-windows:
     name: Windows recovery export
@@ -211,7 +211,7 @@ jobs:
         shell: pwsh
         env:
           TEST_GPG_EXECUTABLE: C:/Program Files/Git/usr/bin/gpg.exe
-        run: node --test scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-security.test.mjs scripts/recovery-restore.test.mjs
+        run: node --test --test-concurrency=1 scripts/recovery-export.test.mjs scripts/recovery-format.test.mjs scripts/recovery-security.test.mjs scripts/recovery-restore.test.mjs scripts/recovery-migrations.test.mjs
 
   release-checks:
     name: Release checks
