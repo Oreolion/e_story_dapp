@@ -49,7 +49,9 @@ There is no eStories Worker deployed yet. The app remains on Vercel; the held Wo
 
 In the Cloudflare account dashboard, check the **Workers plan (Free/Paid)**, account usage and available Cron Trigger capacity. The [current Workers limits](https://developers.cloudflare.com/workers/platform/limits/), checked Nov10, list Free as 100,000 requests/day and five cron triggers/account; other Workers share those limits. The intended single one-minute trigger adds 1,440 scheduled invocations/day. It also makes up to 1,440 Vercel health GETs and 2,880 Vercel worker POSTs/day. Cloudflare allowance does not establish Vercel allowance. Confirm existing included capacity; do not upgrade.
 
-The connected API can read Workers metadata but cannot read billing subscriptions through OAuth. Default usage model `standard` is not plan/remaining-capacity proof. No dispatcher, cron or Worker secrets were provisioned. See [the dispatcher release guide](WORKER_DISPATCH_RELEASE_GUIDE.md) for held defaults and activation gates.
+The owner subsequently confirmed the **Workers Free plan**. Nov10 API readback found zero Cron Triggers across the one existing unrelated Worker. A read-only account analytics query for `2026-11-10T00:00:00Z` through `16:52:14.172Z` returned no invocation rows and no errors; record this as no reported invocations in that window, not guaranteed current quota or future peak traffic. One planned trigger is within the documented five-trigger limit; monitor shared usage before activation and preserve the unrelated Worker.
+
+The connected API can read Workers metadata/analytics but cannot read billing subscriptions through OAuth. Default usage model `standard` is not billing proof; the Free-plan label above is owner confirmation. No dispatcher, cron or Worker secrets were provisioned. See [the dispatcher release guide](WORKER_DISPATCH_RELEASE_GUIDE.md) for held defaults and activation gates.
 
 ## Sources checked Nov10
 

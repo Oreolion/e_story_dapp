@@ -8,7 +8,7 @@ Supabase's Nov 4 [pg_net advisory](https://supabase.com/kb/troubleshooting/datab
 
 The candidate [Worker](../ops/worker-dispatch/worker.mjs) holds only two scoped tokens and a source commit binding. It has no database/service-role credential, provider key, journal content or application response storage. Its [configuration](../ops/worker-dispatch/wrangler.jsonc) disables public/preview URLs, registers no cron and holds both consumers by default.
 
-Account discovery found one connected Cloudflare account and one existing Worker. Default usage model `standard` does not prove included capacity. Billing subscription access returned 403: the OAuth connector cannot access that endpoint. No Worker, trigger, secret or plan was provisioned. Owner confirmation of included capacity remains necessary; no upgrade or purchase is authorized.
+Account discovery found one connected Cloudflare account and one existing unrelated Worker. The owner subsequently confirmed the Workers Free plan; Nov10 API readback found zero existing Cron Triggers, and the bounded account analytics query returned no reported invocations for its recorded window. See [the confirmation record](AI_PROVIDER_ROUTING.md). Billing subscription access returned 403: the OAuth connector cannot access that endpoint. No Worker, trigger, secret or plan was provisioned. Preserve the unrelated Worker, monitor shared account usage and do not upgrade or purchase capacity.
 
 ## Dispatch contract
 
@@ -44,6 +44,6 @@ Two unauthenticated, no-redirect GET probes to the current and preceding generat
 
 ## Remaining decision
 
-The owner has confirmed USDC mainnet enablement in response to the Base wallet check and supplied Gemini 2.5 Flash model limits. These are owner confirmations; see [the provider record](AI_PROVIDER_ROUTING.md) for their scope and the disabled DeepSeek fallback. Cloudflare account plan, usage and available cron capacity remain unconfirmed.
+The owner has confirmed USDC mainnet enablement, Gemini 2.5 Flash model limits and the Workers Free plan. These are owner confirmations; see [the provider record](AI_PROVIDER_ROUTING.md) for their scope and the disabled DeepSeek fallback. API readback established zero existing Cron Triggers and no reported invocation rows in the recorded analytics window. Vercel team readback is active Hobby; current included Vercel usage and Gemini billing tier still need confirmation before enabling consumers.
 
 Web/API remains NO_GO until production configuration, included provider allowances, hosted authenticated acceptance, compatible recovery and enforced old-handler/direct-SDK cutover are evidenced. Nov 10 SELECT-only Supabase readback still shows migration 019 and Vault only; 020–023 and scheduling extensions were not applied. The Computer Use skill was reread, but its required `node_repl` runtime is not exposed; CLI results cannot establish browser acceptance. Mobile is unreleased; no native/OTA release is in scope.

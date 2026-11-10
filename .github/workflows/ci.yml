@@ -131,6 +131,16 @@ jobs:
           node scripts/test-migration019.mjs
           node scripts/test-runtime-concurrency.mjs
 
+      - name: Fetch pinned synthetic cutover test images
+        run: |
+          docker pull postgres@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
+          docker pull postgrest/postgrest@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
+
+      - name: Rehearse Data API pause and resume on isolated fixtures
+        env:
+          TEST_CUTOVER_DOCKER: '1'
+        run: node --test scripts/cutover-fence.test.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -148,9 +158,12 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        # Exercise Vercel's default install behavior with the committed .npmrc.
+        run: npm ci
 
       - name: Build Next.js
+        env:
+          APP_RELEASE_MODE: paused
         run: npm run build
 
       - name: Install browser engines
