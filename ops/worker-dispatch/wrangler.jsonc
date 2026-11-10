@@ -1,0 +1,23 @@
+{
+  "name": "istory-worker-dispatch",
+  "main": "worker.mjs",
+  // Latest available pinned emulator supports this date; advance with runtime proof.
+  "compatibility_date": "2026-08-06",
+  "workers_dev": false,
+  "preview_urls": false,
+  // Register '* * * * *' separately, only after the production release gate.
+  "triggers": { "crons": [] },
+  "vars": {
+    "DISPATCH_ENABLED": "false",
+    "AI_DISPATCH_ENABLED": "false",
+    "PAYMENT_DISPATCH_ENABLED": "false",
+    "EXPECTED_COMMIT_SHA": ""
+  },
+  // AI_WORKER_SECRET and PAYMENT_WORKER_SECRET are separate secret bindings.
+  // They are never Supabase service-role keys and never appear in this file.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}

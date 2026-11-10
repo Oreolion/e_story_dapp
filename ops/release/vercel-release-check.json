@@ -1,0 +1,13 @@
+{
+  "name": "Release checks",
+  "requires": "none",
+  "blocks": "deployment-alias",
+  "targets": ["production"],
+  "isRerequestable": false,
+  "timeout": 2700,
+  "source": {
+    "kind": "git-provider",
+    "provider": "github",
+    "externalCheckName": "Release checks"
+  }
+}
