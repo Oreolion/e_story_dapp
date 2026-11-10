@@ -11,7 +11,10 @@ const images = Object.freeze({
 });
 function docker(args, input) {
   const result = spawnSync('docker', args, { input, encoding: 'utf8', windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 });
-  if (result.error || result.status !== 0) throw new Error('ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED');
+  if (result.error || result.status !== 0) {
+    const state = result.stderr?.match(/ERROR:\s+([A-Z0-9]{5})\b/)?.[1] ?? 'unavailable';
+    throw new Error(`ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED:${args[0]}:${state}`);
+  }
   return result.stdout.trim();
 }
 const source = file => readFileSync(new URL(`../ops/release/cutover/${file}.sql`, import.meta.url), 'utf8');
@@ -37,7 +40,7 @@ test('real Data API fence, in-flight boundary, identity conflicts and recovery',
     return id;
   };
   let db, inFlight;
-  const sql = input => docker(['exec', '-i', db, 'psql', '-X', '-qAt', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1'], input);
+  const sql = input => docker(['exec', '-i', db, 'psql', '-X', '-qAt', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=sqlstate'], input);
   const claim = role => {
     const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
     const body = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ role, exp: Math.floor(Date.now() / 1000) + 180 })}`;
@@ -53,7 +56,8 @@ test('real Data API fence, in-flight boundary, identity conflicts and recovery',
       '-p', '127.0.0.1::3000', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust'],
       ['-c', 'listen_addresses=127.0.0.1', '-c', 'shared_buffers=16MB', '-c', 'max_connections=25']);
     await eventually(() => {
-      try { docker(['exec', db, 'pg_isready', '-U', 'postgres']); return true; } catch { return false; }
+      // initdb's temporary server has only a Unix socket. Wait for final TCP.
+      try { docker(['exec', db, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres']); return true; } catch { return false; }
     });
     sql(`CREATE ROLE authenticator LOGIN NOINHERIT;
       CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
