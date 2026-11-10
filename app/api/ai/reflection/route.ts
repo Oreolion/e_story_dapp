@@ -1,6 +1,7 @@
 import { runReflection } from "@/lib/ai/tasks";
 import { createTextGenerator, inferenceErrorStatus } from "@/lib/ai/provider";
 import { admitTextInference } from "@/lib/ai/admission";
+import { hasTextProvider } from "@/lib/ai/providerPolicy";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
@@ -149,8 +150,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check API key configuration
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!apiKey) {
+    if (!hasTextProvider()) {
       return NextResponse.json(
         { error: "Server configuration error: API Key missing" },
         { status: 500 }
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Initialize Gemini
+    // Build only the consented, owner-scoped source context.
     const sources = (stories ?? []).filter(story => {
       const metadata = Array.isArray(story.story_metadata) ? story.story_metadata[0] : story.story_metadata;
       return metadata?.ai_readable !== false;
@@ -226,7 +226,9 @@ export async function POST(req: NextRequest) {
     });
     const quota = await admitTextInference(supabase, userId, "reflection");
     if (!quota.allowed) return NextResponse.json({ error: "Reflection usage limit reached" }, { status: quota.unavailable ? 503 : 429, headers: { "Retry-After": String(quota.retryAfter) } });
-    const parsedReflection = await runReflection(sources, createTextGenerator(25_000, undefined, "reflection"));
+    const parsedReflection = await runReflection(sources, createTextGenerator(25_000, undefined, "reflection", {
+      reserveFallback: async () => (await admitTextInference(supabase, userId, "reflection")).allowed,
+    }));
     const storyIds = sources.map(story => story.id);
     const canonicalWeight = sources.filter(story => story.isCanonical).length * CANONICAL_WEIGHT_MULTIPLIER;
 

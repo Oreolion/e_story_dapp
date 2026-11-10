@@ -31,6 +31,46 @@ beforeEach(async () => {
 });
 
 describe("real handler and PostgreSQL journeys with synthetic inference", () => {
+  const deepseekResponse = (content = JSON.stringify(analysisOutput)) => Response.json({ model: "deepseek-flash", choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } });
+  const reserved = async () => Number((await db.query<{ total: number }>("SELECT coalesce(sum(reserved_calls),0)::integer AS total FROM ai_daily_provider_calls")).rows[0].total);
+  const fallback = () => { vi.stubEnv("AI_DEEPSEEK_FALLBACK_ENABLED", "true"); vi.stubEnv("DEEPSEEK_API_KEY", "synthetic-provider-placeholder"); };
+  it("counts both editing provider attempts in the actual shared SQL budget", async () => {
+    fallback(); const before = await reserved();
+    fixture.generate.mockRejectedValue({ status: 503 });
+    vi.mocked(fetch).mockResolvedValue(deepseekResponse(syntheticText));
+    expect((await enhance(request("/api/ai/enhance", { text: syntheticText }))).status).toBe(200);
+    expect(await reserved()).toBe(before + 2);
+    expect(fixture.generate).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledOnce();
+  });
+  it("does not bypass exhausted shared SQL budget with another provider", async () => {
+    fallback(); const before = await reserved();
+    vi.stubEnv("AI_DAILY_CALL_LIMIT", String(before + 1));
+    fixture.generate.mockRejectedValue({ status: 503 });
+    expect((await enhance(request("/api/ai/enhance", { text: syntheticText }))).status).toBe(503);
+    expect(await reserved()).toBe(before + 1); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("uses exactly one separately admitted retry for durable analysis and records the actual provider", async () => {
+    fallback(); const before = await reserved();
+    await save(request("/api/journal/save", { content: syntheticText }));
+    fixture.generate.mockRejectedValue({ status: 503 });
+    expect(await (await worker(request("/api/internal/ai-jobs", {}, process.env.AI_WORKER_SECRET))).json()).toMatchObject({ status: "failed" });
+    expect((await db.query("SELECT status,attempts,error_code FROM ai_jobs")).rows[0]).toEqual({ status: "retry_wait", attempts: 1, error_code: "provider_transient" });
+    expect(fetch).not.toHaveBeenCalled();
+    await db.exec("UPDATE ai_jobs SET available_at=now()-interval '1 second'");
+    vi.mocked(fetch).mockResolvedValue(deepseekResponse());
+    expect(await (await worker(request("/api/internal/ai-jobs", {}, process.env.AI_WORKER_SECRET))).json()).toMatchObject({ status: "succeeded" });
+    expect((await db.query("SELECT attempts,usage FROM ai_jobs")).rows[0]).toMatchObject({ attempts: 2, usage: { provider: "deepseek", model: "deepseek-flash", reservedProviderCalls: 1 } });
+    expect(await reserved()).toBe(before + 2);
+    expect(fixture.generate).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledOnce();
+    await worker(request("/api/internal/ai-jobs", {}, process.env.AI_WORKER_SECRET));
+    expect(await reserved()).toBe(before + 2); expect(fetch).toHaveBeenCalledOnce();
+  });
+  it("permits the enabled fallback through editing admission when Gemini is not configured", async () => {
+    fallback(); vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", ""); const before = await reserved();
+    vi.mocked(fetch).mockResolvedValue(deepseekResponse(syntheticText));
+    expect((await enhance(request("/api/ai/enhance", { text: syntheticText }))).status).toBe(200);
+    expect(await reserved()).toBe(before + 1); expect(fixture.generate).not.toHaveBeenCalled(); expect(fetch).toHaveBeenCalledOnce();
+  });
   it.each(["bearer", "cookie"])("saves, queues and delivers current metadata over HTTP with %s auth", async auth => {
     const server = createServer(async (incoming, outgoing) => {
       try {

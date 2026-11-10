@@ -4,6 +4,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 beforeEach(() => {
   vi.stubEnv("APP_ENV", "test");
   vi.stubEnv("AI_PROVIDER_MODE", "live");
+  vi.stubEnv("AI_DEEPSEEK_FALLBACK_ENABLED", "false");
   vi.stubEnv("PAYMENT_PROVIDER_MODE", "live");
   vi.stubEnv("AI_WORKER_ENABLED", "true");
   vi.stubEnv("PAYMENT_NOTICE_WORKER_ENABLED", "true");

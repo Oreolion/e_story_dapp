@@ -44,4 +44,6 @@ Two unauthenticated, no-redirect GET probes to the current and preceding generat
 
 ## Remaining decision
 
-Web/API remains NO_GO until production configuration, provider allowances, wallet-specific Base USDC enablement, hosted authenticated acceptance, compatible recovery and enforced old-handler/direct-SDK cutover are evidenced. Nov 10 SELECT-only Supabase readback still shows migration 019 and Vault only; 020–023 and scheduling extensions were not applied. The Computer Use skill was reread, but its required `node_repl` runtime is not exposed; CLI results cannot establish browser acceptance. Mobile is unreleased; no native/OTA release is in scope.
+The owner has confirmed USDC mainnet enablement in response to the Base wallet check and supplied Gemini 2.5 Flash model limits. These are owner confirmations; see [the provider record](AI_PROVIDER_ROUTING.md) for their scope and the disabled DeepSeek fallback. Cloudflare account plan, usage and available cron capacity remain unconfirmed.
+
+Web/API remains NO_GO until production configuration, included provider allowances, hosted authenticated acceptance, compatible recovery and enforced old-handler/direct-SDK cutover are evidenced. Nov 10 SELECT-only Supabase readback still shows migration 019 and Vault only; 020–023 and scheduling extensions were not applied. The Computer Use skill was reread, but its required `node_repl` runtime is not exposed; CLI results cannot establish browser acceptance. Mobile is unreleased; no native/OTA release is in scope.

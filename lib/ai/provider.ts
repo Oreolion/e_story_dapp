@@ -1,11 +1,29 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { InferencePrivacyError, TEXT_GENERATION_CONFIG } from "./workflow";
+import { InferencePrivacyError, assertPrivateInferenceConfiguration, TEXT_GENERATION_CONFIG } from "./workflow";
 import type { TextTask } from "./workflow";
 import { runtimeConfiguration, RuntimeConfigurationError } from "@/lib/runtime/config";
 import { assertReleaseActive, ReleasePausedError } from "@/lib/runtime/release";
+import { textProviderPolicy } from "./providerPolicy";
+import { generateDeepseek, InferenceProviderError, type ProviderUsage } from "./deepseek";
 
-export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<string, number>) => void, task: TextTask = "analysis") {
+interface RoutingOptions {
+  // Only a separately quota-admitted durable retry may select this directly.
+  preferFallback?: boolean;
+  // Every extra provider call needs a new durable reservation.
+  reserveFallback?: () => Promise<boolean>;
+}
+export function providerUnavailable(error: unknown): boolean {
+  const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : 0;
+  if ([429, 500, 502, 503, 504].includes(status)) return true;
+  if (status) return false;
+  // Installed Gemini SDK wraps transport/abort failures in these exact classes.
+  // Response/input errors and parsing/refusal errors are deliberately excluded.
+  return error instanceof Error && (["GoogleGenerativeAIError", "GoogleGenerativeAIAbortError"].includes(error.constructor.name) || ["AbortError", "TimeoutError"].includes(error.name));
+}
+
+export function createTextGenerator(timeoutMs = 25_000, usage?: (data: ProviderUsage) => void, task: TextTask = "analysis", routing: RoutingOptions = {}) {
   const config = runtimeConfiguration();
+  assertPrivateInferenceConfiguration();
   if (config.aiMode === "disabled") throw new RuntimeConfigurationError();
   if (config.aiMode === "mock") {
     if (config.environment !== "staging" && config.environment !== "test") throw new RuntimeConfigurationError();
@@ -23,17 +41,35 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: Record<st
       return prompt.slice(index + marker.length).trim();
     };
   }
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!key) throw new Error("AI provider is not configured");
-  const model = new GoogleGenerativeAI(key).getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: TEXT_GENERATION_CONFIG }, { timeout: Math.max(1, Math.min(25_000, timeoutMs)) });
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new RuntimeConfigurationError();
+  const policy = textProviderPolicy();
+  if (!policy.gemini && !policy.deepseek) throw new RuntimeConfigurationError();
+  const budget = Math.min(25_000, Math.floor(timeoutMs));
+  const useDeepseek = policy.deepseek && (!policy.gemini || routing.preferFallback === true);
+  const primaryTimeout = policy.deepseek && routing.reserveFallback ? Math.max(1, Math.min(12_000, Math.floor(budget / 2))) : budget;
+  const model = useDeepseek ? null : new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!).getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: TEXT_GENERATION_CONFIG }, { timeout: primaryTimeout });
   return async (prompt: string) => {
-    assertReleaseActive();
-    const result = await model.generateContent(prompt);
+    assertReleaseActive(); assertPrivateInferenceConfiguration();
+    const deadline = Date.now() + budget;
+    if (useDeepseek) return generateDeepseek(prompt, task, budget, usage);
+    let result;
+    try { result = await model!.generateContent(prompt); }
+    catch (error) {
+      if (!policy.deepseek || !textProviderPolicy().deepseek || !routing.reserveFallback || !providerUnavailable(error)) throw error;
+      assertReleaseActive(); assertPrivateInferenceConfiguration();
+      if (deadline - Date.now() < 1000) throw new InferenceProviderError(504);
+      let allowed = false;
+      try { allowed = await routing.reserveFallback(); } catch { /* fail closed */ }
+      if (!allowed) throw new RuntimeConfigurationError();
+      const remaining = deadline - Date.now();
+      if (remaining < 1000) throw new InferenceProviderError(504);
+      return generateDeepseek(prompt, task, remaining, usage, 2);
+    }
     const info = result.response.usageMetadata;
-    if (info) usage?.({ inputTokens: info.promptTokenCount ?? 0, outputTokens: info.candidatesTokenCount ?? 0, thinkingTokens: "thoughtsTokenCount" in info ? Number(info.thoughtsTokenCount) || 0 : 0, totalTokens: info.totalTokenCount ?? 0 });
+    usage?.({ provider: "gemini", model: "gemini-2.5-flash", reservedProviderCalls: 1, ...(info ? { inputTokens: info.promptTokenCount ?? 0, outputTokens: info.candidatesTokenCount ?? 0, thinkingTokens: "thoughtsTokenCount" in info ? Number(info.thoughtsTokenCount) || 0 : 0, totalTokens: info.totalTokenCount ?? 0 } : {}) });
     return result.response.text();
   };
 }
 export function inferenceErrorStatus(error: unknown): number {
-  return error instanceof InferencePrivacyError || error instanceof RuntimeConfigurationError || error instanceof ReleasePausedError ? 503 : 502;
+  return error instanceof InferencePrivacyError || error instanceof RuntimeConfigurationError || error instanceof ReleasePausedError || error instanceof InferenceProviderError ? 503 : 502;
 }

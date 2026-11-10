@@ -3,6 +3,7 @@ import { createTextGenerator, inferenceErrorStatus } from "@/lib/ai/provider";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { admitTextInference } from "@/lib/ai/admission";
+import { hasTextProvider } from "@/lib/ai/providerPolicy";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 
 const MAX_TEXT_LENGTH = 50000;
@@ -14,9 +15,7 @@ export async function POST(req: NextRequest) {
     if (isAuthError(authResult)) return authResult;
     const userId = await resolveUserId(authResult);
 
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
-    if (!apiKey) {
+    if (!hasTextProvider()) {
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
@@ -52,7 +51,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const enhancedText = await runEditing(text, task, createTextGenerator(25_000, undefined, task));
+    const enhancedText = await runEditing(text, task, createTextGenerator(25_000, undefined, task, {
+      reserveFallback: async () => (await admitTextInference(createSupabaseAdminClient(), userId, task)).allowed,
+    }));
 
     return NextResponse.json({ text: enhancedText });
 
