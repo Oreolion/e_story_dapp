@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../components/AuthProvider";
 import { WeeklyReflection } from "../types";
+import { AI_SETUP_CODE, AI_SETUP_MESSAGE } from "@/lib/ai/messages";
 
 interface UseReflectionData {
   reflections: WeeklyReflection[];
@@ -12,6 +13,7 @@ interface UseReflectionData {
   error: string | null;
   canGenerate: boolean;
   currentWeekStart: string | null;
+  generationUnavailable: boolean;
   generateReflection: () => Promise<WeeklyReflection | null>;
   refetch: () => Promise<void>;
 }
@@ -25,6 +27,7 @@ export function useReflection(): UseReflectionData {
   const [error, setError] = useState<string | null>(null);
   const [canGenerate, setCanGenerate] = useState(false);
   const [currentWeekStart, setCurrentWeekStart] = useState<string | null>(null);
+  const [generationUnavailable, setGenerationUnavailable] = useState(false);
 
   const fetchReflections = useCallback(async () => {
     if (isAuthLoading || !authInfo?.id) {
@@ -42,6 +45,7 @@ export function useReflection(): UseReflectionData {
         return;
       }
       const response = await fetch(`/api/ai/reflection?userId=${authInfo.id}&limit=10`, {
+        credentials: "same-origin",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -55,6 +59,7 @@ export function useReflection(): UseReflectionData {
       const data = await response.json();
 
       setReflections(data.reflections || []);
+      setGenerationUnavailable(data.generation?.code === AI_SETUP_CODE);
       setCanGenerate(data.canGenerate ?? true);
       setCurrentWeekStart(data.currentWeekStart || null);
     } catch (err) {
@@ -75,6 +80,11 @@ export function useReflection(): UseReflectionData {
       return null;
     }
 
+    if (generationUnavailable) {
+      setError(AI_SETUP_MESSAGE);
+      return null;
+    }
+
     if (!canGenerate) {
       setError("You can only generate one reflection per week");
       return null;
@@ -87,6 +97,7 @@ export function useReflection(): UseReflectionData {
       const token = await getAccessToken();
       const response = await fetch("/api/ai/reflection", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -100,6 +111,7 @@ export function useReflection(): UseReflectionData {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.code === AI_SETUP_CODE) { setGenerationUnavailable(true); setCanGenerate(false); }
         throw new Error(data.error || "Failed to generate reflection");
       }
 
@@ -118,7 +130,7 @@ export function useReflection(): UseReflectionData {
     } finally {
       setIsGenerating(false);
     }
-  }, [authInfo?.id, authInfo?.wallet_address, canGenerate, getAccessToken]);
+  }, [authInfo?.id, authInfo?.wallet_address, canGenerate, generationUnavailable, getAccessToken]);
 
   // Get the latest reflection (most recent)
   const latestReflection = reflections.length > 0 ? reflections[0] : null;
@@ -131,6 +143,7 @@ export function useReflection(): UseReflectionData {
     error,
     canGenerate,
     currentWeekStart,
+    generationUnavailable,
     generateReflection,
     refetch: fetchReflections,
   };

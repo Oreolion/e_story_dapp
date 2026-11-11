@@ -15,6 +15,7 @@ import {
 import { useReflection } from "@/app/hooks/useReflection";
 import { WeeklyReflection as WeeklyReflectionType } from "@/app/types";
 import { getEmotionClass, getDomainClass, domainLabels } from "@/lib/design-tokens";
+import { AI_SETUP_MESSAGE } from "@/lib/ai/messages";
 import {
   Brain,
   Sparkles,
@@ -140,6 +141,7 @@ export function WeeklyReflectionSection() {
     isGenerating,
     error,
     canGenerate,
+    generationUnavailable,
     generateReflection,
     refetch,
   } = useReflection();
@@ -173,7 +175,7 @@ export function WeeklyReflectionSection() {
               Weekly Reflection
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">
-              Let AI analyze your journal entries from the past week and provide personalized insights about your life patterns.
+              {generationUnavailable ? AI_SETUP_MESSAGE : "Let AI analyze your journal entries from the past week and provide personalized insights about your life patterns."}
             </p>
           </div>
           <Button
@@ -238,6 +240,7 @@ export function WeeklyReflectionSection() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {generationUnavailable && <p role="status" className="text-sm text-gray-600 dark:text-gray-400">{AI_SETUP_MESSAGE}</p>}
           {/* Week range indicator */}
           <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
             <Calendar className="w-4 h-4" />

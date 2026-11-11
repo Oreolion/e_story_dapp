@@ -5,6 +5,7 @@ import { hasTextProvider } from "@/lib/ai/providerPolicy";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { aiGenerationHold } from "@/lib/ai/availability";
 
 // ============================================================================
 // Configuration Constants
@@ -64,6 +65,9 @@ export async function GET(req: NextRequest) {
     const subPlan = userRow?.subscription_plan ?? "free";
     const subExpires = userRow?.subscription_expires_at;
     const isPaid = subPlan !== "free" && subExpires && new Date(subExpires) > new Date();
+    const hold = aiGenerationHold();
+
+    if (hold && !isPaid) return NextResponse.json({ reflections: [], canGenerate: false, generation: hold }, { headers: { "Cache-Control": "no-store" } });
 
     if (!isPaid) {
       return NextResponse.json(
@@ -88,7 +92,8 @@ export async function GET(req: NextRequest) {
       if (error.code === "42P01" || error.message?.includes("does not exist")) {
         return NextResponse.json({
           reflections: [],
-          canGenerate: true,
+          canGenerate: !hold,
+          generation: hold,
           message: "Reflections table not yet created"
         });
       }
@@ -103,7 +108,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       reflections: data || [],
-      canGenerate: !hasReflectionThisWeek,
+      canGenerate: !hold && !hasReflectionThisWeek,
+      generation: hold,
       currentWeekStart: weekStart.toISOString()
     });
 
@@ -125,6 +131,9 @@ export async function POST(req: NextRequest) {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
     const authenticatedUserId = await resolveUserId(authResult);
+
+    const hold = aiGenerationHold();
+    if (hold) return NextResponse.json(hold, { status: 503, headers: { "Cache-Control": "no-store" } });
 
     // Subscription check — weekly reflections require storyteller+ plan
     const adminClient = createSupabaseAdminClient();

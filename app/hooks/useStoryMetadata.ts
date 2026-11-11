@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { StoryMetadata } from "../types";
 import { useAuth } from "@/components/AuthProvider";
+import { AI_SETUP_CODE } from "@/lib/ai/messages";
 export interface AnalysisState { status: string; attempts?: number; error_code?: string | null }
 export interface UseStoryMetadataReturn {
   metadata: StoryMetadata | null; analysis: AnalysisState; isLoading: boolean; error: string | null;
@@ -56,18 +57,26 @@ export function useStoryMetadata(storyId: string | null): UseStoryMetadataReturn
   }, [fetchMetadata, key, ownerId, storyId, pollEpoch]);
   const refetch = useCallback(async () => { setPollEpoch(value => value + 1); }, []);
   const queueAnalysis = useCallback(async (retry = false) => {
-    if (!storyId || !ownerId || isScheduling) return false;
+    if (!storyId || !ownerId || isScheduling || analysis.status === "disabled") return false;
     setIsScheduling(true);
     try {
       const token = await tokenRef.current();
       if (keyRef.current !== key) return false;
       const response = await fetch("/api/ai/analyze", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ storyId, retry }) });
       if (keyRef.current !== key) return false;
-      if (!response.ok) throw new Error("Scheduling failed");
+      if (!response.ok) {
+        const data = await response.json();
+        if (keyRef.current !== key) return false;
+        if (data.code === AI_SETUP_CODE) {
+          setPayloadKey(key); setAnalysis({ status: "disabled", error_code: AI_SETUP_CODE }); setError(null);
+          return false;
+        }
+        throw new Error("Scheduling failed");
+      }
       setPollEpoch(value => value + 1); return true;
     } catch { if (keyRef.current === key) setError("Analysis could not be queued. Please try again later."); return false; }
     finally { if (keyRef.current === key) setIsScheduling(false); }
-  }, [storyId, ownerId, isScheduling, key]);
+  }, [storyId, ownerId, isScheduling, key, analysis.status]);
   const markAsCanonical = useCallback(async (value: boolean) => {
     if (!storyId || !ownerId || isUpdating) return false;
     setIsUpdating(true);

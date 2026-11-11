@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { parseJournalInput } from "@/lib/stories/contracts";
+import { aiGenerationHold } from "@/lib/ai/availability";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
     let body: ReturnType<typeof parseJournalInput>;
     try { body = parseJournalInput(await request.json()); }
     catch { return NextResponse.json({ error: "Invalid journal fields or conflicting aliases" }, { status: 400 }); }
+    const hold = aiGenerationHold();
     const admin = createSupabaseAdminClient();
     const { data: owner, error } = await admin.from("users").select("wallet_address, subscription_plan, subscription_expires_at").eq("id", ownerId).single();
     if (error || !owner) return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
     }).select().single();
     if (insertError?.message === "Story write quota exceeded") return NextResponse.json({ error: "Daily story write limit reached" }, { status: 429 });
     if (insertError || !story) return NextResponse.json({ error: "Failed to save journal entry" }, { status: 500 });
-    return NextResponse.json({ success: true, data: story, message: "Journal entry saved", analysis: { status: body.content.length < 50 ? "skipped" : typeof story.revision === "number" ? "queued" : "unavailable" } });
+    return NextResponse.json({ success: true, data: story, message: "Journal entry saved", analysis: hold ? { status: "disabled", error_code: hold.code } : { status: body.content.length < 50 ? "skipped" : typeof story.revision === "number" ? "queued" : "unavailable" } });
   } catch {
     console.error("Journal save failed");
     return NextResponse.json({ error: "Failed to save journal entry" }, { status: 500 });

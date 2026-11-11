@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { consumeApiQuota } from "@/lib/apiQuota";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { externalMediaEnabled } from "@/lib/runtime/config";
+import { aiGenerationHold } from "@/lib/ai/availability";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
     const authResult = await validateAuthOrReject(req);
     if (isAuthError(authResult)) return authResult;
     const userId = await resolveUserId(authResult);
+    const hold = aiGenerationHold();
+    if (hold) return NextResponse.json(hold, { status: 503, headers: { "Cache-Control": "no-store" } });
     if (!externalMediaEnabled()) return NextResponse.json({ error: "Live transcription is unavailable in this environment" }, { status: 503 });
 
     if (!process.env.ELEVENLABS_API_KEY) {

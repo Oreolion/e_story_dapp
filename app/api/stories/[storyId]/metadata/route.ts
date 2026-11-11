@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
+import { aiGenerationHold } from "@/lib/ai/availability";
 
 export async function GET(
   req: NextRequest,
@@ -50,8 +51,10 @@ export async function GET(
     }
 
     const stale = data?.source_revision === 0 || data?.source_revision != null && data.source_revision !== story.revision;
-    const { data: job } = await supabase.from("ai_jobs").select("status,error_code,attempts").eq("story_id", storyId).eq("source_revision", story.revision).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const hold = aiGenerationHold();
     const visibleMetadata = stale ? null : data;
+    if (hold) return NextResponse.json({ metadata: visibleMetadata, analysis: visibleMetadata ? { status: "succeeded" } : { status: "disabled", error_code: hold.code } }, { headers: { "Cache-Control": "no-store" } });
+    const { data: job } = await supabase.from("ai_jobs").select("status,error_code,attempts").eq("story_id", storyId).eq("source_revision", story.revision).order("created_at", { ascending: false }).limit(1).maybeSingle();
     return NextResponse.json({ metadata: visibleMetadata, analysis: job ?? { status: visibleMetadata ? "succeeded" : "unavailable" } }, { headers: { "Cache-Control": "no-store" } });
 
   } catch (error: unknown) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
+import { aiGenerationHold } from "@/lib/ai/availability";
 const input = z.object({ storyId: z.string().uuid(), retry: z.boolean().optional() });
 
 // Compatibility entry point: schedules canonical persisted content, never the
@@ -10,6 +11,8 @@ export async function POST(request: NextRequest) {
   const actor = await validateAuthOrReject(request);
   if (isAuthError(actor)) return actor;
   const owner = await resolveUserId(actor);
+  const hold = aiGenerationHold();
+  if (hold) return NextResponse.json(hold, { status: 503, headers: { "Cache-Control": "no-store" } });
   let body: z.infer<typeof input>;
   let legacyInline = false;
   try {
@@ -62,5 +65,7 @@ export async function GET(request: NextRequest) {
   if (!story || story.author_id !== owner) return NextResponse.json({ error: "Story not found" }, { status: 404 });
   const { data: job, error: jobError } = await admin.from("ai_jobs").select("status,error_code,updated_at").eq("story_id", parsed.data.storyId).eq("source_revision", story.revision).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (jobError) return NextResponse.json({ error: "Status unavailable" }, { status: 503 });
+  const hold = aiGenerationHold();
+  if (hold && job?.status !== "succeeded") return NextResponse.json({ analysis: { status: "disabled", error_code: hold.code } }, { headers: { "Cache-Control": "no-store" } });
   return NextResponse.json({ analysis: job ?? { status: "skipped" } }, { headers: { "Cache-Control": "no-store" } });
 }

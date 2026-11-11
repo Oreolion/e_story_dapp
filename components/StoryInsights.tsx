@@ -27,6 +27,7 @@ import { getEmotionClass, getDomainClass, domainLabels } from "@/lib/design-toke
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
 import { Crown } from "lucide-react";
+import { AI_SETUP_MESSAGE } from "@/lib/ai/messages";
 
 interface StoryInsightsProps {
   storyId: string;
@@ -81,6 +82,17 @@ export function StoryInsights({ storyId, storyText, state }: StoryInsightsProps)
             <RefreshCw className="w-4 h-4 mr-2" />
             Try Again
           </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (analysis.status === "disabled") {
+    return (
+      <Card className="card-elevated rounded-xl">
+        <CardContent className="py-8 space-y-2" role="status">
+          <h3 className="font-semibold">AI assistance unavailable</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{AI_SETUP_MESSAGE}</p>
         </CardContent>
       </Card>
     );

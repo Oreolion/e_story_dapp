@@ -1,4 +1,5 @@
 "use client";
+import { AI_SETUP_MESSAGE, aiActionErrorMessage } from "@/lib/ai/messages";
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "react-hot-toast";
@@ -232,8 +233,9 @@ export default function TasksPage() {
              body: JSON.stringify({ text: prompt, task: "tracker" })
         });
 
-        if (!enhanceRes.ok) throw new Error("AI generation failed");
-        const { text: generatedEntry } = await enhanceRes.json();
+        const generated = await enhanceRes.json();
+        if (!enhanceRes.ok) throw new Error(aiActionErrorMessage(generated, "AI generation failed"));
+        const { text: generatedEntry } = generated;
 
         const saveRes = await fetch("/api/journal/save", {
             method: "POST",
@@ -255,7 +257,7 @@ export default function TasksPage() {
 
     } catch (err) {
         console.error(err);
-        toast.error("Failed to generate journal");
+        toast.error(err instanceof Error && err.message === AI_SETUP_MESSAGE ? AI_SETUP_MESSAGE : "Failed to generate journal");
     } finally {
         setIsGenerating(false);
     }

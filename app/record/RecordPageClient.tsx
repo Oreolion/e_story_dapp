@@ -1,4 +1,5 @@
 "use client";
+import { AI_SETUP_MESSAGE, aiActionErrorMessage } from "@/lib/ai/messages";
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -285,7 +286,7 @@ export default function RecordPage() {
       }).then(async (res) => {
         if (!res.ok) {
           const err = await res.json();
-          throw new Error(err.error || "Enhancement failed");
+          throw new Error(aiActionErrorMessage(err, "Enhancement failed"));
         }
         const data = await res.json();
         return data.text;
@@ -301,7 +302,7 @@ export default function RecordPage() {
         error: (err) => {
           setPreEnhanceText(null);
           setIsEnhancing(false);
-          return "Failed to enhance text.";
+          return err instanceof Error && err.message === AI_SETUP_MESSAGE ? AI_SETUP_MESSAGE : "Failed to enhance text.";
         },
       });
     } catch (err) {

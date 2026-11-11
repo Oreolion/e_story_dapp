@@ -99,6 +99,12 @@ function setupFetchMock(options: {
 }
 
 describe("StoryInsights", () => {
+  it("explains a deliberate AI hold without offering a futile generation action", async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ metadata: null, analysis: { status: "disabled", error_code: "AI_PROVIDER_SETUP_REQUIRED" } }) });
+    render(<StoryInsights storyId="held-story" storyText="A synthetic saved entry." />);
+    expect(await screen.findByRole("status")).toHaveTextContent("You can still write and save entries.");
+    expect(screen.queryByRole("button", { name: /generate|retry/i })).not.toBeInTheDocument();
+  });
   const defaultProps = {
     storyId: "story-456",
     storyText: "This is a meaningful story about my journey through life.",
