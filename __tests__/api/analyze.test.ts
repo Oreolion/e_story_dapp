@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { FixtureDatabase } from "../../evals/support/database";
 // Original inline implementation tests are preserved byte-for-byte at
@@ -10,11 +10,22 @@ vi.mock("@/app/utils/supabase/supabaseAdmin", () => ({ createSupabaseAdminClient
 import { POST } from "@/app/api/ai/analyze/route";
 function request(body: unknown) { return new NextRequest("http://localhost/api/ai/analyze", { method: "POST", body: JSON.stringify(body) }); }
 beforeEach(() => {
+  // Scheduling tests explicitly exercise enabled synthetic AI; the safe test
+  // environment default is disabled and now intentionally returns a setup hold.
+  vi.stubEnv("AI_PROVIDER_MODE", "mock");
   state.db = new FixtureDatabase(); state.actor = owner;
   state.db.rows("stories").push({ id: storyId, author_id: owner, revision: 1, content: "A synthetic story with enough characters for a real analysis job." });
   state.rpc.mockReset().mockResolvedValue({ data: { id: "synthetic-job", status: "queued" }, error: null });
 });
+afterEach(() => { vi.unstubAllEnvs(); });
 describe("analysis scheduling contract", () => {
+  it("does not enqueue work when the operator holds AI setup", async () => {
+    vi.stubEnv("AI_PROVIDER_MODE", "disabled");
+    const response = await POST(request({ storyId }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "AI_PROVIDER_SETUP_REQUIRED" });
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
   it("schedules canonical stored text and returns accepted rather than false completion", async () => {
     const response = await POST(request({ storyId }));
     expect(response.status).toBe(202); expect(await response.json()).toMatchObject({ success: true, status: "queued" });
