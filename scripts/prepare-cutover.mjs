@@ -54,7 +54,7 @@ $guard_source$
   ) OR EXISTS(SELECT 1 FROM unnest(ARRAY['authenticator','anon','authenticated','service_role']) role_name
     WHERE NOT has_function_privilege(role_name,'public.istory_cutover_guard()','EXECUTE'))
     THEN RAISE EXCEPTION 'CUTOVER_GUARD_DEFINITION_MISMATCH'; END IF;
-  IF EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename='authenticator' AND pid<>pg_backend_pid() AND state<>'idle') THEN
+  IF EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename='authenticator' AND pid<>pg_backend_pid() AND state IS DISTINCT FROM 'idle') THEN
     RAISE EXCEPTION 'CUTOVER_DATA_API_TRANSACTIONS_PRESENT';
   END IF;
 END;

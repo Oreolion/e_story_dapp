@@ -9,4 +9,7 @@ SELECT
   ) AS global_fence_configured,
   (SELECT count(*) FROM pg_stat_activity
     WHERE usename = 'authenticator' AND xact_start IS NOT NULL
-      AND state <> 'idle') AS open_data_api_transactions;
+      AND state <> 'idle') AS open_data_api_transactions,
+  -- Restricted statistics visibility must never look like a confirmed drain.
+  (SELECT count(*) FROM pg_stat_activity
+    WHERE usename = 'authenticator' AND state IS NULL) AS unknown_data_api_sessions;

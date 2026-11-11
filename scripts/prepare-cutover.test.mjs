@@ -62,7 +62,18 @@ test('real PostgreSQL batch refuses an unfenced target, rolls back late failure 
         targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/install.sql', import.meta.url), 'utf8').replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION'));
 
         await withHeldSession(target, 'supabase_admin', 1, () => assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'another release operator holds the same operation lock'));
-        await withHeldSession(target, 'authenticator', 2, () => assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'a pre-admitted Data API transaction is still active'));
+        await withHeldSession(target, 'authenticator', 2, () => {
+          assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'a pre-admitted Data API transaction is still active');
+          assert.equal(targetQuery(target, "SET ROLE anon; SELECT count(*) FROM pg_stat_activity WHERE usename='authenticator' AND state IS NULL;").trim(), '1', 'an unprivileged operator cannot observe the other session state');
+          const readback = targetQuery(target, 'SET ROLE anon;\n' + fs.readFileSync(new URL('../ops/release/cutover/readback.sql', import.meta.url), 'utf8'));
+          assert.equal(readback.trim().split('|').at(-1), '1', 'operator readback reports hidden states separately from observed transactions');
+          // Exercise the actual compiled preconditions without needing to grant
+          // this role migration DDL privileges. Unknown state must stop here.
+          const boundary = sql.indexOf('LOCK TABLE supabase_migrations.schema_migrations');
+          assert.ok(boundary > 0);
+          const checksOnly = sql.slice(0, boundary) + 'COMMIT;\n';
+          assert.throws(() => targetQuery(target, 'SET ROLE anon;\n' + checksOnly), /RESTORE_CHECK_FAILED/, 'unknown session state cannot count as drained');
+        });
 
         // A late statement failure must undo all four migrations AND history.
         const failing = sql.replace(/COMMIT;\n$/, 'SELECT 1/0;\nCOMMIT;\n');
