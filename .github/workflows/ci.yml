@@ -123,11 +123,15 @@ jobs:
 
       - name: Rehearse production feature migration on PostgreSQL 17
         run: |
-          docker run -d --name istory-migration019-rehearsal-20261014 --label istory.rehearsal=runtime --network none --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+          docker run -d --name istory-migration019-rehearsal-20261014 --label istory.rehearsal=runtime --network none --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
+          ready=false
           for attempt in $(seq 1 30); do
-            if docker exec istory-migration019-rehearsal-20261014 pg_isready -U postgres; then break; fi
+            # initdb's temporary server exposes only a Unix socket. Wait for
+            # the final TCP listener so shutdown cannot race the first query.
+            if docker exec istory-migration019-rehearsal-20261014 pg_isready -h 127.0.0.1 -U postgres; then ready=true; break; fi
             sleep 1
           done
+          if [ "$ready" != true ]; then echo '::error::Synthetic PostgreSQL did not become ready'; exit 1; fi
           node scripts/test-migration019.mjs
           node scripts/test-runtime-concurrency.mjs
 

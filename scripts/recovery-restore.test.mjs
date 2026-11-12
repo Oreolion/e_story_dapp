@@ -86,7 +86,12 @@ test('real isolated PostgreSQL restore verifies data, RLS roles, extensions and 
         CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY);
         INSERT INTO supabase_migrations.schema_migrations VALUES ('019');`);
       installMigrationFixture(source, 'text');
+      targetQuery(source, 'CREATE ROLE authenticator NOLOGIN;');
+      for (const file of ['install','install-bridge']) targetQuery(source, fs.readFileSync(new URL(`../ops/release/cutover/${file}.sql`, import.meta.url), 'utf8'));
+      targetQuery(source, `SELECT public.istory_retain_payment_callback('{"id":"00000000-0000-4000-8000-000000000021","amountPaid":"2.99"}'::jsonb);`);
       const catalog = JSON.parse(targetQuery(source, catalogSql));
+      assert.ok(catalog.schemaNames.includes('istory_release'), 'private operational schema must be exported');
+      assert.ok(catalog.security.tables.some(t=>t.schema==='istory_release' && t.table==='payment_callbacks' && t.rls), 'inbox access controls must be included');
       const counter = new CopyCounter();
       const pgDump = args => {
         const result = spawnSync('docker', ['exec', source, 'pg_dump', '-h', '/tmp', '-U', 'supabase_admin', '-d', 'postgres', '--quote-all-identifiers', ...args],
