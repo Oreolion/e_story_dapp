@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { reviewedMigrations, permissionsSql } from './recovery-migrations.mjs';
+import { bridgeChecksSql } from './cutover-bridge-contract.mjs';
 
 function migrationBody(sql) {
   // Only the four hash-verified files are accepted, not arbitrary SQL input.
@@ -16,6 +17,11 @@ function migrationBody(sql) {
 
 export function compileCutoverBatch() {
   const reviewed = reviewedMigrations();
+  const operations = ['install','pause','install-bridge','activate-bridge','open-candidate','hold-candidate','readback-bridge'].map(name => {
+    const file = `ops/release/cutover/${name}.sql`;
+    const text = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    return { file, sha256: createHash('sha256').update(text).digest('hex') };
+  });
   const sql = `-- Offline prepared operation for Supabase qfwhtsmqndnocfidhdhy only.
 -- NOT AUTHORIZATION TO EXECUTE. Requires approved maintenance, hosted fence,
 -- drained legacy execution, fresh applicable recovery and exact-artifact audit.
@@ -33,12 +39,12 @@ BEGIN
   IF to_regprocedure('public.istory_cutover_guard()') IS NULL OR NOT EXISTS(
     SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid=s.setrole
     CROSS JOIN LATERAL unnest(s.setconfig) entry
-    WHERE r.rolname='authenticator' AND s.setdatabase=0 AND entry='pgrst.db_pre_request=public.istory_cutover_guard'
+    WHERE r.rolname='authenticator' AND s.setdatabase=0 AND entry IN ('pgrst.db_pre_request=public.istory_cutover_guard','pgrst.db_pre_request=public.istory_release_guard')
   ) OR EXISTS(
     SELECT 1 FROM pg_db_role_setting s JOIN pg_roles r ON r.oid=s.setrole
     CROSS JOIN LATERAL unnest(s.setconfig) entry
     WHERE r.rolname='authenticator' AND split_part(entry,'=',1)='pgrst.db_pre_request'
-      AND (s.setdatabase<>0 OR entry<>'pgrst.db_pre_request=public.istory_cutover_guard')
+      AND (s.setdatabase<>0 OR entry NOT IN ('pgrst.db_pre_request=public.istory_cutover_guard','pgrst.db_pre_request=public.istory_release_guard'))
   ) THEN RAISE EXCEPTION 'CUTOVER_EFFECTIVE_FENCE_REQUIRED'; END IF;
   IF NOT EXISTS(
     SELECT 1 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
@@ -59,6 +65,7 @@ $guard_source$
   END IF;
 END;
 $cutover$;
+${bridgeChecksSql()}
 LOCK TABLE supabase_migrations.schema_migrations IN SHARE ROW EXCLUSIVE MODE;
 DO $history$
 BEGIN
@@ -77,7 +84,7 @@ ${permissionsSql}
 NOTIFY pgrst, 'reload schema';
 COMMIT;
 `;
-  return { intendedProjectRef: 'qfwhtsmqndnocfidhdhy', sql, sqlSha256: createHash('sha256').update(sql).digest('hex'), migrations: reviewed.map(({ file, sha256 }) => ({ file, sha256 })) };
+  return { intendedProjectRef: 'qfwhtsmqndnocfidhdhy', sql, sqlSha256: createHash('sha256').update(sql).digest('hex'), operations, migrations: reviewed.map(({ file, sha256 }) => ({ file, sha256 })) };
 }
 
 function main() {

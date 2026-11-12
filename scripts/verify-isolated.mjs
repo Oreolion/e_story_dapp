@@ -41,7 +41,7 @@ function copy(relative) {
     files.push({ path: relative.split(path.sep).join('/'), sha256: createHash('sha256').update(fs.readFileSync(target)).digest('hex') });
   }
 }
-for (const name of ['app', 'components', 'contexts', 'types', 'lib', 'public', 'styles', 'evals', '__tests__', 'e2e', 'supabase', 'scripts', 'security', '.github/workflows']) copy(name);
+for (const name of ['app', 'components', 'contexts', 'types', 'lib', 'public', 'styles', 'evals', '__tests__', 'e2e', 'supabase', 'scripts', 'security', 'ops', '.github/workflows']) copy(name);
 for (const name of [
   'package.json', 'package-lock.json', 'tsconfig.json', 'next-env.d.ts', 'next.config.mjs',
   'postcss.config.mjs', 'eslint.config.mjs', 'vitest.config.ts', 'playwright.config.ts',

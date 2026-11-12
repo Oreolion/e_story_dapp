@@ -70,6 +70,8 @@ Local evidence includes 12 live-shape compatibility tests and real PostgreSQL 17
 
 ## Coordinate old and new execution
 
+The Nov12 [persistent write/payment bridge](CUTOVER_WRITE_AND_PAYMENT_BRIDGE.md) adds permanent legacy service-role admission control and a durable signed callback inbox. It is source preparation only. New offline batches require the bridge paused; previously generated batches are obsolete. Its private schema needs recovery coverage and its new operational objects need explicit production change scope. Do not substitute the older temporary `resume.sql` sequence for bridge opening.
+
 ### Candidate traffic admission and recovery rehearsal
 
 The [operator-access guide](OPERATOR_RELEASE_ACCESS.md) supplies the controlled browser path for the acceptance stage: global release active, front door operator, providers/consumers held, a short-lived artifact-bound browser proof and normal account authorization. Health explicitly reports public admission false. This is additional source preparation, not installed production configuration, a replacement for the Data API fence or evidence that OAuth currently works. Activate only during the reviewed cutover after prerequisite schema/fencing/recovery gates clear; test the actual canonical origin before opening public traffic.

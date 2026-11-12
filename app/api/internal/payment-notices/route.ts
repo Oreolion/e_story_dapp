@@ -4,6 +4,7 @@ import { workerAuthorized } from "@/lib/internalWorkerAuth";
 import { dispatchPaymentNotice } from "@/lib/payments/notices";
 import { runtimeConfiguration } from "@/lib/runtime/config";
 import { rejectPausedRequest } from "@/lib/runtime/releaseResponse";
+import { replayPaymentCallback } from "@/lib/payments/callbacks";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export async function POST(request: NextRequest) {
@@ -14,7 +15,14 @@ export async function POST(request: NextRequest) {
   if (!workerAuthorized(request, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     if (!runtimeConfiguration().paymentWorkerEnabled) return NextResponse.json({ status: "disabled" });
-    return NextResponse.json(await dispatchPaymentNotice(createSupabaseAdminClient()));
+    const admin = createSupabaseAdminClient();
+    if (process.env.PAYMENT_CALLBACK_REPLAY_ENABLED === "true") {
+      if (process.env.PAYMENT_CALLBACK_MODE !== "retain") throw new Error("Callback replay is unavailable");
+      const receipt = await replayPaymentCallback(admin);
+      const notice = await dispatchPaymentNotice(admin);
+      return NextResponse.json({ ...notice, receiptStatus: receipt.status });
+    }
+    return NextResponse.json(await dispatchPaymentNotice(admin));
   }
   catch { return NextResponse.json({ error: "Notification dispatch unavailable" }, { status: 503 }); }
 }

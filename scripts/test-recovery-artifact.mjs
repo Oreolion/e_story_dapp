@@ -190,6 +190,33 @@ async function rehearseOperator(sha, routes) {
   } finally { await stopServer(child); }
 }
 
+async function rehearseCallbackAdmission(sha) {
+  const port=await availablePort(), origin='http://127.0.0.1:'+port;
+  const env={...recoveryEnvironment(process.env,sha,'paused'),PAYMENT_CALLBACK_MODE:'retain',
+    DATA_API_RELEASE_EPOCH:'00000000-0000-4000-8000-000000000001',DATA_API_RELEASE_KEY:randomBytes(32).toString('hex'),
+    BLOCKRADAR_WEBHOOK_SECRET:randomBytes(32).toString('hex')};
+  const child=spawn(process.execPath,[path.join(root,'node_modules/next/dist/bin/next'),'start','--hostname','127.0.0.1','--port',String(port)],{cwd:root,env,stdio:'ignore',windowsHide:true});
+  let spawnError; child.on('error',error=>{spawnError=error;});
+  try {
+    let live; const deadline=Date.now()+45000;
+    while(Date.now()<deadline){
+      if(spawnError||child.exitCode!==null||child.signalCode!==null) throw fail('CALLBACK_SERVER_START_FAILED');
+      try{const response=await probe(origin,'/api/health');if(response.ok){live=await response.json();break;}}catch{/* bounded startup */}
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    if(live?.commitSha!==sha||live.releaseMode!=='paused'||live.acceptingTraffic!==false) throw fail('CALLBACK_ARTIFACT_BINDING_FAILED');
+    const checks=[
+      ['/api/ready','GET',503,{}],['/api/payment/webhook','POST',401,{}],
+      ['/api/payment/webhook','GET',503,{}],['/api/payment/webhook','OPTIONS',503,{}],
+      ['/api/payment/verify','POST',503,{}],['/api/internal/payment-notices','POST',503,{}],
+      ['/api/user/profile','GET',503,{'x-middleware-subrequest':'middleware:middleware:middleware:middleware:middleware'}],
+      ['/api/payment/webhook','POST',401,{'x-blockradar-signature':'invalid'}],
+    ];
+    for(const [route,method,status,headers] of checks) if((await probe(origin,route,method,headers)).status!==status) throw fail('CALLBACK_ADMISSION_BOUNDARY_FAILED');
+    return {mode:'callback-retention',probes:checks.length+1,limits:['Only compiled ingress/continued hold is tested here; no signed receipt or database request is sent. Durable storage and replay need their separate database/provider evidence.']};
+  } finally {await stopServer(child);}
+}
+
 async function main() {
   if (process.argv.length !== 2) throw fail('RECOVERY_INVALID_ARGUMENTS');
   const sha = process.env.GITHUB_SHA;
@@ -203,6 +230,7 @@ async function main() {
   const results = [];
   for (const mode of ['paused', 'invalid-synthetic-setting', 'active']) results.push(await rehearse(mode, sha, routes));
   results.push(await rehearseOperator(sha, routes));
+  results.push(await rehearseCallbackAdmission(sha));
   const after = await buildIdentity();
   if (before.sha256 !== after.sha256) throw fail('RECOVERY_BUILD_CHANGED');
   const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', sourceCommit: sha, build: before, apiRoutes: routes.length, results,

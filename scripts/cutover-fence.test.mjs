@@ -82,9 +82,9 @@ test('real Data API fence, in-flight boundary, identity conflicts and recovery',
     const binding = docker(['port', db, '3000/tcp']);
     assert.match(binding, /^127\.0\.0\.1:\d+$/);
     const base = `http://${binding}`;
-    const request = (role = 'anon', path = '/cutover_fixture', method = 'GET', body) => fetch(base + path, {
+    const request = (role = 'anon', path = '/cutover_fixture', method = 'GET', body, headers = {}) => fetch(base + path, {
       method, redirect: 'error', signal: AbortSignal.timeout(5_000),
-      headers: { ...(role === 'anon' ? {} : { Authorization: `Bearer ${claim(role)}` }), 'Content-Type': 'application/json' },
+      headers: { ...(role === 'anon' ? {} : { Authorization: `Bearer ${claim(role)}` }), 'Content-Type': 'application/json', ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     await eventually(async () => { try { return (await request()).status === 200; } catch { return false; } });
@@ -133,7 +133,59 @@ test('real Data API fence, in-flight boundary, identity conflicts and recovery',
     assert.equal((await request('authenticated', '/cutover_fixture', 'POST', { id: 3, value: 'resumed synthetic' })).status, 201);
     assert.equal(sql('SELECT count(*) FROM public.cutover_fixture;'), '2');
     assert.throws(() => sql(source('resume')), /ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED/);
+    // New bridge: reopening keeps old service-role executions fenced forever.
+    sql(source('pause'));
+    await eventually(async () => (await request()).status === 503);
+    sql(source('install-bridge'));
+    sql("CREATE OR REPLACE FUNCTION public.istory_release_guard() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$BEGIN RETURN; END;$$;");
+    assert.throws(() => sql(source('activate-bridge')), /ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED/,'guard source tampering cannot be activated');
+    const originalGuard = source('install-bridge').split('$bridge_guard$')[1];
+    assert.ok(originalGuard?.includes('istory_cutover_guard'));
+    sql(`CREATE OR REPLACE FUNCTION public.istory_release_guard() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $original$${originalGuard}$original$;`);
+    assert.throws(() => sql(source('activate-bridge')), /ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED/);
+    const releaseKey = randomBytes(32).toString('hex');
+    const epoch = '00000000-0000-4000-8000-000000000001';
+    sql(`UPDATE istory_release.control SET epoch='${epoch}',key_sha256=sha256(convert_to('${releaseKey}','UTF8'));`);
+    sql(source('activate-bridge'));
+    const admission = { 'x-istory-release-epoch': epoch, 'x-istory-release-key': releaseKey };
+    const retained = { id: '00000000-0000-4000-8000-000000000021', amountPaid: '2.99' };
+    await eventually(async () => (await request('service_role','/rpc/istory_retain_payment_callback','POST',{ p_receipt: retained }, admission)).status === 200);
+    // This actor cannot write ordinary data during the maintenance phase.
+    assert.equal((await request('service_role','/cutover_fixture','POST',{ id: 4, value: 'must not write' }, admission)).status,503);
+    assert.equal((await request('anon','/rpc/istory_retain_payment_callback','POST',{ p_receipt: retained }, admission)).status,503);
+    assert.equal((await request('service_role','/rpc/istory_retain_payment_callback','POST',{ p_receipt: retained })).status,503);
+    assert.equal((await request('service_role','/rpc/istory_retain_payment_callback','POST',{ p_receipt: { ...retained, amountPaid: '7.99' } }, admission)).status,400);
+    assert.equal(sql('SELECT count(*) FROM istory_release.payment_callbacks;'),'1');
+    assert.throws(() => sql(source('open-candidate')), /ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED/,'reopening before schema installation is refused');
+    // This fixture verifies the transport control only; real migrations/history
+    // and atomic entitlement replay are exercised in their separate rehearsals.
+    sql("CREATE SCHEMA supabase_migrations; CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY); INSERT INTO supabase_migrations.schema_migrations VALUES('020'),('021'),('022'),('023');");
+    sql(source('open-candidate'));
+    assert.equal((await request('service_role','/cutover_fixture','POST',{ id: 4, value: 'current candidate' }, admission)).status,201);
+    assert.equal((await request('service_role','/cutover_fixture','POST',{ id: 5, value: 'legacy must not write' })).status,503);
+    assert.equal((await request('service_role','/cutover_fixture','POST',{ id: 5, value: 'wrong epoch' },{ ...admission, 'x-istory-release-epoch':'00000000-0000-4000-8000-000000000002' })).status,503);
+    assert.equal((await request('authenticated')).status,200);
+    // Real concurrent HTTP clients, not a sequential adapter simulation.
+    const callbackPath='/rpc/istory_retain_payment_callback';
+    const duplicated=await Promise.all(Array.from({length:6},()=>request('service_role',callbackPath,'POST',{p_receipt:retained},admission)));
+    assert.ok(duplicated.every(response=>response.status===200));
+    assert.equal(sql('SELECT count(*) FROM istory_release.payment_callbacks;'),'1');
+    const claims=await Promise.all(Array.from({length:6},async()=>{
+      const response=await request('service_role','/rpc/istory_claim_payment_callback','POST',{},admission);
+      assert.equal(response.status,200); return response.json();
+    }));
+    const leased=claims.flat();
+    assert.equal(leased.length,1,'one durable receipt can have only one concurrent claim');
+    assert.match(leased[0].lease_token,/^[a-f0-9-]{36}$/);
+    sql("ALTER ROLE authenticator IN DATABASE postgres SET pgrst.db_pre_request='';");
+    assert.throws(() => sql(source('open-candidate')), /ISOLATED_CUTOVER_DOCKER_OPERATION_FAILED/);
+    sql("ALTER ROLE authenticator IN DATABASE postgres RESET pgrst.db_pre_request;");
+    sql(source('hold-candidate'));
+    assert.equal((await request('authenticated')).status,503);
+    assert.equal((await request('service_role','/rpc/istory_retain_payment_callback','POST',{ p_receipt: retained }, admission)).status,200);
+    assert.equal(sql('SELECT count(*) FROM public.cutover_fixture;'),'3');
     console.log('PASS isolated PostgREST: 21 denied role/method probes, preserved writes, in-flight counterexample, conflicting-control refusal and verified resume');
+    console.log('PASS persistent bridge: durable callback exception, legacy service denial after reopen, epoch binding and emergency hold');
   } finally {
     await inFlight;
     for (const { id, image } of owned.reverse()) {

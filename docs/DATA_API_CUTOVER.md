@@ -4,6 +4,8 @@ Prepared Nov 10, 2026. The SQL files are reviewed preparation, **not an installe
 
 ## What the fence covers
 
+Nov12 update: the [persistent write/payment bridge](CUTOVER_WRITE_AND_PAYMENT_BRIDGE.md) supersedes removing the temporary fence for the planned release. Newly prepared migration batches require the paused bridge. The original resume sequence below describes the temporary control only; never use it to remove the new bridge. No hosted bridge has been activated.
+
 [Supabase documents](https://supabase.com/docs/guides/api/securing-your-api) `pgrst.db_pre_request` as a function run before Data API database requests. The proposed guard raises a constant HTTP 503 error before application SQL. It covers anonymous, authenticated and service-role PostgREST callers, including cached browser SDK writes and old API handlers making new REST requests. It denies reads as well as writes during maintenance.
 
 It does **not** cancel a transaction already admitted, terminate an old handler waiting on an external provider, fence direct SQL connections, or apply to Supabase Auth, Storage or Realtime. Public schema/identity/payment changes do not by themselves establish a storage migration. Inventory other SQL writers and stop applicable consumers separately. Keep the fence installed until old execution has drained; a count of zero current database transactions cannot prove that a handler will not issue a later write.

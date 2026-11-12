@@ -60,6 +60,12 @@ test('real PostgreSQL batch refuses an unfenced target, rolls back late failure 
         targetQuery(target, 'CREATE OR REPLACE FUNCTION public.istory_cutover_guard() RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$BEGIN RETURN; END;$$;');
         assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'a matching setting cannot hide a guard that no longer denies requests');
         targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/install.sql', import.meta.url), 'utf8').replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION'));
+        assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'a temporary fence alone cannot permit a release that reopens legacy writers');
+        targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/install-bridge.sql', import.meta.url), 'utf8'));
+        targetQuery(target, "UPDATE istory_release.control SET epoch='00000000-0000-4000-8000-000000000001',key_sha256=sha256(convert_to(repeat('a',64),'UTF8'));");
+        targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/activate-bridge.sql', import.meta.url), 'utf8'));
+        const callbackId = '00000000-0000-4000-8000-000000000021';
+        targetQuery(target, `SELECT public.istory_retain_payment_callback('{"id":"${callbackId}","amountPaid":"2.99"}'::jsonb);`);
 
         await withHeldSession(target, 'supabase_admin', 1, () => assert.throws(() => targetQuery(target, sql), /RESTORE_CHECK_FAILED/, 'another release operator holds the same operation lock'));
         await withHeldSession(target, 'authenticator', 2, () => {
@@ -81,11 +87,16 @@ test('real PostgreSQL batch refuses an unfenced target, rolls back late failure 
         assert.throws(() => targetQuery(target, failing), /RESTORE_CHECK_FAILED/);
         assert.equal(targetQuery(target, "SELECT to_regclass('public.ai_jobs') IS NULL;").trim(), 't');
         assert.equal(targetQuery(target, 'SELECT string_agg(version,\',\' ORDER BY version) FROM supabase_migrations.schema_migrations;').trim(), '019');
+        assert.equal(targetQuery(target, 'SELECT count(*) FROM istory_release.payment_callbacks;').trim(), '1', 'failed schema transaction must preserve already acknowledged receipts');
 
         targetQuery(target, sql);
         assert.equal(targetQuery(target, 'SELECT string_agg(version,\',\' ORDER BY version) FROM supabase_migrations.schema_migrations;').trim(), '019,020,021,022,023');
         assert.equal(targetQuery(target, "SELECT name FROM supabase_migrations.schema_migrations WHERE version='020';").trim(), 'durable_ai_jobs');
         targetQuery(target, permissionsSql + probesSql);
+        assert.equal(targetQuery(target, 'SELECT count(*) FROM istory_release.payment_callbacks;').trim(), '1');
+        targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/open-candidate.sql', import.meta.url), 'utf8'));
+        assert.throws(() => targetQuery(target, "SET ROLE service_role; SELECT public.istory_release_guard();"), /RESTORE_CHECK_FAILED/, 'late legacy work remains denied after migration');
+        targetQuery(target, fs.readFileSync(new URL('../ops/release/cutover/hold-candidate.sql', import.meta.url), 'utf8'));
         assert.equal(targetQuery(target, 'SELECT count(*) FROM public.users;').trim(), '0');
         assert.equal(targetQuery(target, "SELECT count(*) FROM public.rehearsal_duplicates;").trim(), '3');
         assert.equal(targetQuery(target, "SELECT count(*) FROM public.stories WHERE author_id IS NULL AND content IS NULL;").trim(), '1');

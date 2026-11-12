@@ -40,6 +40,7 @@ export function runtimeConfiguration(env: EnvironmentValues = process.env) {
     if (env.EXPECTED_VERCEL_PROJECT_ID && env.VERCEL_PROJECT_ID !== env.EXPECTED_VERCEL_PROJECT_ID) return fail();
   } else if (!["localhost", "127.0.0.1", "[::1]", "synthetic.invalid", "mock.supabase.co", "placeholder.supabase.co"].includes(database.hostname)) return fail();
   const aiMode = env.AI_PROVIDER_MODE ?? (environment === "staging" ? "mock" : environment === "production" ? "live" : "disabled");
+  if (env.PAYMENT_CALLBACK_REPLAY_ENABLED !== undefined && !["true", "false"].includes(env.PAYMENT_CALLBACK_REPLAY_ENABLED)) return fail();
   const paymentMode = env.PAYMENT_PROVIDER_MODE ?? (environment === "production" ? "live" : "disabled");
   if (!["disabled", "mock", "live"].includes(aiMode) || !["disabled", "sandbox", "live"].includes(paymentMode)) return fail();
   if (environment === "production" && aiMode === "mock") return fail();

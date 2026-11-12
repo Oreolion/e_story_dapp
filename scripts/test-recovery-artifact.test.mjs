@@ -15,6 +15,9 @@ test('operator loopback origin matches the installed NextRequest canonical origi
 test('recovery server receives only synthetic settings and cannot inherit provider credentials', () => {
   const parent = { CI: 'true', APP_ENV: 'ci', PATH: 'synthetic-bin', GOOGLE_GENERATIVE_AI_API_KEY: 'synthetic-private-value', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-admin-value', VERCEL_TOKEN: 'synthetic-hosting-value', RELEASE_COHORT_SECRET: 'synthetic-private-cohort', APP_FRONTDOOR_MODE: 'operator' };
   const child = recoveryEnvironment(parent, sha, 'paused');
+  const releaseParent = { ...parent, DATA_API_RELEASE_KEY: 'synthetic-private-release-key', DATA_API_RELEASE_EPOCH: 'synthetic-private-epoch', PAYMENT_CALLBACK_MODE: 'retain', PAYMENT_CALLBACK_REPLAY_ENABLED: 'true' };
+  const isolated = recoveryEnvironment(releaseParent, sha, 'paused');
+  for (const name of ['DATA_API_RELEASE_KEY','DATA_API_RELEASE_EPOCH','PAYMENT_CALLBACK_MODE','PAYMENT_CALLBACK_REPLAY_ENABLED']) assert.equal(Object.hasOwn(isolated,name),false);
   assert.equal(child.APP_RELEASE_MODE, 'paused');
   assert.equal(child.VERCEL_GIT_COMMIT_SHA, sha);
   for (const name of ['GOOGLE_GENERATIVE_AI_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'VERCEL_TOKEN', 'RELEASE_COHORT_SECRET', 'APP_FRONTDOOR_MODE']) assert.equal(Object.hasOwn(child, name), false);

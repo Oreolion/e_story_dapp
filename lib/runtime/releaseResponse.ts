@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { releaseMode } from "./release";
+import { isRetainedCallbackRequest } from "./dataApiFence";
 
 const page = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Temporarily unavailable | iStory</title></head><body><main><h1>We’ll be back shortly</h1><p>Please try again shortly.</p></main></body></html>';
 
 export function rejectPausedRequest(request: Request): NextResponse | null {
   if (releaseMode() === "active") return null;
+  if (isRetainedCallbackRequest(request)) return null;
   const pathname = new URL(request.url).pathname;
   if ((pathname === "/api/health" || pathname === "/api/ready") && ["GET", "HEAD"].includes(request.method)) return null;
   return maintenanceResponse(request);
