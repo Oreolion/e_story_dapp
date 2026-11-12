@@ -1,12 +1,17 @@
 // Isolated PostgreSQL 17 rehearsal. Never connects to Supabase or publishes a port.
 // Start: docker run -d --name istory-migration019-rehearsal-20261014 --network none
-//        --memory 384m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+//        --label istory.rehearsal=runtime --memory 384m --cpus 1
+//        -e POSTGRES_HOST_AUTH_METHOD=trust postgres@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
 import { readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { transactionSql, verificationSql } from './apply-migration019.mjs';
 
-const container = 'istory-migration019-rehearsal-20261014';
+const container = process.env.ISTORY_REHEARSAL_CONTAINER ?? 'istory-migration019-rehearsal-20261014';
+assert.ok(container === 'istory-migration019-rehearsal-20261014' || /^istory-runtime-rehearsal-[a-z0-9-]+$/.test(container), 'Only a dedicated rehearsal container may be selected');
+const inspect = spawnSync('docker', ['inspect', '--format', '{{.Config.Image}}|{{.HostConfig.NetworkMode}}|{{index .Config.Labels "istory.rehearsal"}}', container], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+assert.equal(inspect.status, 0, 'The dedicated rehearsal container must be running');
+assert.equal(inspect.stdout.trim(), 'postgres@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f|none|runtime', 'Refuse an unlabelled container, different image or network access');
 const migration = readFileSync(new URL('../supabase/migrations/019_create_content_safety_and_account_deletion.sql', import.meta.url), 'utf8');
 function sql(database, input) {
   const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-X', '-U', 'postgres', '-d', database, '-v', 'ON_ERROR_STOP=1', '-At'], { input, encoding: 'utf8' });
