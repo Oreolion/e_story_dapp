@@ -139,7 +139,9 @@ async function rehearse(mode, sha, routes) {
 }
 
 async function rehearseOperator(sha, routes) {
-  const port = await availablePort(), origin = 'http://127.0.0.1:' + port;
+  // NextRequest canonicalizes loopback IPs to localhost. Use that same origin
+  // for the form and Origin header; do not weaken the application's CSRF check.
+  const port = await availablePort(), origin = 'http://localhost:' + port;
   const code = randomBytes(32).toString('base64url'); // Synthetic, memory-only; never printed.
   const env = { ...recoveryEnvironment(process.env, sha, 'active'), NEXT_PUBLIC_APP_URL: origin,
     APP_FRONTDOOR_MODE: 'operator', RELEASE_COHORT_SECRET: code, RELEASE_COHORT_ID: '11111111-1111-4111-8111-111111111111',
@@ -172,7 +174,10 @@ async function rehearseOperator(sha, routes) {
     if (form.status !== 200 || !(await form.text()).includes('type="password"')) throw fail('OPERATOR_FORM_UNAVAILABLE');
     const admitted = await fetch(origin + entry, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000), headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'code=' + code }); probes++;
     const cookie = admitted.headers.get('set-cookie')?.split(';')[0];
-    if (admitted.status !== 303 || admitted.headers.get('location') !== '/' || !cookie?.startsWith('__Host-istory_operator=')) throw fail('OPERATOR_ENTRY_FAILED');
+    if (admitted.status !== 303) throw fail('OPERATOR_ENTRY_STATUS_' + admitted.status);
+    const target = new URL(admitted.headers.get('location') ?? '/invalid', origin);
+    if (target.origin !== origin || target.pathname !== '/' || target.search || target.hash || target.username || target.password) throw fail('OPERATOR_ENTRY_REDIRECT_INVALID');
+    if (!cookie?.startsWith('__Host-istory_operator=')) throw fail('OPERATOR_ENTRY_PROOF_MISSING');
     const account = await probe(origin, '/api/user/profile', 'GET', { Cookie: cookie }); probes++;
     if (account.status !== 401 || !account.headers.get('cache-control')?.includes('no-store')) throw fail('OPERATOR_ACCOUNT_AUTH_BYPASSED');
     const publicPage = await probe(origin, '/terms', 'GET', { Cookie: cookie }); probes++;

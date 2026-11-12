@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { inventoryRoutes, recoveryEnvironment } from './test-recovery-artifact.mjs';
+import { NextRequest } from 'next/server.js';
 const sha = 'a'.repeat(40);
+
+test('operator loopback origin matches the installed NextRequest canonical origin', () => {
+  assert.equal(new NextRequest('http://127.0.0.1:3002/api/release/access').nextUrl.origin, 'http://localhost:3002');
+  assert.equal(new NextRequest('http://localhost:3002/api/release/access').nextUrl.origin, 'http://localhost:3002');
+});
 
 test('recovery server receives only synthetic settings and cannot inherit provider credentials', () => {
   const parent = { CI: 'true', APP_ENV: 'ci', PATH: 'synthetic-bin', GOOGLE_GENERATIVE_AI_API_KEY: 'synthetic-private-value', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-admin-value', VERCEL_TOKEN: 'synthetic-hosting-value', RELEASE_COHORT_SECRET: 'synthetic-private-cohort', APP_FRONTDOOR_MODE: 'operator' };
