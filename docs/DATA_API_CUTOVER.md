@@ -36,7 +36,7 @@ Nov10 SELECT-only production inspection found no authenticator `pgrst.db_pre_req
 9. Resume only the reviewed Data API configuration after old execution and compatibility checks clear; verify HTTP behavior. Complete controlled Google/wallet/link/Firefox and owner-isolation acceptance, including a cached-client refresh/recovery path. Hold front-door admission if those checks fail. The required Computer Use runtime is currently unavailable in this session; CLI results do not replace this acceptance.
 10. Reopen public traffic only after final release audit, then enable consumers individually within confirmed allowances and observe the declared watch window. To pause again, use the existing guard and reviewed pause operation. Do not restore the incompatible legacy application or roll back the database over post-cutover data.
 
-This sequence still needs an effective controlled-cohort front door, hosted verification, deployed-handler drain evidence and a retained recovery artifact. It is not a completed production cutover or a waiver of those requirements.
+The [operator-access front door](OPERATOR_RELEASE_ACCESS.md) is now implemented for controlled browser acceptance on the canonical OAuth origin, with public traffic still held and cost-bearing features disabled. Its exact-build and hosted configuration/browser checks must clear before use. Hosted fence verification, deployed-handler drain evidence and a compatible retained recovery artifact are still required. This is not a completed production cutover or a waiver of those requirements.
 
 ## Offline migration batch preparation
 

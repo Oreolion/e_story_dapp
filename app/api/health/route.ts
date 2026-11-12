@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { releaseMode } from "@/lib/runtime/release";
+import { cohortMode } from "@/lib/runtime/cohort";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,13 @@ export async function GET() {
   const source = process.env.VERCEL_GIT_COMMIT_SHA;
   const commitSha = source && /^[a-f0-9]{40}$/i.test(source) ? source.toLowerCase() : null;
   const mode = releaseMode();
+  const frontdoor = cohortMode();
   return NextResponse.json(
     {
       status: "ok",
       releaseMode: mode,
-      acceptingTraffic: mode === "active",
+      acceptingTraffic: mode === "active" && frontdoor === "open",
+      frontdoorMode: frontdoor,
       timestamp: new Date().toISOString(),
       service: "estories-web",
       version: commitSha?.slice(0, 7) || "dev",

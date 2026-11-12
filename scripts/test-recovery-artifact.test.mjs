@@ -7,11 +7,11 @@ import { inventoryRoutes, recoveryEnvironment } from './test-recovery-artifact.m
 const sha = 'a'.repeat(40);
 
 test('recovery server receives only synthetic settings and cannot inherit provider credentials', () => {
-  const parent = { CI: 'true', APP_ENV: 'ci', PATH: 'synthetic-bin', GOOGLE_GENERATIVE_AI_API_KEY: 'synthetic-private-value', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-admin-value', VERCEL_TOKEN: 'synthetic-hosting-value' };
+  const parent = { CI: 'true', APP_ENV: 'ci', PATH: 'synthetic-bin', GOOGLE_GENERATIVE_AI_API_KEY: 'synthetic-private-value', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-admin-value', VERCEL_TOKEN: 'synthetic-hosting-value', RELEASE_COHORT_SECRET: 'synthetic-private-cohort', APP_FRONTDOOR_MODE: 'operator' };
   const child = recoveryEnvironment(parent, sha, 'paused');
   assert.equal(child.APP_RELEASE_MODE, 'paused');
   assert.equal(child.VERCEL_GIT_COMMIT_SHA, sha);
-  for (const name of ['GOOGLE_GENERATIVE_AI_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'VERCEL_TOKEN']) assert.equal(Object.hasOwn(child, name), false);
+  for (const name of ['GOOGLE_GENERATIVE_AI_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'VERCEL_TOKEN', 'RELEASE_COHORT_SECRET', 'APP_FRONTDOOR_MODE']) assert.equal(Object.hasOwn(child, name), false);
   for (const changed of [{ ...parent, CI: undefined }, { ...parent, APP_ENV: 'production' }, { ...parent, VERCEL: '1' }]) assert.throws(() => recoveryEnvironment(changed, sha, 'paused'), /RECOVERY_CI_CONTEXT_REQUIRED/);
   assert.throws(() => recoveryEnvironment(parent, 'short', 'paused'));
   assert.throws(() => recoveryEnvironment(parent, sha, 'unexpected'));

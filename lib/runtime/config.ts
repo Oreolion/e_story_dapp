@@ -1,4 +1,5 @@
 import { assertReleaseActive } from "./release";
+import { cohortMode } from "./cohort";
 
 export type AppEnvironment = "development" | "test" | "ci" | "staging" | "production";
 type EnvironmentValues = Record<string, string | undefined>;
@@ -22,6 +23,7 @@ function flag(value: string | undefined): boolean {
 }
 export function runtimeConfiguration(env: EnvironmentValues = process.env) {
   assertReleaseActive(env);
+  if (cohortMode(env) === "invalid") return fail();
   const environment = env.APP_ENV ?? (env.CI === "1" ? "ci" : env.NODE_ENV === "test" ? "test" : env.NODE_ENV === "production" ? "production" : "development");
   if (!["development", "test", "ci", "staging", "production"].includes(environment)) return fail();
   const hosted = environment === "staging" || environment === "production";
@@ -55,6 +57,7 @@ export function runtimeConfiguration(env: EnvironmentValues = process.env) {
 }
 export function assertEmailRecipient(recipient: string, env: EnvironmentValues = process.env) {
   const config = runtimeConfiguration(env);
+  if (cohortMode(env) !== "open") return fail();
   if (config.environment === "production") return;
   if (config.environment === "test") return; // Test runner transport is independently replaced.
   const allowed = new Set((env.STAGING_EMAIL_ALLOWLIST ?? "").split(",").map(value => value.trim().toLowerCase()).filter(Boolean));
@@ -62,5 +65,5 @@ export function assertEmailRecipient(recipient: string, env: EnvironmentValues =
 }
 export function externalMediaEnabled(env: EnvironmentValues = process.env) {
   const config = runtimeConfiguration(env);
-  return config.environment === "production" || config.environment === "test";
+  return cohortMode(env) === "open" && (config.environment === "production" || config.environment === "test");
 }

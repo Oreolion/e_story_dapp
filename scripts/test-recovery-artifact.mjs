@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -115,7 +115,10 @@ async function rehearse(mode, sha, routes) {
     if (live.commitSha !== sha || live.environment !== 'ci' || live.releaseMode !== expectedMode || live.acceptingTraffic !== (mode === 'active')) throw fail('RECOVERY_ARTIFACT_BINDING_FAILED');
     const ready = await probe(origin, '/api/ready');
     if (ready.status !== (mode === 'active' ? 200 : 503) || (await ready.json()).acceptingTraffic !== (mode === 'active')) throw fail('RECOVERY_READINESS_FAILED');
-    if (mode === 'active') return { mode: expectedMode, probes: 2 };
+    if (mode === 'active') {
+      if ((await probe(origin, '/api/release/access')).status !== 404) throw fail('OPERATOR_ENTRY_EXPOSED_BY_DEFAULT');
+      return { mode: expectedMode, probes: 3 };
+    }
     for (const route of routes) for (const method of route.methods) {
       if (['/api/health', '/api/ready'].includes(route.path) && ['GET', 'HEAD'].includes(method)) continue;
       const response = await probe(origin, route.path, method); probes++;
@@ -135,6 +138,53 @@ async function rehearse(mode, sha, routes) {
   } finally { await stopServer(child); }
 }
 
+async function rehearseOperator(sha, routes) {
+  const port = await availablePort(), origin = 'http://127.0.0.1:' + port;
+  const code = randomBytes(32).toString('base64url'); // Synthetic, memory-only; never printed.
+  const env = { ...recoveryEnvironment(process.env, sha, 'active'), NEXT_PUBLIC_APP_URL: origin,
+    APP_FRONTDOOR_MODE: 'operator', RELEASE_COHORT_SECRET: code, RELEASE_COHORT_ID: '11111111-1111-4111-8111-111111111111',
+    VERCEL_DEPLOYMENT_ID: 'dpl_syntheticCIOperatorArtifact', AI_PROVIDER_MODE: 'disabled', PAYMENT_PROVIDER_MODE: 'disabled',
+    AI_WORKER_ENABLED: 'false', PAYMENT_NOTICE_WORKER_ENABLED: 'false' };
+  const child = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', String(port)], { cwd: root, env, stdio: 'ignore', windowsHide: true });
+  let spawnError; child.on('error', error => { spawnError = error; });
+  const entry = '/api/release/access'; let probes = 0;
+  try {
+    let live; const deadline = Date.now() + 45000;
+    while (Date.now() < deadline) {
+      if (spawnError || child.exitCode !== null || child.signalCode !== null) throw fail('OPERATOR_SERVER_START_FAILED');
+      try { const response = await probe(origin, '/api/health'); if (response.ok) { live = await response.json(); break; } } catch { /* bounded startup only */ }
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    if (live?.commitSha !== sha || live.frontdoorMode !== 'operator' || live.acceptingTraffic !== false) throw fail('OPERATOR_ARTIFACT_BINDING_FAILED');
+    if ((await probe(origin, '/api/ready')).status !== 503) throw fail('OPERATOR_PUBLIC_READINESS_FAILED');
+    probes += 2;
+    for (const route of routes) for (const method of route.methods) {
+      if (['/api/health', '/api/ready'].includes(route.path) && ['GET', 'HEAD'].includes(method) || route.path === entry && ['GET', 'HEAD', 'POST'].includes(method)) continue;
+      const response = await probe(origin, route.path, method); probes++;
+      if (response.status !== 503 || response.headers.get('cache-control') !== 'no-store') throw fail('OPERATOR_API_EXPOSED');
+      if (method !== 'HEAD' && (await response.json()).code !== 'SERVICE_PAUSED') throw fail('OPERATOR_API_EXPOSED');
+    }
+    for (const route of ['/', '/profile', '/api/auth/callback?code=synthetic', '/_next/image?url=synthetic', '/api/stories/synthetic.png']) {
+      const response = await probe(origin, route, 'GET', { 'x-middleware-subrequest': 'middleware:middleware:middleware:middleware:middleware' }); probes++;
+      if (response.status !== 503) throw fail('OPERATOR_MIDDLEWARE_BYPASS');
+    }
+    const form = await probe(origin, entry); probes++;
+    if (form.status !== 200 || !(await form.text()).includes('type="password"')) throw fail('OPERATOR_FORM_UNAVAILABLE');
+    const admitted = await fetch(origin + entry, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000), headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'code=' + code }); probes++;
+    const cookie = admitted.headers.get('set-cookie')?.split(';')[0];
+    if (admitted.status !== 303 || admitted.headers.get('location') !== '/' || !cookie?.startsWith('__Host-istory_operator=')) throw fail('OPERATOR_ENTRY_FAILED');
+    const account = await probe(origin, '/api/user/profile', 'GET', { Cookie: cookie }); probes++;
+    if (account.status !== 401 || !account.headers.get('cache-control')?.includes('no-store')) throw fail('OPERATOR_ACCOUNT_AUTH_BYPASSED');
+    const publicPage = await probe(origin, '/terms', 'GET', { Cookie: cookie }); probes++;
+    if (publicPage.status !== 200 || !publicPage.headers.get('cache-control')?.includes('no-store') || !publicPage.headers.get('x-robots-tag')?.includes('noindex')) throw fail('OPERATOR_PAGE_CACHE_EXPOSED');
+    const forged = await probe(origin, '/api/user/profile', 'GET', { Cookie: cookie + 'x' }); probes++;
+    if (forged.status !== 503) throw fail('OPERATOR_FORGED_COOKIE_ACCEPTED');
+    const stillHeld = await probe(origin, '/api/user/profile'); probes++;
+    if (stillHeld.status !== 503) throw fail('OPERATOR_ACCESS_BECAME_GLOBAL');
+    return { mode: 'operator', probes, limits: ['Synthetic loopback HTTP only; hosted OAuth, operator browser behavior and database fencing require separate acceptance.'] };
+  } finally { await stopServer(child); }
+}
+
 async function main() {
   if (process.argv.length !== 2) throw fail('RECOVERY_INVALID_ARGUMENTS');
   const sha = process.env.GITHUB_SHA;
@@ -147,6 +197,7 @@ async function main() {
   const before = await buildIdentity();
   const results = [];
   for (const mode of ['paused', 'invalid-synthetic-setting', 'active']) results.push(await rehearse(mode, sha, routes));
+  results.push(await rehearseOperator(sha, routes));
   const after = await buildIdentity();
   if (before.sha256 !== after.sha256) throw fail('RECOVERY_BUILD_CHANGED');
   const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', sourceCommit: sha, build: before, apiRoutes: routes.length, results,

@@ -72,6 +72,8 @@ Local evidence includes 12 live-shape compatibility tests and real PostgreSQL 17
 
 ### Candidate traffic admission and recovery rehearsal
 
+The [operator-access guide](OPERATOR_RELEASE_ACCESS.md) supplies the controlled browser path for the acceptance stage: global release active, front door operator, providers/consumers held, a short-lived artifact-bound browser proof and normal account authorization. Health explicitly reports public admission false. This is additional source preparation, not installed production configuration, a replacement for the Data API fence or evidence that OAuth currently works. Activate only during the reviewed cutover after prerequisite schema/fencing/recovery gates clear; test the actual canonical origin before opening public traffic.
+
 The candidate supports `APP_RELEASE_MODE=active|paused`. An absent setting preserves active behavior; any other value denies traffic. Paused requests return uncached HTTP 503 with `Retry-After: 60` before session refresh, API handlers or image optimization. Database-client factories, canonical auth, inference and privileged worker/payment entry points also deny work. `/api/health` remains a liveness signal with `acceptingTraffic: false`; `/api/ready` returns 503. Neither endpoint establishes database or provider health. Production verification requires the exact source SHA and active traffic admission.
 
 This setting is deployment configuration, **not a live global kill switch**. An environment change must reach the relevant running artifact; changing Vercel settings alone does not establish that. Static assets may still be served. Already-running handlers, old deployment URLs, cached browser code and direct Supabase SDK calls are outside this gate.

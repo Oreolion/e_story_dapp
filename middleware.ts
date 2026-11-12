@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 import { rejectPausedRequest } from "./lib/runtime/releaseResponse";
+import { rejectOperatorRequest, protectOperatorResponse } from "./lib/runtime/cohortResponse";
 
 // ============================================================================
 // Rate Limiting Configuration
@@ -51,6 +52,7 @@ function checkRateLimit(key: string, maxRequests: number): { allowed: boolean; r
 // ============================================================================
 
 function getRateLimit(pathname: string): number {
+  if (pathname === "/api/release/access") return 5;
   // CRE callback: higher limit (multiple DON nodes call per verification)
   if (pathname === "/api/cre/callback") return 30;
 
@@ -157,12 +159,14 @@ function refreshSupabaseSession(request: NextRequest, response: NextResponse): {
 export async function middleware(request: NextRequest) {
   const paused = rejectPausedRequest(request);
   if (paused) return paused;
+  const operatorHold = await rejectOperatorRequest(request);
+  if (operatorHold) return operatorHold;
   const { pathname } = request.nextUrl;
 
   let response = NextResponse.next({ request });
   // Image optimization must also stop in paused mode; active image requests
   // do not need a session refresh.
-  if (pathname === "/_next/image") return response;
+  if (pathname === "/_next/image") return protectOperatorResponse(response);
 
   // ── Step 1: Refresh Supabase session (page navigations only) ──────
   // Only run session refresh for browser page loads — NOT for API routes.
@@ -187,10 +191,10 @@ export async function middleware(request: NextRequest) {
 
     // Handle CORS preflight (OPTIONS) requests
     if (request.method === "OPTIONS") {
-      return new NextResponse(null, {
+      return protectOperatorResponse(new NextResponse(null, {
         status: 204,
         headers: getCorsHeaders(origin),
-      });
+      }));
     }
 
     const maxRequests = getRateLimit(pathname);
@@ -208,7 +212,7 @@ export async function middleware(request: NextRequest) {
       const { allowed, remaining } = checkRateLimit(rateLimitKey, maxRequests);
 
       if (!allowed) {
-        return NextResponse.json(
+        return protectOperatorResponse(NextResponse.json(
           { error: "Too many requests. Please try again later." },
           {
             status: 429,
@@ -219,7 +223,7 @@ export async function middleware(request: NextRequest) {
               ...getCorsHeaders(origin),
             },
           }
-        );
+        ));
       }
 
       response.headers.set("X-RateLimit-Limit", String(maxRequests));
@@ -232,7 +236,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return response;
+  return protectOperatorResponse(response);
 }
 
 export const config = {

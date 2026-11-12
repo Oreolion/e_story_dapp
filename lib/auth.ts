@@ -7,6 +7,7 @@ import { AuthStoreUnavailable, canonicalUserId, type AuthPrincipal } from "./aut
 import { runtimeConfiguration } from "./runtime/config";
 import { assertReleaseActive } from "./runtime/release";
 import { rejectPausedRequest } from "./runtime/releaseResponse";
+import { rejectOperatorRequest } from "./runtime/cohortResponse";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -122,6 +123,8 @@ export async function validateAuthOrReject(
 ): Promise<string | NextResponse> {
   const paused = rejectPausedRequest(request);
   if (paused) return paused;
+  const operatorHold = await rejectOperatorRequest(request);
+  if (operatorHold) return operatorHold;
   let userId: string | null;
   try { userId = await validateAuth(request); }
   catch (error) {
