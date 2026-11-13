@@ -81,11 +81,43 @@ export async function buildIdentity(buildRoot = root) {
     target.update(JSON.stringify([relative, stat.size]) + '\n');
     const fileHash = createHash('sha256');
     for await (const chunk of fs.createReadStream(file)) { target.update(chunk); fileHash.update(chunk); }
-    if (cached) { cacheFiles++; cacheBytes += stat.size; }
-    else { bytes += stat.size; entries.push({ path: relative, bytes: stat.size, sha256: fileHash.digest('hex') }); }
+    const digest = fileHash.digest('hex');
+    if (cached) { verifyCacheSeed(buildRoot, relative, digest); cacheFiles++; cacheBytes += stat.size; }
+    else { bytes += stat.size; entries.push({ path: relative, bytes: stat.size, sha256: digest }); }
   }
   return { sha256: hash.digest('hex'), files: entries.length, bytes, entries,
     runtimeCache: { sha256: cacheHash.digest('hex'), files: cacheFiles, bytes: cacheBytes } };
+}
+
+function verifyCacheSeed(buildRoot, relative, digest) {
+  const [, kind, ownerHash, payload] = relative.match(/^\.next\/server\/route-cache\/(APP_PAGE|APP_ROUTE|PAGES)\/([a-f0-9]{64})\/\$\/(.+)$/);
+  const seed = path.join(buildRoot, '.next/server', kind === 'PAGES' ? 'pages' : 'app', payload);
+  const metaPath = seed.replace(/\.(html|meta|rsc|body|json)$/, '.meta');
+  try {
+    const stat = fs.lstatSync(seed), metaStat = fs.lstatSync(metaPath);
+    if (!stat.isFile() || stat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink() || metaStat.size > 64 * 1024) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    const source = meta.routeCache?.owner?.sourceRoute;
+    const base = payload.replace(/\.(html|meta|rsc|body|json)$/, '');
+    if (typeof source !== 'string' || meta.routeCache.owner.kind !== kind || meta.routeCache.key !== `/route-cache/${kind}/${ownerHash}/$/${base}` ||
+      createHash('sha256').update(source).digest('hex') !== ownerHash) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+    if (relative.endsWith('.meta')) {
+      const cachePath = path.join(buildRoot, relative);
+      if (fs.statSync(cachePath).size > 64 * 1024) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+      const primary = metaPath.replace(/\.meta$/, kind === 'APP_ROUTE' ? '.body' : '.html');
+      const primaryStat = fs.lstatSync(primary);
+      if (!primaryStat.isFile() || primaryStat.isSymbolicLink()) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+      const expected = { ...meta, routeCacheLastModified: meta.routeCacheLastModified ?? primaryStat.mtime.getTime() };
+      // Canonical comparison avoids treating JSON property order as data drift.
+      if (canonicalJson(cached) !== canonicalJson(expected)) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+    } else if (createHash('sha256').update(fs.readFileSync(seed)).digest('hex') !== digest) throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED');
+  } catch { throw fail('RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED'); }
+}
+
+function canonicalJson(value) {
+  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 }
 
 export function changedBuildFiles(before, after) {

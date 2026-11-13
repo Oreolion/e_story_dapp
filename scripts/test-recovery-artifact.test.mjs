@@ -68,8 +68,16 @@ test('Next response-cache promotion preserves the compiled identity and still de
   assert.equal(promoted.runtimeCache.files, 3);
   assert.notEqual(promoted.runtimeCache.sha256, before.runtimeCache.sha256);
   assert.deepEqual(changedBuildFiles(before, promoted), []);
+  fs.writeFileSync(path.join(server, key + '.html'), 'tampered runtime response');
+  await assert.rejects(buildIdentity(directory), /RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED/);
+  fs.copyFileSync(path.join(server, 'app/terms.html'), path.join(server, key + '.html'));
+  const cacheMeta = path.join(server, key + '.meta');
+  const originalMeta = fs.readFileSync(cacheMeta);
+  fs.writeFileSync(cacheMeta, JSON.stringify({ ...JSON.parse(originalMeta), headers: { 'set-cookie': 'unexpected' } }));
+  await assert.rejects(buildIdentity(directory), /RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED/);
+  fs.writeFileSync(cacheMeta, originalMeta);
   fs.writeFileSync(path.join(server, 'app/terms.html'), 'changed compiled seed');
-  assert.notEqual((await buildIdentity(directory)).sha256, before.sha256);
+  await assert.rejects(buildIdentity(directory), /RECOVERY_RUNTIME_CACHE_NOT_BUILD_SEED/);
 });
 
 test('runtime cache separation rejects executables, unknown namespaces and links', async t => {
