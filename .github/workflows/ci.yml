@@ -177,9 +177,20 @@ jobs:
         env:
           EVAL_BASE_URL: http://127.0.0.1:3001
         run: |
-          npm run start -- --hostname 127.0.0.1 --port 3001 > /tmp/istory-acceptance-server.log 2>&1 &
+          # Own the actual server PID, rather than npm's wrapper, and reap it
+          # before the next step fingerprints the shared compiled directory.
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3001 > /tmp/istory-acceptance-server.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            for attempt in $(seq 1 20); do
+              if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+              sleep 0.25
+            done
+            if kill -0 "$server_pid" 2>/dev/null; then kill -KILL "$server_pid" 2>/dev/null || true; fi
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
           ready=false
           for attempt in $(seq 1 30); do
             if curl --fail --silent --max-time 2 http://127.0.0.1:3001/api/health > /dev/null; then ready=true; break; fi

@@ -5,6 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { buildIdentity, changedBuildFiles, inventoryRoutes, recoveryEnvironment } from './test-recovery-artifact.mjs';
 import { NextRequest } from 'next/server.js';
+import nextFileCache from 'next/dist/server/lib/incremental-cache/file-system-cache.js';
+import { nodeFs } from 'next/dist/server/lib/node-fs-methods.js';
+import { getRouteCacheKey } from 'next/dist/server/lib/route-cache-key.js';
 const sha = 'a'.repeat(40);
 
 function buildFixture(t) {
@@ -42,6 +45,46 @@ test('build identity detects executable changes, added runtime files and removal
 test('build identity refuses directory links instead of following them', async t => {
   const directory = buildFixture(t);
   fs.symlinkSync(path.join(directory, '.next/static'), path.join(directory, '.next/server/linked'), process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(buildIdentity(directory), /RECOVERY_BUILD_SYMLINK/);
+});
+
+test('Next response-cache promotion preserves the compiled identity and still detects seed changes', async t => {
+  const directory = buildFixture(t), server = path.join(directory, '.next/server');
+  const owner = { kind: 'APP_PAGE', sourceRoute: '/terms/page' };
+  const key = getRouteCacheKey('/terms', owner);
+  fs.mkdirSync(path.join(server, 'app'));
+  fs.writeFileSync(path.join(server, 'app/terms.html'), '<p>synthetic immutable terms</p>');
+  fs.writeFileSync(path.join(server, 'app/terms.rsc'), 'synthetic RSC');
+  fs.writeFileSync(path.join(server, 'app/terms.meta'), JSON.stringify({
+    headers: {}, status: 200, routeCache: { owner, key, isFallback: false },
+  }));
+  const before = await buildIdentity(directory);
+  const cache = new nextFileCache.default({ fs: nodeFs, flushToDisk: true, serverDistDir: server, revalidatedTags: [] });
+  const result = await cache.get(key, { kind: 'APP_PAGE', isFallback: false, isRoutePPREnabled: false });
+  assert.equal(result.value.html, '<p>synthetic immutable terms</p>');
+  assert.ok(fs.existsSync(path.join(server, key + '.html')));
+  const promoted = await buildIdentity(directory);
+  assert.equal(promoted.sha256, before.sha256);
+  assert.equal(promoted.runtimeCache.files, 3);
+  assert.notEqual(promoted.runtimeCache.sha256, before.runtimeCache.sha256);
+  assert.deepEqual(changedBuildFiles(before, promoted), []);
+  fs.writeFileSync(path.join(server, 'app/terms.html'), 'changed compiled seed');
+  assert.notEqual((await buildIdentity(directory)).sha256, before.sha256);
+});
+
+test('runtime cache separation rejects executables, unknown namespaces and links', async t => {
+  const directory = buildFixture(t);
+  const cache = path.join(directory, '.next/server/route-cache/APP_PAGE', 'a'.repeat(64), '$');
+  fs.mkdirSync(cache, { recursive: true });
+  const executable = path.join(cache, 'unexpected.js');
+  fs.writeFileSync(executable, 'synthetic executable');
+  await assert.rejects(buildIdentity(directory), /RECOVERY_RUNTIME_CACHE_FILE_UNEXPECTED/);
+  fs.unlinkSync(executable);
+  const unknown = path.join(directory, '.next/server/route-cache/unowned.html');
+  fs.writeFileSync(unknown, 'synthetic unknown');
+  await assert.rejects(buildIdentity(directory), /RECOVERY_RUNTIME_CACHE_FILE_UNEXPECTED/);
+  fs.unlinkSync(unknown);
+  fs.symlinkSync(path.join(directory, '.next/static'), path.join(cache, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(buildIdentity(directory), /RECOVERY_BUILD_SYMLINK/);
 });
 

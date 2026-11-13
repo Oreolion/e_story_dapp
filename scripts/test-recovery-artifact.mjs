@@ -66,17 +66,26 @@ export async function buildIdentity(buildRoot = root) {
   walk(path.join(buildRoot, '.next', 'server')); walk(path.join(buildRoot, '.next', 'static'));
   for (const name of ['BUILD_ID', 'build-manifest.json', 'app-build-manifest.json', 'required-server-files.json', 'routes-manifest.json', 'prerender-manifest.json']) files.push(path.join(buildRoot, '.next', name));
   if (files.length > 20000) throw fail('RECOVERY_BUILD_SIZE_LIMIT');
-  const hash = createHash('sha256'); const entries = []; let bytes = 0;
+  const hash = createHash('sha256'), cacheHash = createHash('sha256');
+  const entries = []; let bytes = 0, totalBytes = 0, cacheBytes = 0, cacheFiles = 0;
   for (const file of files.sort()) {
     const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 ** 2 || (bytes += stat.size) > 1024 ** 3) throw fail('RECOVERY_BUILD_SIZE_LIMIT');
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 ** 2 || (totalBytes += stat.size) > 1024 ** 3) throw fail('RECOVERY_BUILD_SIZE_LIMIT');
     const relative = path.relative(buildRoot, file).split(path.sep).join('/');
-    hash.update(JSON.stringify([relative, stat.size]) + '\n');
+    // Next 15.5.28 promotes immutable page seeds into this dedicated mutable
+    // response-cache namespace. Keep the seeds, code and static assets immutable;
+    // inventory/cache-hash these known response files separately, never executables.
+    const cached = relative.startsWith('.next/server/route-cache/');
+    if (cached && !/^\.next\/server\/route-cache\/(APP_PAGE|APP_ROUTE|PAGES)\/[a-f0-9]{64}\/\$\/.+\.(html|meta|rsc|body|json)$/.test(relative)) throw fail('RECOVERY_RUNTIME_CACHE_FILE_UNEXPECTED');
+    const target = cached ? cacheHash : hash;
+    target.update(JSON.stringify([relative, stat.size]) + '\n');
     const fileHash = createHash('sha256');
-    for await (const chunk of fs.createReadStream(file)) { hash.update(chunk); fileHash.update(chunk); }
-    entries.push({ path: relative, bytes: stat.size, sha256: fileHash.digest('hex') });
+    for await (const chunk of fs.createReadStream(file)) { target.update(chunk); fileHash.update(chunk); }
+    if (cached) { cacheFiles++; cacheBytes += stat.size; }
+    else { bytes += stat.size; entries.push({ path: relative, bytes: stat.size, sha256: fileHash.digest('hex') }); }
   }
-  return { sha256: hash.digest('hex'), files: files.length, bytes, entries };
+  return { sha256: hash.digest('hex'), files: entries.length, bytes, entries,
+    runtimeCache: { sha256: cacheHash.digest('hex'), files: cacheFiles, bytes: cacheBytes } };
 }
 
 export function changedBuildFiles(before, after) {
@@ -250,13 +259,13 @@ async function main() {
     const { entries: afterEntries, ...observed } = after;
     const destination = path.join(root, 'output/release'); fs.mkdirSync(destination, { recursive: true });
     fs.writeFileSync(path.join(destination, 'recovery-build-failure.json'), JSON.stringify({
-      status: 'RECOVERY_BUILD_CHANGED', sourceCommit: sha, before: build, after: observed,
+      status: 'RECOVERY_BUILD_CHANGED', identityVersion: 2, sourceCommit: sha, before: build, after: observed,
       changes: changedBuildFiles({ entries: beforeEntries }, { entries: afterEntries }), completedRehearsals: results,
       limits: ['Synthetic compiled-file names, sizes and hashes only; no file content or environment values. The immutable-build gate remains failed.'],
     }, null, 2) + '\n');
     throw fail('RECOVERY_BUILD_CHANGED');
   }
-  const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', sourceCommit: sha, build, apiRoutes: routes.length, results,
+  const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', identityVersion: 2, sourceCommit: sha, build, observedRuntimeCache: after.runtimeCache, apiRoutes: routes.length, results,
     limits: ['CI synthetic build only; not a retained or verified Vercel production recovery deployment.', 'Old deployment URLs, direct SDK traffic, existing handlers and external callback retention require separate provider/database controls.'] };
   const destination = path.join(root, 'output/release'); fs.mkdirSync(destination, { recursive: true });
   fs.writeFileSync(path.join(destination, 'recovery-build.json'), JSON.stringify(report, null, 2) + '\n');
