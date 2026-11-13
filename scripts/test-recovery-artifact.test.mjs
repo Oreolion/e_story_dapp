@@ -3,9 +3,47 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { inventoryRoutes, recoveryEnvironment } from './test-recovery-artifact.mjs';
+import { buildIdentity, changedBuildFiles, inventoryRoutes, recoveryEnvironment } from './test-recovery-artifact.mjs';
 import { NextRequest } from 'next/server.js';
 const sha = 'a'.repeat(40);
+
+function buildFixture(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'istory-build-identity-'));
+  t.after(() => {
+    assert.equal(path.dirname(directory), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(directory).startsWith('istory-build-identity-'));
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  for (const name of ['server', 'static']) fs.mkdirSync(path.join(directory, '.next', name), { recursive: true });
+  for (const name of ['BUILD_ID', 'build-manifest.json', 'app-build-manifest.json', 'required-server-files.json', 'routes-manifest.json', 'prerender-manifest.json']) {
+    fs.writeFileSync(path.join(directory, '.next', name), 'synthetic fixture');
+  }
+  return directory;
+}
+
+test('build identity detects executable changes, added runtime files and removals without exposing contents', async t => {
+  const directory = buildFixture(t);
+  const executable = path.join(directory, '.next/server/page.js');
+  const removed = path.join(directory, '.next/static/old.js');
+  fs.writeFileSync(executable, 'first synthetic executable'); fs.writeFileSync(removed, 'old synthetic static');
+  const before = await buildIdentity(directory);
+  assert.deepEqual(changedBuildFiles(before, await buildIdentity(directory)), []);
+  fs.writeFileSync(executable, 'second synthetic executable'); fs.unlinkSync(removed);
+  fs.writeFileSync(path.join(directory, '.next/server/generated.meta'), 'synthetic generated metadata');
+  const after = await buildIdentity(directory);
+  assert.notEqual(before.sha256, after.sha256);
+  const changes = changedBuildFiles(before, after);
+  assert.deepEqual(changes.map(({ path, change }) => [path, change]), [
+    ['.next/server/generated.meta', 'added'], ['.next/server/page.js', 'modified'], ['.next/static/old.js', 'removed'],
+  ]);
+  assert.ok(!JSON.stringify(changes).includes('synthetic executable'));
+});
+
+test('build identity refuses directory links instead of following them', async t => {
+  const directory = buildFixture(t);
+  fs.symlinkSync(path.join(directory, '.next/static'), path.join(directory, '.next/server/linked'), process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(buildIdentity(directory), /RECOVERY_BUILD_SYMLINK/);
+});
 
 test('operator loopback origin matches the installed NextRequest canonical origin', () => {
   assert.equal(new NextRequest('http://127.0.0.1:3002/api/release/access').nextUrl.origin, 'http://localhost:3002');

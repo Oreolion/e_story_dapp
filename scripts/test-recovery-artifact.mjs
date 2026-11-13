@@ -53,7 +53,7 @@ export function inventoryRoutes(apiRoot) {
   return routes.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-async function buildIdentity() {
+export async function buildIdentity(buildRoot = root) {
   const files = [];
   function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -63,17 +63,30 @@ async function buildIdentity() {
       else if (entry.isFile()) files.push(full);
     }
   }
-  walk(path.join(root, '.next', 'server')); walk(path.join(root, '.next', 'static'));
-  for (const name of ['BUILD_ID', 'build-manifest.json', 'app-build-manifest.json', 'required-server-files.json', 'routes-manifest.json', 'prerender-manifest.json']) files.push(path.join(root, '.next', name));
+  walk(path.join(buildRoot, '.next', 'server')); walk(path.join(buildRoot, '.next', 'static'));
+  for (const name of ['BUILD_ID', 'build-manifest.json', 'app-build-manifest.json', 'required-server-files.json', 'routes-manifest.json', 'prerender-manifest.json']) files.push(path.join(buildRoot, '.next', name));
   if (files.length > 20000) throw fail('RECOVERY_BUILD_SIZE_LIMIT');
-  const hash = createHash('sha256'); let bytes = 0;
+  const hash = createHash('sha256'); const entries = []; let bytes = 0;
   for (const file of files.sort()) {
     const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 ** 2 || (bytes += stat.size) > 1024 ** 3) throw fail('RECOVERY_BUILD_SIZE_LIMIT');
-    hash.update(JSON.stringify([path.relative(root, file).split(path.sep).join('/'), stat.size]) + '\n');
-    for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+    const relative = path.relative(buildRoot, file).split(path.sep).join('/');
+    hash.update(JSON.stringify([relative, stat.size]) + '\n');
+    const fileHash = createHash('sha256');
+    for await (const chunk of fs.createReadStream(file)) { hash.update(chunk); fileHash.update(chunk); }
+    entries.push({ path: relative, bytes: stat.size, sha256: fileHash.digest('hex') });
   }
-  return { sha256: hash.digest('hex'), files: files.length, bytes };
+  return { sha256: hash.digest('hex'), files: files.length, bytes, entries };
+}
+
+export function changedBuildFiles(before, after) {
+  const previous = new Map(before.entries.map(file => [file.path, file]));
+  const current = new Map(after.entries.map(file => [file.path, file]));
+  return [...new Set([...previous.keys(), ...current.keys()])].sort().filter(name => {
+    const a = previous.get(name), b = current.get(name);
+    return !a || !b || a.sha256 !== b.sha256 || a.bytes !== b.bytes;
+  }).map(name => ({ path: name, change: !previous.has(name) ? 'added' : !current.has(name) ? 'removed' : 'modified',
+    before: previous.get(name) ?? null, after: current.get(name) ?? null }));
 }
 
 async function availablePort() {
@@ -232,8 +245,18 @@ async function main() {
   results.push(await rehearseOperator(sha, routes));
   results.push(await rehearseCallbackAdmission(sha));
   const after = await buildIdentity();
-  if (before.sha256 !== after.sha256) throw fail('RECOVERY_BUILD_CHANGED');
-  const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', sourceCommit: sha, build: before, apiRoutes: routes.length, results,
+  const { entries: beforeEntries, ...build } = before;
+  if (before.sha256 !== after.sha256) {
+    const { entries: afterEntries, ...observed } = after;
+    const destination = path.join(root, 'output/release'); fs.mkdirSync(destination, { recursive: true });
+    fs.writeFileSync(path.join(destination, 'recovery-build-failure.json'), JSON.stringify({
+      status: 'RECOVERY_BUILD_CHANGED', sourceCommit: sha, before: build, after: observed,
+      changes: changedBuildFiles({ entries: beforeEntries }, { entries: afterEntries }), completedRehearsals: results,
+      limits: ['Synthetic compiled-file names, sizes and hashes only; no file content or environment values. The immutable-build gate remains failed.'],
+    }, null, 2) + '\n');
+    throw fail('RECOVERY_BUILD_CHANGED');
+  }
+  const report = { status: 'CI_RECOVERY_BUILD_VERIFIED', sourceCommit: sha, build, apiRoutes: routes.length, results,
     limits: ['CI synthetic build only; not a retained or verified Vercel production recovery deployment.', 'Old deployment URLs, direct SDK traffic, existing handlers and external callback retention require separate provider/database controls.'] };
   const destination = path.join(root, 'output/release'); fs.mkdirSync(destination, { recursive: true });
   fs.writeFileSync(path.join(destination, 'recovery-build.json'), JSON.stringify(report, null, 2) + '\n');

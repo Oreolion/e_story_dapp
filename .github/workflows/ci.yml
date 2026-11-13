@@ -194,6 +194,15 @@ jobs:
       - name: Rehearse traffic admission on the same compiled artifact
         run: node scripts/test-recovery-artifact.mjs
 
+      - name: Preserve compiled identity failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-build-failure-evidence
+          path: output/release/recovery-build-failure.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Preserve compiled recovery evidence
         uses: actions/upload-artifact@v4
         with:
