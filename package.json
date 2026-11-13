@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/install-runtime-compat.mjs",
-    "test:dependency-security": "node --test scripts/decoder-compat.test.mjs scripts/zod-size-backport.test.mjs",
+    "test:dependency-security": "node --test scripts/decoder-compat.test.mjs scripts/zod-size-backport.test.mjs scripts/hono-security.test.mjs",
     "audit:runtime": "node scripts/audit-runtime.mjs",
     "dev": "next dev --turbopack -p 3000",
     "build": "next build",
@@ -115,7 +115,8 @@
     "@coinbase/cdp-sdk": "1.38.6",
     "lodash": "4.18.1",
     "ws@^8.0.0": "8.22.0",
-    "ws@^7.0.0": "7.5.13"
+    "ws@^7.0.0": "7.5.13",
+    "hono": "4.13.16"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

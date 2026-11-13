@@ -61,7 +61,7 @@ function main() {
   const assessment = adjudicateAudit(audit);
   const bindings = { decoder: verifyDecoder(), zod: verifyZod() };
   // A hash claim alone is insufficient: execute the actual installed parser regressions.
-  const regressions = spawnSync(process.execPath, ['--test', 'scripts/decoder-compat.test.mjs', 'scripts/zod-size-backport.test.mjs', 'scripts/audit-runtime.test.mjs'], {
+  const regressions = spawnSync(process.execPath, ['--test', 'scripts/decoder-compat.test.mjs', 'scripts/zod-size-backport.test.mjs', 'scripts/hono-security.test.mjs', 'scripts/audit-runtime.test.mjs'], {
     cwd: root, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true,
     env: Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP'].filter(name => process.env[name]).map(name => [name, process.env[name]])),
   });
