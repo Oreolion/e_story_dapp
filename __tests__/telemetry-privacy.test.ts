@@ -70,7 +70,7 @@ it("removes credentials before the real installed Sentry SDK hands events to its
   const envelopes: unknown[] = [];
   sentry.init({ ...options, enabled: true, dsn: "https://synthetic@telemetry.invalid/1", defaultIntegrations: false,
     tracesSampleRate: 0, sendClientReports: false,
-    transport: () => ({ send: async (envelope) => { envelopes.push(envelope); return { statusCode: 200 }; }, flush: async () => true }),
+    transport: () => ({ send: async (envelope: unknown) => { envelopes.push(envelope); return { statusCode: 200 }; }, flush: async () => true }),
   });
   try {
     sentry.captureEvent({ message: "synthetic captured failure", extra: { DATA_API_RELEASE_KEY: "synthetic-transport-key" },
