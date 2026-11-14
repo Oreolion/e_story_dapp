@@ -110,6 +110,9 @@ jobs:
       - name: Run Vitest
         run: npm run test
 
+      - name: Verify audio storage privacy with synthetic PostgreSQL roles
+        run: node --test scripts/storage-audio-privacy.test.mjs
+
       - name: Verify authenticated dispatch safety with synthetic requests
         run: node --test scripts/worker-dispatch.test.mjs
 

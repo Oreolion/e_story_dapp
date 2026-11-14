@@ -43,8 +43,10 @@ global.MediaRecorder = class {
   }
   stop() {
     this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["synthetic audio"], { type: "audio/webm" }) });
     this.onstop();
   }
+  ondataavailable?: (event: { data: Blob }) => void;
   //   ondataavailable(e: any) {}
   onstop() {}
   //   constructor(stream: any) {}
@@ -208,6 +210,54 @@ describe("RecordPage", () => {
       await waitFor(() => expect(screen.getByPlaceholderText("Give your story a title...")).toHaveValue(""));
       expect(ipfsService.uploadMetadata).toHaveBeenCalledTimes(isPublic ? 1 : 0);
       if (isPublic) expect(ipfsService.uploadMetadata).toHaveBeenCalledWith(expect.objectContaining({ is_public: true }), "synthetic-record-token", { visibility: "public" });
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it.each([false, true])("saves a recording without publishing private audio when public=%s", async isPublic => {
+    sessionStorage.clear();
+    const audioUrl = "https://mock-storage.com/story-audio/test-user-123/recording.webm";
+    const outbound = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/ai/transcribe") {
+        return new Response(JSON.stringify({ error: "Synthetic provider unavailable" }), { status: 503 });
+      }
+      if (url === "/api/audio/upload") {
+        const form = init?.body as FormData;
+        expect(form.get("visibility")).toBe("public");
+        expect(form.get("file")).toBeInstanceOf(Blob);
+        return new Response(JSON.stringify({ url: audioUrl }), { status: 200 });
+      }
+      if (url === "/api/stories") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.is_public).toBe(isPublic);
+        expect(body.audio_url).toBe(isPublic ? audioUrl : null);
+        expect(body.has_audio).toBe(isPublic);
+        return new Response(JSON.stringify({ story: { id: "synthetic-recording" } }), { status: 200 });
+      }
+      throw new Error("Unexpected outbound destination");
+    });
+    vi.stubGlobal("fetch", outbound);
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL() { return "blob:synthetic-recording"; }
+      static revokeObjectURL() {}
+    });
+    try {
+      renderWithProviders(<RecordPage />);
+      // Exercise the real recording and save handlers; no React state is replaced.
+      const microphone = screen.getByText("Tap to start recording").parentElement?.querySelector("button");
+      expect(microphone).toBeTruthy();
+      fireEvent.click(microphone!);
+      await screen.findByText("Tap to stop recording");
+      fireEvent.click(microphone!);
+      await waitFor(() => expect(outbound).toHaveBeenCalledWith("/api/ai/transcribe", expect.anything()));
+      fireEvent.change(screen.getByPlaceholderText("Give your story a title..."), { target: { value: "Synthetic recording" } });
+      fireEvent.change(screen.getByPlaceholderText(/What happened today/i), { target: { value: "Synthetic text entered after transcription was unavailable." } });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Save Privately" })).toBeEnabled());
+      if (isPublic) fireEvent.click(screen.getByRole("switch", { name: "Publish story publicly" }));
+      fireEvent.click(screen.getByRole("button", { name: isPublic ? /Publish.*Save/ : "Save Privately" }));
+      await waitFor(() => expect(outbound.mock.calls.filter(([url]) => url === "/api/stories")).toHaveLength(1));
+      expect(outbound.mock.calls.filter(([url]) => url === "/api/audio/upload")).toHaveLength(isPublic ? 1 : 0);
+      await waitFor(() => expect(screen.getByPlaceholderText("Give your story a title...")).toHaveValue(""));
+      expect(ipfsService.uploadMetadata).toHaveBeenCalledTimes(isPublic ? 1 : 0);
     } finally { vi.unstubAllGlobals(); }
   });
 });

@@ -357,7 +357,7 @@ export default function RecordPage() {
       try {
         if (audioBlob && !isPublic) toast("Private entry saves text only. Cloud audio is currently available for public stories.");
         // A. Upload Audio via API route (bypasses RLS, works for wallet & OAuth users)
-        if (audioBlob) {
+        if (audioBlob && isPublic) {
           const uploadForm = new FormData();
           uploadForm.append("file", audioBlob, "recording.webm");
           uploadForm.append("userId", userId);
