@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
+import { telemetryPrivacyOptions } from "./lib/runtime/telemetryPrivacy";
 
 Sentry.init({
+  ...telemetryPrivacyOptions,
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
   // Performance: sample 10% of transactions in production
