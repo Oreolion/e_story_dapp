@@ -1,6 +1,8 @@
 -- Separate reviewed production operation; NOT part of migrations 020-023.
 -- Requires scoped approval, fresh recovery evidence and playback verification.
 -- Invoke only through the target-bound Supabase project CLI/provider interface.
+-- FIRST make story-audio private through the normal Storage API/dashboard.
+-- Storage table records are read-only here; only RLS policies are installed.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '15s';
@@ -10,6 +12,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'story-audio') THEN
     RAISE EXCEPTION 'AUDIO_BUCKET_REQUIRED';
   END IF;
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'story-audio' AND public) THEN
+    RAISE EXCEPTION 'AUDIO_BUCKET_MUST_BE_PRIVATE';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid = 'storage.objects'::regclass AND relrowsecurity)
     OR EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('anon','authenticated') AND (rolsuper OR rolbypassrls))
     OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role' AND rolbypassrls) THEN
@@ -17,9 +22,6 @@ BEGIN
   END IF;
 END;
 $preconditions$;
-
--- Existing author playback already issues signed URLs. Retain every object.
-UPDATE storage.buckets SET public = false WHERE id = 'story-audio';
 
 -- Restrictive policies compose with existing permissive policies using AND.
 -- Browser uploads/overwrites must use the authenticated, quota-limited app API.

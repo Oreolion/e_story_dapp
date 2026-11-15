@@ -32,8 +32,16 @@ test('audio privacy operation preserves data and enforces real PostgreSQL roles'
       await asRole('authenticated', "INSERT INTO storage.objects VALUES(2,'story-audio','synthetic-owner/direct.webm','synthetic-owner')");
     });
     const before = await db.query('SELECT * FROM storage.objects ORDER BY id');
+    await t.test('refuses a public bucket and never changes Storage records itself', async () => {
+      await assert.rejects(db.exec(sql), /AUDIO_BUCKET_MUST_BE_PRIVATE/);
+      await db.exec('ROLLBACK');
+      assert.equal((await db.query("SELECT public FROM storage.buckets WHERE id='story-audio'")).rows[0].public, true);
+      assert.equal((await db.query("SELECT count(*)::int AS n FROM pg_policy WHERE polname LIKE 'istory_audio_%'")).rows[0].n, 0);
+    });
+    // Test-fixture setup only. Production changes this setting through Storage API.
+    await db.exec("UPDATE storage.buckets SET public=false WHERE id='story-audio'");
     await db.exec(sql);
-    await t.test('makes only audio private and preserves every object and owner', async () => {
+    await t.test('preserves the API-configured buckets and every object and owner', async () => {
       assert.deepEqual((await db.query('SELECT * FROM storage.objects ORDER BY id')).rows, before.rows);
       assert.deepEqual((await db.query('SELECT * FROM storage.buckets ORDER BY id')).rows, [{id:'avatars',public:true},{id:'story-audio',public:false}]);
     });
@@ -54,10 +62,11 @@ test('audio privacy operation preserves data and enforces real PostgreSQL roles'
       await assert.rejects(asRole('anon', "INSERT INTO storage.objects VALUES(6,'story-audio','anonymous.webm',NULL)"), /row-level security/);
     });
     await t.test('a conflicting policy rolls back the entire rerun', async () => {
-      await db.exec("UPDATE storage.buckets SET public=true WHERE id='story-audio'");
+      await db.exec('DROP POLICY istory_audio_insert_via_server ON storage.objects');
       await assert.rejects(db.exec(sql), /already exists/);
       await db.exec('ROLLBACK');
-      assert.equal((await db.query("SELECT public FROM storage.buckets WHERE id='story-audio'")).rows[0].public, true);
+      assert.equal((await db.query("SELECT count(*)::int AS n FROM pg_policy WHERE polname='istory_audio_insert_via_server'")).rows[0].n, 0);
+      assert.equal((await db.query("SELECT public FROM storage.buckets WHERE id='story-audio'")).rows[0].public, false);
     });
   } finally { await db.close(); }
 });
