@@ -1,5 +1,6 @@
 // app/api/stories/route.ts
 import { parseJournalInput } from "@/lib/stories/contracts";
+import { ownedAudioPath } from "@/lib/stories/audio";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
@@ -86,6 +87,10 @@ export async function POST(req: NextRequest) {
     // Verify author_id matches authenticated user (use resolved ID)
     if (resolvedUserId !== author_id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (audio_url && !ownedAudioPath(audio_url, resolvedUserId)) {
+      return NextResponse.json({ error: "Invalid audio URL" }, { status: 400 });
     }
 
     const admin = createSupabaseAdminClient();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { validateAuthOrReject, isAuthError, resolveUserId } from "@/lib/auth";
 import { parseJournalInput } from "@/lib/stories/contracts";
+import { ownedAudioPath } from "@/lib/stories/audio";
 import { aiGenerationHold } from "@/lib/ai/availability";
 
 export async function POST(request: NextRequest) {
@@ -12,6 +13,9 @@ export async function POST(request: NextRequest) {
     let body: ReturnType<typeof parseJournalInput>;
     try { body = parseJournalInput(await request.json()); }
     catch { return NextResponse.json({ error: "Invalid journal fields or conflicting aliases" }, { status: 400 }); }
+    if (body.audio_url && !ownedAudioPath(body.audio_url, ownerId)) {
+      return NextResponse.json({ error: "Invalid audio URL" }, { status: 400 });
+    }
     const hold = aiGenerationHold();
     const admin = createSupabaseAdminClient();
     const { data: owner, error } = await admin.from("users").select("wallet_address, subscription_plan, subscription_expires_at").eq("id", ownerId).single();

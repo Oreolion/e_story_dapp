@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { resolveUserId, validateAuth } from "@/lib/auth";
 import { isValidUuid } from "@/lib/validation";
-
-/** Extract the storage path from a Supabase public URL (e.g. ".../story-audio/userId/123.webm" → "userId/123.webm") */
-function extractStoragePath(publicUrl: string): string | null {
-  const marker = "/story-audio/";
-  const idx = publicUrl.indexOf(marker);
-  if (idx === -1) return null;
-  return publicUrl.slice(idx + marker.length);
-}
+import { ownedAudioPath } from "@/lib/stories/audio";
 
 /**
  * GET /api/stories/[storyId] — Fetch a single story with author info
@@ -88,7 +81,7 @@ export async function GET(
       story.audio_url = null;
     } else if (story.audio_url) {
       // Generate a signed URL for the author — public URLs fail on private buckets
-      const storagePath = extractStoragePath(story.audio_url);
+      const storagePath = ownedAudioPath(story.audio_url, story.author_id);
       if (storagePath) {
         const { data: signedData, error: signedError } = await admin.storage
           .from("story-audio")
