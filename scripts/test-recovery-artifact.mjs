@@ -7,6 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { verifyOperatorBrowserAdmission } from './operator-browser-acceptance.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fail = code => Object.assign(new Error(code), { recoveryCode: code });
@@ -240,7 +241,8 @@ async function rehearseOperator(sha, routes) {
     if (forged.status !== 503) throw fail('OPERATOR_FORGED_COOKIE_ACCEPTED');
     const stillHeld = await probe(origin, '/api/user/profile'); probes++;
     if (stillHeld.status !== 503) throw fail('OPERATOR_ACCESS_BECAME_GLOBAL');
-    return { mode: 'operator', probes, limits: ['Synthetic loopback HTTP only; hosted OAuth, operator browser behavior and database fencing require separate acceptance.'] };
+    const browsers = await verifyOperatorBrowserAdmission(origin, code);
+    return { mode: 'operator', probes, browsers, limits: ['Synthetic loopback HTTP and Chromium/Firefox form navigation only; hosted OAuth and database fencing require separate acceptance.'] };
   } finally { await stopServer(child); }
 }
 

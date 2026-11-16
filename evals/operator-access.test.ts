@@ -102,6 +102,8 @@ it("issues only a secure host cookie and redirects only to the fixed same-origin
 });
 it("rejects cross-origin, duplicate, oversized and incorrect submissions without redirects or reflected secrets", async () => {
   for (const [body, headers, status] of [[`code=${code}`, { Origin: "https://other.invalid" }, 403],
+    [`code=${code}`, { Origin: "null" }, 403],
+    [`code=${code}`, { "sec-fetch-site": "cross-site" }, 403],
     [`code=${code}&code=${code}`, {}, 400], ["code=wrong", {}, 401], ["code=" + "x".repeat(513), {}, 413],
     [`code=${code}&next=https://other.invalid`, {}, 400]] as const) {
     const response = await POST(submit(body, headers)); expect(response.status).toBe(status);
