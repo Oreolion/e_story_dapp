@@ -193,7 +193,7 @@ async function rehearse(mode, sha, routes) {
   } finally { await stopServer(child); }
 }
 
-async function rehearseOperator(sha, routes) {
+async function rehearseOperator(sha, routes, browserCase) {
   // NextRequest canonicalizes loopback IPs to localhost. Use that same origin
   // for the form and Origin header; do not weaken the application's CSRF check.
   const port = await availablePort(), origin = 'http://localhost:' + port;
@@ -213,6 +213,11 @@ async function rehearseOperator(sha, routes) {
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     if (live?.commitSha !== sha || live.frontdoorMode !== 'operator' || live.acceptingTraffic !== false) throw fail('OPERATOR_ARTIFACT_BINDING_FAILED');
+    // The entry route permits five requests per minute, including GETs. Give
+    // each browser scenario its own server instead of consuming another test's
+    // budget, changing client headers, relaxing the limit or sleeping a minute.
+    if (browserCase) return { mode: 'operator-browser', ...browserCase,
+      browsers: await verifyOperatorBrowserAdmission(origin, code, browserCase) };
     if ((await probe(origin, '/api/ready')).status !== 503) throw fail('OPERATOR_PUBLIC_READINESS_FAILED');
     probes += 2;
     for (const route of routes) for (const method of route.methods) {
@@ -241,8 +246,7 @@ async function rehearseOperator(sha, routes) {
     if (forged.status !== 503) throw fail('OPERATOR_FORGED_COOKIE_ACCEPTED');
     const stillHeld = await probe(origin, '/api/user/profile'); probes++;
     if (stillHeld.status !== 503) throw fail('OPERATOR_ACCESS_BECAME_GLOBAL');
-    const browsers = await verifyOperatorBrowserAdmission(origin, code);
-    return { mode: 'operator', probes, browsers, limits: ['Synthetic loopback HTTP and Chromium/Firefox form navigation only; hosted OAuth and database fencing require separate acceptance.'] };
+    return { mode: 'operator', probes, limits: ['Synthetic loopback HTTP only; hosted OAuth and database fencing require separate acceptance.'] };
   } finally { await stopServer(child); }
 }
 
@@ -286,6 +290,9 @@ async function main() {
   const results = [];
   for (const mode of ['paused', 'invalid-synthetic-setting', 'active']) results.push(await rehearse(mode, sha, routes));
   results.push(await rehearseOperator(sha, routes));
+  for (const browser of ['chromium', 'firefox']) for (const scenario of ['wrong-code', 'lifecycle']) {
+    results.push(await rehearseOperator(sha, routes, { browser, scenario }));
+  }
   results.push(await rehearseCallbackAdmission(sha));
   const after = await buildIdentity();
   const { entries: beforeEntries, ...build } = before;
