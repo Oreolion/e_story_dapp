@@ -9,7 +9,9 @@ import { prepareEncryption, plumbing, stop, exited, readPassphrase, projectRef, 
 import { catalogSql, validateCatalog, quoteIdentifier as qi, quoteLiteral as ql } from './recovery-format.mjs';
 import { canonical, securityDifferenceSummary, extensionSecuritySql } from './recovery-security.mjs';
 
-export const restoreImage = 'public.ecr.aws/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706';
+// Supabase's official Docker Hub mirror serves the identical reviewed digest.
+// Pin bytes rather than a mutable tag; ECR's transfer cap must not skip tests.
+export const restoreImage = 'docker.io/supabase/postgres@sha256:b15d862126dd2dac02da524696ccfde2dcce2ceaee0a58973b2727befe492706';
 const files = ['roles.sql.gpg', 'schema.sql.gpg', 'data.sql.gpg', 'migration-schema.sql.gpg', 'migration-data.sql.gpg', 'catalog.json.gpg'];
 const ownedTargets = new Map();
 const docker = (args, input, maxBuffer = 2 * 1024 * 1024) => spawnSync('docker', args, { input, env: plumbing(), encoding: 'utf8', timeout: 30000, maxBuffer, windowsHide: true });

@@ -32,7 +32,8 @@ env:
 jobs:
   test:
     timeout-minutes: 60
-    runs-on: ubuntu-latest
+    # Keep the runner compatible with the locked Playwright browser builds.
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
