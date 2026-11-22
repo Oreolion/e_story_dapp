@@ -10,6 +10,35 @@ The owner must choose between retaining both projects and using isolated local/C
 
 This branch strengthens the future hosted check. It does not provision resources or establish hosted acceptance. Its tests use synthetic HTTP responses and no external services.
 
+Fresh-bootstrap implementation added on 2026-11-22: the commands below now rehearse the complete fresh schema locally and on PostgreSQL 17 in CI. This does not allocate hosted resources or authorize applying SQL to an existing project.
+
+## Fresh-database rehearsal
+
+With the committed dependencies installed and a supported Node executable:
+
+```powershell
+node --test scripts/staging-bootstrap.test.mjs
+node scripts/rehearse-staging-bootstrap.mjs
+```
+
+The default rehearsal creates a new in-memory PostgreSQL instance. It needs no Docker, Supabase login, database password, environment files or model credentials. It accepts no connection URL or remote-project argument. There are no paid provider calls, emails, mainnet operations or customer records.
+
+CI also runs `node scripts/rehearse-staging-bootstrap.mjs --postgres17`. That mode requires the CI context and its exact pinned, labelled, network-isolated PostgreSQL test container. It creates a unique synthetic database, rather than selecting an existing application database. It performs no database/container deletion; the job-owned container expires with its runner. This mode is for CI, not an instruction to set CI flags on a production machine.
+
+The bootstrap refuses pre-existing public app objects, migration history, auth users, buckets/media or unsafe database roles. The lock and catalog checks use a controlled search path. It applies migrations 000–023 and missing-schema additions in **one transaction**, then records source/applied SQL hashes and a private bootstrap manifest. A second invocation is rejected. Tests inject a failure after the final migration to verify that tables, history and bucket metadata all roll back.
+
+Historical migration files remain unchanged. The builder omits only migration 014's hash-pinned legacy follows-table deletion block, which is unnecessary on an empty database. It removes the reviewed outer transaction wrappers from 020–023 so that they participate in the single bootstrap transaction. Both adaptations are visible in the manifest and applied migration statements. Unknown migration inventory or a changed deletion block fails closed.
+
+`ops/staging/fresh-schema-gaps.sql` supplies the books table/FK/index used by the application, profile location/website fields, numeric story IDs and nullable wallet references for OAuth-only reflections. Final hardening enables RLS on all 28 app tables and restricts direct client privileges; existing Auth/Storage and extension-object ownership/ACLs are preserved. Future functions created by the bootstrap owner have their global PUBLIC default execution privilege removed as well: a schema-scoped revoke alone cannot cancel PostgreSQL's global default. Review that creator-role default policy during any future hosted adapter implementation.
+
+Synthetic probes exercise OAuth-profile creation, journal save and generated ID, automatic queueing, worker claim/completion, persisted metadata, counters, book creation, a walletless reflection and account deletion. Their records and call-budget rows are rolled back. Separate real-role tests cover direct access denial, existing-state preservation, future default privileges, private audio upload/overwrite restrictions and unchanged extension/Auth function ACLs.
+
+The runner writes `output/staging/fresh-bootstrap-embedded.json`; CI also writes `fresh-bootstrap-postgres17.json` and uploads both as a commit-bound workflow artifact. Each attempt first replaces any prior receipt with `IN_PROGRESS`; failure records `FAILED` and exits nonzero. Only `FRESH_BOOTSTRAP_REHEARSED` from the successful current run is rehearsal evidence. The receipt includes SQL/probe hashes, source migration hashes, engine version and counts, with `hostedSetupVerified: false`.
+
+These fixtures model the Auth/Storage database contracts; they do not run Supabase's managed Auth or Storage services. Bucket metadata is installed only in these fresh synthetic databases. Hosted bucket creation must use supported provider setup and separately verified permissions. No hosted installer or SQL-editor command is shipped by this step.
+
+Before hosted application acceptance, audit the remaining direct SDK book/chapter/parent queries in `lib/queries/hooks.ts` and the direct book write in `app/profile/ProfilePageClient.tsx`. The bootstrap uses server-only private app-data permissions; those legacy browser paths must not be made to pass by reopening private tables. Database CRUD/probe success is not evidence that those UI journeys work. Route them through appropriately authorized APIs or explicitly limit the accepted hosted scope in the next application iteration.
+
 ## Available now: synthetic local/CI acceptance
 
 Use a clean feature worktree based on current `origin/master`. Install the committed dependencies with the supported Node version (CI uses Node 22); do not copy local environment files. The existing isolated verifier excludes environment and credential files and supplies synthetic configuration.
@@ -27,7 +56,7 @@ For hosted runners, push a short-lived `feature/*` branch to trigger existing CI
 ## Provision hosted staging once a free slot is confirmed
 
 1. Create a **new** Supabase staging project. Record its ref and organization. Never reuse production, eBrain, a paused unrelated project, or a production backup. Start with no customer records, media, or auth users.
-2. Rehearse a fresh-schema bootstrap in isolation before applying it to staging. Do not blindly run the historical migration directory: it contains legacy assumptions, including migration 016 referencing `books` without a corresponding creation migration. Existing production-upgrade fixtures do not establish a fresh-project bootstrap. Record migration hashes and verify required tables, RPC permissions, RLS, private audio storage and synthetic CRUD before admitting the staging application.
+2. Run the fresh-bootstrap rehearsals above for the exact candidate, then prepare a separately target-bound hosted adapter. Do not blindly run the historical migration directory: it contains legacy assumptions, including migration 016 referencing `books` without a corresponding creation migration. The builder supplies that schema gap for fresh fixtures. Embedded/PostgreSQL 17 passes still do not establish managed Supabase setup, target identity or hosted Auth/Storage behavior.
 3. Create a **dedicated Vercel staging project**, with a separate `*.vercel.app` origin and Vercel Authentication enabled for its deployments and project alias. Confirm the provider's effective protection settings. Keep its Git project identity and database ref separate from production. Do not promote the staging build to production: public environment values are compiled into it.
 4. Configure the values below through the providers' protected interfaces. Use only keys created for staging. Do not copy production API keys, bypass credentials, signing secrets, cookies or worker credentials.
 5. Configure Supabase Auth callback URLs only for the staging origin. If OAuth provider configuration is unavailable, record that authenticated browser acceptance remains pending; do not loosen redirects or use a production database to make login pass.
