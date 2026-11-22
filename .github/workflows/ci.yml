@@ -116,6 +116,9 @@ jobs:
       - name: Verify authenticated dispatch safety with synthetic requests
         run: node --test scripts/worker-dispatch.test.mjs
 
+      - name: Verify staging isolation and exact candidate admission
+        run: node --test scripts/verify-staging.test.mjs
+
       - name: Install pinned isolated Worker test runtime
         run: npm install --prefix "$RUNNER_TEMP/istory-dispatch-runtime" --ignore-scripts --no-audit --no-fund --no-package-lock --save=false miniflare@4.20260730.0
 
