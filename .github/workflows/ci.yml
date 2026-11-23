@@ -119,6 +119,11 @@ jobs:
       - name: Verify staging isolation and exact candidate admission
         run: node --test scripts/verify-staging.test.mjs
 
+      - name: Rehearse an empty staging bootstrap and its security boundaries
+        run: |
+          node --test scripts/staging-bootstrap.test.mjs
+          node scripts/rehearse-staging-bootstrap.mjs
+
       - name: Install pinned isolated Worker test runtime
         run: npm install --prefix "$RUNNER_TEMP/istory-dispatch-runtime" --ignore-scripts --no-audit --no-fund --no-package-lock --save=false miniflare@4.20260730.0
 
@@ -140,6 +145,16 @@ jobs:
           if [ "$ready" != true ]; then echo '::error::Synthetic PostgreSQL did not become ready'; exit 1; fi
           node scripts/test-migration019.mjs
           node scripts/test-runtime-concurrency.mjs
+          node scripts/rehearse-staging-bootstrap.mjs --postgres17
+
+      - name: Preserve synthetic fresh-bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-staging-bootstrap-${{ github.sha }}
+          path: output/staging/fresh-bootstrap-*.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Fetch pinned synthetic cutover test images
         run: |
