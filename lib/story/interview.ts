@@ -33,3 +33,14 @@ export type InterviewTurn = z.infer<typeof interviewTurn>;
 export type InterviewRequest = z.input<typeof interviewRequest>;
 export const interviewText = (turns: InterviewTurn[]) =>
   turns.map((turn) => `${turn.question}\n${turn.answer}`).join("\n\n");
+
+// Used during recovery as well as normal additions. Keep author edits and skip
+// exact answer blocks that have already reached the editor.
+export function appendInterviewTurns(existing: string, turns: InterviewTurn[]) {
+  return turns.reduce((text, turn) => {
+    const block = interviewText([turn]);
+    return text.includes(block)
+      ? text
+      : [text, block].filter(Boolean).join("\n\n");
+  }, existing);
+}

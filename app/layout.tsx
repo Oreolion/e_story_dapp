@@ -171,7 +171,6 @@ export default async function RootLayout({
         </ProvidersDynamic>
         {!isStaging && <Analytics />}
         {!isStaging && <SpeedInsights />}
-        <CookieConsent />
       </body>
     </html>
   );

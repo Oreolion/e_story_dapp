@@ -390,7 +390,7 @@ export default function SocialPage() {
       </div>
 
       {/* Stats Bar */}
-      <Card className="card-elevated bg-[hsl(var(--memory-500)/0.05)] border-[hsl(var(--memory-500)/0.2)]">
+      <Card role="region" aria-label="Community statistics" className="card-elevated bg-[hsl(var(--memory-500)/0.05)] border-[hsl(var(--memory-500)/0.2)]">
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center space-y-2">

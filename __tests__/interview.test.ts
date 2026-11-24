@@ -3,6 +3,7 @@ import {
   interviewRequest,
   interviewQuestion,
   interviewText,
+  appendInterviewTurns,
   STARTER_QUESTION,
 } from "@/lib/story/interview";
 import { runInterviewQuestion } from "@/lib/ai/interview";
@@ -11,6 +12,17 @@ const turns = [
   { question: STARTER_QUESTION, answer: "I took the train home." },
 ];
 describe("guided interview contracts", () => {
+  it("recovers missing answers without duplicating existing blocks or replacing author edits", () => {
+    const second = {
+      question: "What happened next?",
+      answer: "I watched the sun set.",
+    };
+    const existing = `My own introduction.\n\n${interviewText(turns)}\n\nMy own closing paragraph.`;
+    expect(appendInterviewTurns(existing, [...turns, second])).toBe(
+      `${existing}\n\n${interviewText([second])}`,
+    );
+    expect(appendInterviewTurns("", turns)).toBe(interviewText(turns));
+  });
   it("accepts bounded author answers and rejects authority-bearing fields", () => {
     expect(
       interviewRequest.safeParse({ topic: "A journey", turns }).success,

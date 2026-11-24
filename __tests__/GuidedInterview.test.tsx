@@ -97,7 +97,9 @@ describe("author-controlled guided interviews", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Add answers to story" }),
     );
-    expect(add).toHaveBeenCalledWith(`${STARTER_QUESTION}\nA journey home.`);
+    expect(add).toHaveBeenCalledWith([
+      { question: STARTER_QUESTION, answer: "A journey home." },
+    ]);
     expect(
       screen.getByRole("button", { name: "Added to story below" }),
     ).toBeDisabled();
@@ -160,6 +162,25 @@ describe("author-controlled guided interviews", () => {
     expect(sessionStorage.getItem("estories_interview_v1:owner-a")).toContain(
       "My private draft",
     );
+  });
+  it("keeps completed answers re-addable after reload, independent of the editor's draft write", () => {
+    const add = vi.fn();
+    const props = { ownerId: "owner-a", active: true, onAddToStory: add };
+    const view = render(<GuidedInterview {...props} />);
+    fireEvent.change(screen.getByLabelText("Your answer"), {
+      target: { value: "Recover this answer" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add answers to story" }),
+    );
+    view.unmount();
+    render(<GuidedInterview {...props} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add answers to story" }),
+    );
+    expect(add).toHaveBeenLastCalledWith([
+      { question: STARTER_QUESTION, answer: "Recover this answer" },
+    ]);
   });
   it("aborts in-flight questions on mode change without sending another request", async () => {
     let signal: AbortSignal | undefined;

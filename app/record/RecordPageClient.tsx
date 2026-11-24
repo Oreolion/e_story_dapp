@@ -2,6 +2,7 @@
 import { GuidedInterview } from "@/components/story/GuidedInterview";
 import { AuthModal } from "@/components/AuthModal";
 import { z } from "zod";
+import { appendInterviewTurns } from "@/lib/story/interview";
 import { AI_SETUP_MESSAGE, aiActionErrorMessage } from "@/lib/ai/messages";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -721,9 +722,9 @@ function RecordStudio() {
           ownerId={authInfo.id}
           active={captureMode === "interview"}
           disabled={isBusy}
-          onAddToStory={(text) =>
+          onAddToStory={(turns) =>
             setTranscribedText((previous) =>
-              [previous, text].filter(Boolean).join("\n\n"),
+              appendInterviewTurns(previous, turns),
             )
           }
         />

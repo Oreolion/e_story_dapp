@@ -11,7 +11,6 @@ import { aiActionErrorMessage } from "@/lib/ai/messages";
 import {
   interviewQuestion,
   interviewTurn,
-  interviewText,
   MAX_ANSWER_LENGTH,
   MAX_INTERVIEW_TURNS,
   STARTER_QUESTION,
@@ -41,7 +40,7 @@ type InterviewProps = {
   ownerId: string;
   active: boolean;
   disabled?: boolean;
-  onAddToStory: (text: string) => void;
+  onAddToStory: (turns: InterviewTurn[]) => void;
 };
 export function GuidedInterview(props: InterviewProps) {
   return <InterviewSession key={props.ownerId} {...props} />;
@@ -86,7 +85,9 @@ function InterviewSession({
   useEffect(() => {
     if (!restored) return;
     try {
-      sessionStorage.setItem(key, JSON.stringify(draft));
+      // The editor saves separately. Never persist an acknowledgement that
+      // could prevent recovery if that other write was delayed or failed.
+      sessionStorage.setItem(key, JSON.stringify({ ...draft, exported: 0 }));
     } catch {
       setStorageWarning(true);
     }
@@ -339,7 +340,7 @@ function InterviewSession({
           ]
         : draft.turns;
     if (turns.length <= draft.exported || busy || recording) return;
-    onAddToStory(interviewText(turns.slice(draft.exported)));
+    onAddToStory(turns.slice(draft.exported));
     setDraft((previous) => ({
       ...previous,
       turns,
