@@ -139,7 +139,9 @@ async function run([name, args, timeout, subdirectory = '']) {
   console.log(JSON.stringify(report));
   return result.status === 0 && !timedOut && !launchError;
 }
-if (['--tests', '--build'].includes(mode) && !(await run(['dependency-security', ['--test', 'scripts/decoder-compat.test.mjs', 'scripts/zod-size-backport.test.mjs'], minute]))) process.exitCode = 1;
+// The pinned upstream decoder suite includes a wall-clock regression assertion.
+// Do not make it compete with the parser stress suite for CPU and memory.
+if (['--tests', '--build'].includes(mode) && !(await run(['dependency-security', ['--test', '--test-concurrency=1', 'scripts/decoder-compat.test.mjs', 'scripts/zod-size-backport.test.mjs'], minute]))) process.exitCode = 1;
 for (const stage of stages) {
   if (process.exitCode) break;
   if (!(await run(stage))) {

@@ -4,18 +4,16 @@
  * Use these helpers to fire standard and custom events from anywhere in the app.
  * The base pixel script is loaded once in the root layout via <Script>.
  *
- * IMPORTANT: Custom events are only sent if the user has granted "all" cookie
- * consent. The initial PageView is handled unconditionally in <MetaPixel> so
- * Meta can verify the domain, but all subsequent tracking respects GDPR.
+ * Base and custom events require optional marketing consent.
  */
 
-import { getConsent } from "@/components/CookieConsent";
+import { getConsent } from "@/lib/privacy/consent";
 
 // Extend Window interface for fbq
 declare global {
   interface Window {
     fbq: (
-      command: "init" | "track" | "trackCustom",
+      command: "init" | "track" | "trackCustom" | "consent",
       eventName: string,
       params?: Record<string, unknown>
     ) => void;

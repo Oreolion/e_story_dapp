@@ -719,7 +719,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Public API ──────────────────────────────────────────────────────
   const signInWithGoogle = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase) throw new Error("Sign-in unavailable");
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -728,10 +728,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
       if (error) {
-        console.error("[AUTH] signInWithOAuth error:", error.message);
+        throw new Error("Sign-in unavailable");
       }
-    } catch (err) {
-      console.error("[AUTH] signInWithOAuth threw:", err);
+    } catch {
+      throw new Error("Sign-in unavailable");
     }
   }, [supabase]);
 

@@ -243,10 +243,10 @@ describe("RecordPage", () => {
     try {
       renderWithProviders(<RecordPage />);
       // Exercise the real recording and save handlers; no React state is replaced.
-      const microphone = screen.getByText("Tap to start recording").parentElement?.querySelector("button");
+      const microphone = screen.getByRole("button", { name: "Start recording" });
       expect(microphone).toBeTruthy();
       fireEvent.click(microphone!);
-      await screen.findByText("Tap to stop recording");
+      await screen.findByRole("button", { name: "Stop recording" });
       fireEvent.click(microphone!);
       await waitFor(() => expect(outbound).toHaveBeenCalledWith("/api/ai/transcribe", expect.anything()));
       fireEvent.change(screen.getByPlaceholderText("Give your story a title..."), { target: { value: "Synthetic recording" } });

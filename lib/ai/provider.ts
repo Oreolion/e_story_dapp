@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { InferencePrivacyError, assertPrivateInferenceConfiguration, TEXT_GENERATION_CONFIG } from "./workflow";
+import { InferencePrivacyError, assertPrivateInferenceConfiguration, textGenerationConfig } from "./workflow";
 import type { TextTask } from "./workflow";
 import { runtimeConfiguration, RuntimeConfigurationError } from "@/lib/runtime/config";
 import { assertReleaseActive, ReleasePausedError } from "@/lib/runtime/release";
@@ -30,6 +30,7 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: ProviderU
     return async (prompt: string) => {
       assertReleaseActive();
       usage?.({ inputTokens: 0, outputTokens: 0, totalTokens: 0, mockResponses: 1 });
+      if (task === "interview") return JSON.stringify({ question: "Which detail of this synthetic story would you like to explore next?" });
       if (task === "analysis") return JSON.stringify({ themes: ["staging fixture"], emotional_tone: "neutral", life_domain: "general", intensity_score: 0, significance_score: 0, people_mentioned: [], places_mentioned: [], time_references: [], brief_insight: "Staging fixture: no live model analyzed this entry.", actionable_advice: "Use synthetic content to verify this staging workflow." });
       if (task === "reflection") {
         const empty = prompt.startsWith("You are a compassionate life coach. The user has not recorded");
@@ -47,7 +48,7 @@ export function createTextGenerator(timeoutMs = 25_000, usage?: (data: ProviderU
   const budget = Math.min(25_000, Math.floor(timeoutMs));
   const useDeepseek = policy.deepseek && (!policy.gemini || routing.preferFallback === true);
   const primaryTimeout = policy.deepseek && routing.reserveFallback ? Math.max(1, Math.min(12_000, Math.floor(budget / 2))) : budget;
-  const model = useDeepseek ? null : new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!).getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: TEXT_GENERATION_CONFIG }, { timeout: primaryTimeout });
+  const model = useDeepseek ? null : new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!).getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: textGenerationConfig(task) }, { timeout: primaryTimeout });
   return async (prompt: string) => {
     assertReleaseActive(); assertPrivateInferenceConfiguration();
     const deadline = Date.now() + budget;

@@ -1,8 +1,7 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
 import {
   Home,
   Mic,
@@ -11,106 +10,128 @@ import {
   User,
   Moon,
   Sun,
-  TrainTrack,
+  Menu,
+  BookOpen,
 } from "lucide-react";
-import { LogoMark } from "./LogoMark";
-import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AuthButton } from "./AuthButton";
+import { useAuth } from "./AuthProvider";
 import { NotificationDropdown } from "./NotificationDropdown";
 
-const navigation = [
+const workspace = [
   { name: "Home", href: "/", icon: Home },
-  { name: "Record", href: "/record", icon: Mic },
   { name: "Archive", href: "/library", icon: Archive },
-  { name: "Community", href: "/social", icon: Users },
-  { name: "Profile", href: "/profile", icon: User },
-  { name: "Tracker", href: "/tracker", icon: TrainTrack },
+  { name: "Create", href: "/record", icon: Mic },
+  { name: "Discover", href: "/social", icon: Users },
+  { name: "You", href: "/profile", icon: User },
 ];
-
+const publicLinks = [
+  { name: "How it works", href: "/#how-it-works" },
+  { name: "Discover", href: "/social" },
+  { name: "Pricing", href: "/pricing" },
+];
 export function Navigation() {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
-
+  const { resolvedTheme, setTheme } = useTheme();
+  const { profile } = useAuth();
+  const links = profile ? workspace : publicLinks;
   return (
-    <nav className="sticky top-0 z-50 backdrop-blur-lg bg-white/70 dark:bg-gray-900/70 border-b border-gray-200 dark:border-gray-700">
-      <div className="container mx-auto px-4 lg:px-6">
-        <div className="flex items-center justify-between h-16 gap-8">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2 shrink-0">
-            <motion.div whileHover={{ scale: 1.05 }}>
-              <LogoMark size={28} />
-            </motion.div>
-            <span className="text-3xl font-bold bg-gradient-to-r from-[#d4a04a] via-[#9b7dd4] to-[#6c3dbd] bg-clip-text text-transparent" style={{ fontFamily: "var(--font-brand)", WebkitTextStroke: "0.5px currentColor" }}>
-              eStories
+    <>
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto flex min-h-18 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
+          <Link
+            href="/"
+            aria-label="eStories home"
+            className="flex shrink-0 items-center gap-2 text-2xl font-display tracking-tight"
+          >
+            <BookOpen aria-hidden className="size-6 text-primary" />
+            eStories
+            <span className="hidden xl:inline ml-3 border-l pl-3 text-xs tracking-normal font-sans text-muted-foreground">
+              A place for your stories
             </span>
           </Link>
-
-          {/* Navigation Links - Center */}
-          <div className="hidden lg:flex items-center gap-2 flex-1">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all ${
-                    isActive
-                      ? "bg-[hsl(var(--memory-100))] dark:bg-[hsl(var(--memory-900)/0.3)] text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]"
-                      : "text-gray-600 dark:text-gray-300 hover:text-[hsl(var(--memory-500))] dark:hover:text-[hsl(var(--memory-400))]"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-sm font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Right Side Actions */}
-          <div className="flex items-center gap-2 lg:gap-3 shrink-0">
-            {/* Notifications */}
-            <NotificationDropdown />
-
-            {/* Theme Toggle */}
+          <nav
+            aria-label="Main navigation"
+            className="hidden lg:flex items-center gap-1"
+          >
+            {links.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className="rounded-md px-3 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-accent aria-[current=page]:text-foreground aria-[current=page]:bg-accent"
+              >
+                {item.name}
+              </Link>
+            ))}
+          </nav>
+          <div className="flex items-center gap-1 sm:gap-2">
+            {profile && <NotificationDropdown />}
             <Button
               variant="ghost"
-              size="sm"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="w-9 h-9 p-0"
+              size="icon"
+              aria-label="Toggle color theme"
+              onClick={() =>
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+              }
             >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <Sun aria-hidden className="size-4 dark:hidden" />
+              <Moon aria-hidden className="hidden size-4 dark:block" />
             </Button>
-
-            {/* Auth Button */}
             <AuthButton />
+            {!profile && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    className="lg:hidden"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Open navigation menu"
+                  >
+                    <Menu aria-hidden className="size-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {publicLinks.map((item) => (
+                    <DropdownMenuItem asChild key={item.href}>
+                      <Link href={item.href} className="min-h-11">
+                        {item.name}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
-      </div>
-      {/* Mobile Navigation */}
-      <div className="lg:hidden border-t border-gray-200 dark:border-gray-700">
-        <div className="flex justify-around py-2">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
+      </header>
+      {profile && (
+        <nav
+          data-workspace-nav
+          aria-label="Mobile workspace"
+          className="fixed bottom-0 inset-x-0 z-50 border-t bg-background lg:hidden pb-[env(safe-area-inset-bottom)]"
+        >
+          <div className="grid grid-cols-5 max-w-lg mx-auto">
+            {workspace.map((item) => (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-colors ${
-                  isActive
-                    ? "bg-[hsl(var(--memory-100))] dark:bg-[hsl(var(--memory-900)/0.3)] text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]"
-                    : "text-gray-600 dark:text-gray-300 hover:text-[hsl(var(--memory-500))]"
-                }`}
+                aria-current={pathname === item.href ? "page" : undefined}
+                className="min-w-0 flex flex-col items-center gap-1 px-1 py-3 text-muted-foreground aria-[current=page]:text-primary hover:bg-accent"
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{item.name}</span>
+                <item.icon aria-hidden className="size-5" />
+                <span className="text-xs">{item.name}</span>
               </Link>
-            );
-          })}
-        </div>
-      </div>
-    </nav>
+            ))}
+          </div>
+        </nav>
+      )}
+    </>
   );
 }

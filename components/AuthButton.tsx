@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "./AuthProvider";
-import { useAccount, useDisconnect } from "wagmi";
+import { useDisconnect } from "wagmi";
 import { AuthModal } from "./AuthModal";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +19,8 @@ import {
   LogOut,
   User,
   CreditCard,
+  TrainTrack,
   Wallet,
-  Loader2,
   Check,
 } from "lucide-react";
 
@@ -33,7 +33,6 @@ export function AuthButton() {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, isLoading, needsOnboarding, signOut } = useAuth();
-  const { isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -60,31 +59,21 @@ export function AuthButton() {
   }
 
   // Not authenticated at all
-  if (!profile && !isConnected) {
+  if (!profile) {
     return (
       <>
         <Button
           onClick={() => setShowAuthModal(true)}
           size="sm"
-          className="bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] text-white"
+          className="px-4"
         >
-          Connect
+          Log in
         </Button>
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
         />
       </>
-    );
-  }
-
-  // Wallet connected but no profile yet (signing in progress)
-  if (isConnected && !profile) {
-    return (
-      <Button variant="ghost" size="sm" disabled className="gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-sm">Signing in...</span>
-      </Button>
     );
   }
 
@@ -115,10 +104,15 @@ export function AuthButton() {
       <>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 px-2">
+            <Button
+              aria-label="Open account menu"
+              variant="ghost"
+              size="sm"
+              className="gap-2 px-2"
+            >
               <Avatar className="w-7 h-7">
                 <AvatarImage src={profile.avatar ?? undefined} />
-                <AvatarFallback className="text-xs bg-gradient-to-br from-[hsl(var(--memory-500))] to-[hsl(var(--insight-500))] text-white">
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -129,15 +123,30 @@ export function AuthButton() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild>
-              <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
+              <Link
+                href="/profile"
+                className="flex items-center gap-2 cursor-pointer"
+              >
                 <User className="w-4 h-4" />
                 Profile
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/pricing" className="flex items-center gap-2 cursor-pointer">
+              <Link
+                href="/pricing"
+                className="flex items-center gap-2 cursor-pointer"
+              >
                 <CreditCard className="w-4 h-4" />
                 Pricing
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link
+                href="/tracker"
+                className="flex items-center gap-2 min-h-11"
+              >
+                <TrainTrack className="size-4" />
+                Tracker
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
