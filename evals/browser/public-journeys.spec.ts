@@ -51,12 +51,26 @@ test("standard login exposes Google and optional wallet access", async ({
     page.getByRole("button", { name: "Continue with a wallet" }),
   ).toBeVisible();
   await expect(page.getByText(/No wallet needed/).last()).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Sign up", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Create your eStories account" }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Log in", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Log in to eStories" }),
+  ).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("dialog")).toContainText("Continue with Google");
   expect(
-    await page.getByRole("dialog").evaluate((dialog) =>
-      dialog.contains(document.activeElement),
-    ),
+    await page
+      .getByRole("dialog")
+      .evaluate((dialog) => dialog.contains(document.activeElement)),
   ).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -85,12 +99,22 @@ for (const width of [320, 390, 768, 1440]) {
     await page.getByRole("button", { name: "Essential only" }).click();
     const signup = page.getByRole("button", { name: "Sign up", exact: true });
     await expect(signup).toBeVisible();
-    await expect(page.getByRole("button", { name: "Log in", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Log in", exact: true }),
+    ).toBeVisible();
     await signup.click();
-    await expect(page.getByRole("heading", { name: "Create your eStories account" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Create your eStories account" }),
+    ).toBeVisible();
+    const box = await page.getByRole("dialog").boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     await page.keyboard.press("Escape");
     await expect(signup).toBeFocused();
-    const faq = page.getByRole("button", { name: "Do I need a crypto wallet?" });
+    const faq = page.getByRole("button", {
+      name: "Do I need a crypto wallet?",
+    });
     await faq.click();
     await expect(faq).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText(/No! Sign up with Google/)).toBeVisible();
@@ -108,12 +132,33 @@ for (const width of [320, 390, 768, 1440]) {
   });
 }
 
-test("landing page retains the original product detail and branded home link", async ({ page }) => {
+test("landing page retains the original product detail and branded home link", async ({
+  page,
+}) => {
   await page.goto("/");
-  await expect(page.getByRole("link", { name: "eStories home", exact: true })).toHaveAttribute("href", "/");
-  for (const name of ["Just talk", "See your patterns", "Yours forever", "Curate your story", "Real stories, real people", "Your story has value", "Free", "Storyteller", "Creator", "Your story starts here"]) {
-    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "eStories home", exact: true }),
+  ).toHaveAttribute("href", "/");
+  for (const name of [
+    "Just talk",
+    "See your patterns",
+    "Yours forever",
+    "Curate your story",
+    "Real stories, real people",
+    "Your story has value",
+    "Free",
+    "Storyteller",
+    "Creator",
+    "Your story starts here",
+  ]) {
+    await expect(
+      page.getByRole("heading", { name, exact: true }),
+    ).toBeVisible();
   }
-  await expect(page.getByText("Founder, eStories", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Is on-chain verification available?" })).toBeVisible();
+  await expect(
+    page.getByText("Founder, eStories", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Is on-chain verification available?" }),
+  ).toBeVisible();
 });
