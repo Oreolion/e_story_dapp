@@ -1,27 +1,34 @@
 import "../app/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";
-import { Inter, Love_Light } from "next/font/google";
+import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { ProvidersDynamic } from "../components/ProvidersDynamic";
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
 import { Toaster } from "react-hot-toast";
-import { GlobalBackgroundDynamic } from "../components/three/GlobalBackgroundDynamic";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { MetaPixel } from "../components/MetaPixel";
 import { CookieConsent } from "../components/CookieConsent";
 
-const inter = Inter({ subsets: ["latin"] });
-const isStaging = process.env.APP_ENV === "staging";
-const loveLight = Love_Light({
-  weight: "400",
+const source = Source_Sans_3({
   subsets: ["latin"],
-  variable: "--font-brand",
+  variable: "--font-source",
+  display: "swap",
+});
+const isStaging = process.env.APP_ENV === "staging";
+const editorial = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-editorial",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(isStaging ? process.env.NEXT_PUBLIC_APP_URL ?? "https://staging.invalid" : "https://estories.app"),
+  metadataBase: new URL(
+    isStaging
+      ? (process.env.NEXT_PUBLIC_APP_URL ?? "https://staging.invalid")
+      : "https://estories.app",
+  ),
   title: {
     default: "eStories - AI-Powered Sovereign Storytelling",
     template: "%s | eStories",
@@ -110,9 +117,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${source.variable} ${editorial.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {!isStaging && <MetaPixel />}
         <script
@@ -125,15 +135,27 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.className} ${loveLight.variable}`}>
+      <body>
         <ProvidersDynamic>
-          {/* 3D Background - renders behind all content */}
-          <GlobalBackgroundDynamic />
-
+          <a href="#main-content" className="skip-link">
+            Skip to content
+          </a>
           <div className="relative min-h-screen flex flex-col">
-            {isStaging && <div role="status" className="relative z-50 bg-amber-100 px-4 py-2 text-center text-sm text-amber-950">Staging — synthetic data only. AI responses may be fixtures.</div>}
+            {isStaging && (
+              <div
+                role="status"
+                className="relative z-50 bg-amber-100 px-4 py-2 text-center text-sm text-amber-950"
+              >
+                Staging — synthetic data only. AI responses may be fixtures.
+              </div>
+            )}
+            <CookieConsent />
             <Navigation />
-            <main className="container mx-auto px-4 py-8 flex-1 relative z-10">
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 relative z-10 min-w-0"
+            >
               {children}
             </main>
             <Footer />
@@ -149,7 +171,6 @@ export default async function RootLayout({
         </ProvidersDynamic>
         {!isStaging && <Analytics />}
         {!isStaging && <SpeedInsights />}
-        <CookieConsent />
       </body>
     </html>
   );

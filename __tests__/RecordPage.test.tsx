@@ -44,11 +44,11 @@ global.MediaRecorder = class {
   stop() {
     this.state = "inactive";
     this.ondataavailable?.({ data: new Blob(["synthetic audio"], { type: "audio/webm" }) });
-    this.onstop();
+    this.onstop?.();
   }
   ondataavailable?: (event: { data: Blob }) => void;
   //   ondataavailable(e: any) {}
-  onstop() {}
+  onstop: (() => void) | null = null;
   //   constructor(stream: any) {}
 } as any;
 
@@ -188,6 +188,26 @@ describe("RecordPage", () => {
     renderWithProviders(<RecordPage />);
     expect(screen.getByText("Save Privately")).toBeInTheDocument();
   });
+
+  it("stops microphone tracks on unmount without submitting audio", async () => {
+    const stop = vi.fn();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValueOnce({
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream);
+    const outbound = vi.fn();
+    vi.stubGlobal("fetch", outbound);
+    const view = renderWithProviders(<RecordPage />);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+      await screen.findByRole("button", { name: "Stop recording" });
+      view.unmount();
+      expect(stop).toHaveBeenCalled();
+      expect(outbound).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
   it.each([false, true])("saves the intended visibility and publishes only when public=%s", async isPublic => {
     sessionStorage.clear();
     const outbound = vi.fn(async (url: string, init?: RequestInit) => {
@@ -243,10 +263,10 @@ describe("RecordPage", () => {
     try {
       renderWithProviders(<RecordPage />);
       // Exercise the real recording and save handlers; no React state is replaced.
-      const microphone = screen.getByText("Tap to start recording").parentElement?.querySelector("button");
+      const microphone = screen.getByRole("button", { name: "Start recording" });
       expect(microphone).toBeTruthy();
       fireEvent.click(microphone!);
-      await screen.findByText("Tap to stop recording");
+      await screen.findByRole("button", { name: "Stop recording" });
       fireEvent.click(microphone!);
       await waitFor(() => expect(outbound).toHaveBeenCalledWith("/api/ai/transcribe", expect.anything()));
       fireEvent.change(screen.getByPlaceholderText("Give your story a title..."), { target: { value: "Synthetic recording" } });

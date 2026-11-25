@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { InvalidModelOutput } from "./tasks";
-import { assertPrivateInferenceConfiguration, TEXT_GENERATION_CONFIG, type TextTask } from "./workflow";
+import { assertPrivateInferenceConfiguration, textGenerationConfig, type TextTask } from "./workflow";
 import { assertReleaseActive } from "@/lib/runtime/release";
 import { textProviderPolicy } from "./providerPolicy";
 
@@ -28,8 +28,8 @@ export async function generateDeepseek(prompt: string, task: TextTask, timeoutMs
       method: "POST", redirect: "error", signal: controller.signal,
       headers: { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model: "deepseek-flash", messages: [{ role: "user", content: prompt }], stream: false,
-        thinking: { type: "disabled" }, max_tokens: TEXT_GENERATION_CONFIG.maxOutputTokens,
-        response_format: { type: task === "analysis" || task === "reflection" ? "json_object" : "text" } }),
+        thinking: { type: "disabled" }, max_tokens: textGenerationConfig(task).maxOutputTokens,
+        response_format: { type: task === "analysis" || task === "reflection" || task === "interview" ? "json_object" : "text" } }),
     });
     if (!response.ok) { await response.body?.cancel(); throw new InferenceProviderError(response.status); }
     if (!response.body) throw new InvalidModelOutput();

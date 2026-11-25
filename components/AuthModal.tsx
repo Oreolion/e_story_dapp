@@ -1,5 +1,5 @@
-"use client";
-
+﻿"use client";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import {
@@ -10,76 +10,105 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Wallet, Chrome } from "lucide-react";
-
-interface AuthModalProps {
+import { Wallet, Loader2 } from "lucide-react";
+export function AuthModal({
+  isOpen,
+  onClose,
+}: {
   isOpen: boolean;
   onClose: () => void;
-}
-
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+}) {
   const { signInWithGoogle } = useAuth();
   const { openConnectModal } = useConnectModal();
-
-  const handleWalletConnect = () => {
-    onClose();
-    openConnectModal?.();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const locked = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!isOpen) setError("");
+  }, [isOpen]);
+  const google = async () => {
+    if (locked.current) return;
+    locked.current = true;
+    setPending(true);
+    setError("");
+    try {
+      await signInWithGoogle();
+    } catch {
+      setError("Google sign-in could not start. Please try again.");
+    } finally {
+      locked.current = false;
+      setPending(false);
+    }
   };
-
-  const handleGoogleSignIn = async () => {
-    onClose();
-    await signInWithGoogle();
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md p-7"
+        onOpenAutoFocus={() => {
+          returnFocus.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          // This controlled dialog has no Radix DialogTrigger. Preserve the
+          // opener, but let a subsequently opened wallet dialog retain focus.
+          if (
+            !document.querySelector('[role="dialog"]') &&
+            returnFocus.current?.isConnected
+          ) {
+            returnFocus.current.focus({ preventScroll: true });
+          }
+        }}
+      >
         <DialogHeader>
-          <DialogTitle className="text-center">Connect to eStories</DialogTitle>
-          <DialogDescription className="text-center">
-            Choose how to get started
+          <p className="eyebrow">Your stories start here</p>
+          <DialogTitle className="font-display text-3xl mt-2">
+            Log in to eStories
+          </DialogTitle>
+          <DialogDescription>
+            Use your Google account to write, record and keep your stories. No
+            wallet needed.
           </DialogDescription>
         </DialogHeader>
-
-        <div className="flex flex-col gap-3 py-4">
+        <div className="space-y-5 py-3">
           <Button
-            variant="outline"
-            className="w-full h-14 justify-start gap-3 text-left"
-            onClick={handleGoogleSignIn}
+            className="w-full min-h-12"
+            onClick={google}
+            disabled={pending}
           >
-            <Chrome className="w-5 h-5 shrink-0" />
-            <div>
-              <div className="font-medium">Continue with Google</div>
-              <div className="text-xs text-muted-foreground">
-                Quick sign in — recommended
-              </div>
-            </div>
+            {pending && <Loader2 aria-hidden className="size-4 animate-spin" />}
+            {pending ? "Opening Google…" : "Continue with Google"}
           </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                or
-              </span>
-            </div>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="border-t pt-5">
+            <p className="text-xs text-muted-foreground mb-3">
+              Already use a wallet? You can log in with it instead.
+            </p>
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={pending || !openConnectModal}
+              onClick={() => {
+                onClose();
+                openConnectModal?.();
+              }}
+            >
+              <Wallet aria-hidden className="size-4" />
+              Continue with a wallet
+            </Button>
           </div>
-
-          <Button
-            variant="outline"
-            className="w-full h-14 justify-start gap-3 text-left"
-            onClick={handleWalletConnect}
-          >
-            <Wallet className="w-5 h-5 shrink-0" />
-            <div>
-              <div className="font-medium">Connect Wallet</div>
-              <div className="text-xs text-muted-foreground">
-                MetaMask, WalletConnect
-              </div>
-            </div>
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

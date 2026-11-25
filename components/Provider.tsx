@@ -8,13 +8,18 @@ import {
   QueryCache,
   MutationCache,
 } from "@tanstack/react-query";
-import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowkit";
+import {
+  RainbowKitProvider,
+  darkTheme,
+  lightTheme,
+} from "@rainbow-me/rainbowkit";
 import { useTheme } from "next-themes";
 import { config } from "@/lib/wagmi.config";
 import { useAccount, useBalance } from "wagmi";
 import { AuthProvider } from "./AuthProvider";
 import { BackgroundProvider } from "@/contexts/BackgroundContext";
 import { ApiError } from "@/lib/api";
+import { MotionConfig } from "framer-motion";
 
 // Create QueryClient with auth-aware defaults.
 // staleTime: 30s prevents excessive refetching on tab switches.
@@ -51,7 +56,10 @@ function createQueryClient() {
     }),
     mutationCache: new MutationCache({
       onError: (error, _variables, _context, mutation) => {
-        console.error(`[RQ Mutation Error] ${mutation.options.mutationKey}:`, error);
+        console.error(
+          `[RQ Mutation Error] ${mutation.options.mutationKey}:`,
+          error,
+        );
       },
     }),
   });
@@ -111,9 +119,7 @@ function ThemedRainbowKit({ children }: { children: ReactNode }) {
   const rainbowTheme = resolvedTheme === "light" ? lightTheme() : darkTheme();
 
   return (
-    <RainbowKitProvider theme={rainbowTheme}>
-      {children}
-    </RainbowKitProvider>
+    <RainbowKitProvider theme={rainbowTheme}>{children}</RainbowKitProvider>
   );
 }
 
@@ -127,7 +133,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <ThemedRainbowKit>
             <BackgroundProvider>
               <AuthProvider>
-                <AppInner>{children}</AppInner>
+                <MotionConfig reducedMotion="user">
+                  <AppInner>{children}</AppInner>
+                </MotionConfig>
               </AuthProvider>
             </BackgroundProvider>
           </ThemedRainbowKit>

@@ -2,7 +2,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { withRunTree } from "langsmith/traceable";
 import { RunTree } from "langsmith/run_trees";
 
-export type TextTask = "analysis" | "enhancement" | "reflection" | "tracker";
+export type TextTask = "analysis" | "enhancement" | "reflection" | "tracker" | "interview";
 export interface TextWorkflowInput {
   task: TextTask;
   prompt: string;
@@ -19,7 +19,7 @@ const State = Annotation.Root({
 // quotas and database commits belong to the calling service, outside inference.
 const graph = new StateGraph(State)
   .addNode("validate_input", ({ request }) => {
-    if (!["analysis", "enhancement", "reflection", "tracker"].includes(request.task) ||
+    if (!["analysis", "enhancement", "reflection", "tracker", "interview"].includes(request.task) ||
         !request.prompt.trim() || request.prompt.length > 100_000) {
       throw new Error("Invalid text workflow input");
     }
@@ -58,4 +58,5 @@ export function assertPrivateInferenceConfiguration() {
 }
 
 export const TEXT_GENERATION_CONFIG = { maxOutputTokens: 4096 } as const;
+export const textGenerationConfig = (task: TextTask) => task === "interview" ? { maxOutputTokens: 512, thinkingConfig: { thinkingBudget: 0 } } : TEXT_GENERATION_CONFIG;
 export const TEXT_REQUEST_OPTIONS = { timeout: 25_000 } as const;

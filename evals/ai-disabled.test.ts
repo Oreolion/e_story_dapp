@@ -5,6 +5,7 @@ const effects = vi.hoisted(() => ({ admin: vi.fn(), authenticate: vi.fn(), resol
 vi.mock("@elevenlabs/elevenlabs-js", () => ({ ElevenLabsClient: effects.transcriber }));
 vi.mock("@/app/utils/supabase/supabaseAdmin", () => ({ createSupabaseAdminClient: effects.admin }));
 vi.mock("@/lib/auth", () => ({ validateAuthOrReject: effects.authenticate, resolveUserId: effects.resolve, isAuthError: (value: unknown) => value instanceof Response }));
+import { POST as interview } from "@/app/api/ai/interview/route";
 import { POST as enhance } from "@/app/api/ai/enhance/route";
 import { POST as analyze } from "@/app/api/ai/analyze/route";
 import { POST as reflect, GET as reflections } from "@/app/api/ai/reflection/route";
@@ -20,9 +21,9 @@ beforeEach(() => {
   effects.resolve.mockResolvedValue("11111111-1111-4111-8111-111111111111");
 });
 
-const request = () => new NextRequest("https://synthetic.invalid/api/ai/test", { method: "POST", body: JSON.stringify({ text: "Synthetic text", storyId: "22222222-2222-4222-8222-222222222222" }), headers: { "Content-Type": "application/json" } });
+const request = () => new NextRequest("https://synthetic.invalid/api/ai/test", { method: "POST", body: JSON.stringify({ text: "Synthetic text", storyId: "22222222-2222-4222-8222-222222222222" }), headers: { "Content-Type": "application/json", "x-profile-owner-id": "11111111-1111-4111-8111-111111111111" } });
 
-it.each([["editing", enhance], ["analysis", analyze], ["reflection", reflect], ["transcription", transcribe]] as const)("explains the %s hold before quota, content reads or inference", async (_name, handler) => {
+it.each([["interview", interview], ["editing", enhance], ["analysis", analyze], ["reflection", reflect], ["transcription", transcribe]] as const)("explains the %s hold before quota, content reads or inference", async (_name, handler) => {
   const response = await handler(request());
   expect(response.status).toBe(503);
   expect(response.headers.get("cache-control")).toBe("no-store");
@@ -32,7 +33,7 @@ it.each([["editing", enhance], ["analysis", analyze], ["reflection", reflect], [
   expect(effects.transcriber).not.toHaveBeenCalled();
 });
 
-it.each([enhance, analyze, reflect, transcribe])("keeps authentication ahead of the disabled-feature response", async handler => {
+it.each([interview, enhance, analyze, reflect, transcribe])("keeps authentication ahead of the disabled-feature response", async handler => {
   effects.authenticate.mockResolvedValue(Response.json({ error: "Unauthorized" }, { status: 401 }));
   expect((await handler(request())).status).toBe(401);
   expect(effects.resolve).not.toHaveBeenCalled();

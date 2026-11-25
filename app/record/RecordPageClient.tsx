@@ -1,9 +1,12 @@
 "use client";
+import { GuidedInterview } from "@/components/story/GuidedInterview";
+import { AuthModal } from "@/components/AuthModal";
+import { z } from "zod";
+import { appendInterviewTurns } from "@/lib/story/interview";
 import { AI_SETUP_MESSAGE, aiActionErrorMessage } from "@/lib/ai/messages";
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
 
 // Relative paths (Preserving your working structure)
@@ -43,17 +46,13 @@ import {
   Square,
   Save,
   Wand2,
-  Volume2,
-  Languages,
-  Clock,
   FileText,
-  Zap,
   Loader2,
   PlayCircle,
   StopCircle,
   Globe,
   Calendar as CalendarIcon, // Renamed to avoid conflict
-  Lock,   // NEW: For Private icon
+  Lock, // NEW: For Private icon
   Unlock, // NEW: For Public icon
   Undo2,
   BookOpen,
@@ -64,19 +63,58 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-const STORY_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  BookOpen, Landmark, Globe2, Users, Feather,
+const STORY_TYPE_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
+  BookOpen,
+  Landmark,
+  Globe2,
+  Users,
+  Feather,
 };
 
-const STORY_TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  memory:  { bg: "bg-[hsl(var(--memory-500)/0.12)]",  border: "border-[hsl(var(--memory-500)/0.4)]",  text: "text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]" },
-  story:   { bg: "bg-[hsl(var(--story-500)/0.12)]",   border: "border-[hsl(var(--story-500)/0.4)]",   text: "text-[hsl(var(--story-600))] dark:text-[hsl(var(--story-400))]" },
-  insight: { bg: "bg-[hsl(var(--insight-500)/0.12)]",  border: "border-[hsl(var(--insight-500)/0.4)]",  text: "text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))]" },
-  growth:  { bg: "bg-[hsl(var(--growth-500)/0.12)]",  border: "border-[hsl(var(--growth-500)/0.4)]",  text: "text-[hsl(var(--growth-600))] dark:text-[hsl(var(--growth-400))]" },
-  rose:    { bg: "bg-rose-500/12",                     border: "border-rose-500/40",                    text: "text-rose-600 dark:text-rose-400" },
+const STORY_TYPE_COLORS: Record<
+  string,
+  { bg: string; border: string; text: string }
+> = {
+  memory: {
+    bg: "bg-[hsl(var(--memory-500)/0.12)]",
+    border: "border-[hsl(var(--memory-500)/0.4)]",
+    text: "text-[hsl(var(--memory-600))] dark:text-[hsl(var(--memory-400))]",
+  },
+  story: {
+    bg: "bg-[hsl(var(--story-500)/0.12)]",
+    border: "border-[hsl(var(--story-500)/0.4)]",
+    text: "text-[hsl(var(--story-600))] dark:text-[hsl(var(--story-400))]",
+  },
+  insight: {
+    bg: "bg-[hsl(var(--insight-500)/0.12)]",
+    border: "border-[hsl(var(--insight-500)/0.4)]",
+    text: "text-[hsl(var(--insight-600))] dark:text-[hsl(var(--insight-400))]",
+  },
+  growth: {
+    bg: "bg-[hsl(var(--growth-500)/0.12)]",
+    border: "border-[hsl(var(--growth-500)/0.4)]",
+    text: "text-[hsl(var(--growth-600))] dark:text-[hsl(var(--growth-400))]",
+  },
+  rose: {
+    bg: "bg-rose-500/12",
+    border: "border-rose-500/40",
+    text: "text-rose-600 dark:text-rose-400",
+  },
 };
 
 export default function RecordPage() {
+  const { profile } = useAuth();
+  const params = useSearchParams();
+  return (
+    <RecordStudio
+      key={`${profile?.id ?? "anonymous"}:${params.get("parentId") ?? "new"}`}
+    />
+  );
+}
+function RecordStudio() {
   const { isConnected } = useApp();
   const { profile: authInfo } = useAuth();
   const router = useRouter();
@@ -84,8 +122,12 @@ export default function RecordPage() {
   const parentStoryId = searchParams.get("parentId");
 
   // Set background mode for this page
-  useBackgroundMode('record');
+  useBackgroundMode("record");
 
+  const [captureMode, setCaptureMode] = useState<"monologue" | "interview">(
+    "monologue",
+  );
+  const [showLogin, setShowLogin] = useState(false);
   // State Management
   const [isRecording, setIsRecording] = useState(false);
   const [transcribedText, setTranscribedText] = useState("");
@@ -98,7 +140,7 @@ export default function RecordPage() {
 
   // NEW: Date Selection for Backdating (Defaults to Today)
   const [storyDate, setStoryDate] = useState(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -116,46 +158,94 @@ export default function RecordPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mountedRef = useRef(true);
+  const startingRecordingRef = useRef(false);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   // Use centralized auth token from AuthProvider
   const { getAccessToken } = useAuth();
 
-  // ─── Draft persistence (survives page reloads) ───────────────────────
-  const DRAFT_KEY = "estories_record_draft";
-
-  // Restore draft on mount
+  // Account-scoped drafts prevent sharing text between accounts on one device.
+  // Retain the old unassigned key for manual recovery, never auto-import it.
+  const DRAFT_KEY = authInfo
+    ? `estories_record_v2:${authInfo.id}:${parentStoryId ?? "new"}`
+    : null;
+  const [draftReady, setDraftReady] = useState(false);
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft.transcribedText) setTranscribedText(draft.transcribedText);
-      if (draft.entryTitle) setEntryTitle(draft.entryTitle);
-      if (draft.storyDate) setStoryDate(draft.storyDate);
-      if (draft.isPublic !== undefined) setIsPublic(draft.isPublic);
-      if (draft.storyType) setStoryType(draft.storyType);
-      toast.success("Restored unsaved draft");
+      const raw = DRAFT_KEY && sessionStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = z
+          .object({
+            transcribedText: z.string().max(50000),
+            entryTitle: z.string().max(500),
+            storyDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            isPublic: z.boolean(),
+            storyType: z
+              .string()
+              .refine((value) =>
+                STORY_TYPES.some((type) => type.value === value),
+              ),
+          })
+          .parse(JSON.parse(raw));
+        setTranscribedText(draft.transcribedText);
+        setEntryTitle(draft.entryTitle);
+        setStoryDate(draft.storyDate);
+        setIsPublic(draft.isPublic);
+        setStoryType(draft.storyType as StoryType);
+      }
     } catch {
-      // Corrupt draft — ignore
+      /* A corrupt or unavailable draft must not block editing. */
     }
-  }, []);
-
-  // Auto-save draft whenever content changes (debounced via effect)
+    setDraftReady(true);
+  }, [DRAFT_KEY]);
   const saveDraft = useCallback(() => {
-    if (!transcribedText.trim() && !entryTitle.trim()) {
-      sessionStorage.removeItem(DRAFT_KEY);
-      return;
+    if (!DRAFT_KEY || !draftReady) return;
+    try {
+      if (!transcribedText.trim() && !entryTitle.trim())
+        sessionStorage.removeItem(DRAFT_KEY);
+      else
+        sessionStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            transcribedText,
+            entryTitle,
+            storyDate,
+            isPublic,
+            storyType,
+          }),
+        );
+    } catch {
+      /* Storage may be blocked or full; the editor stays usable. */
     }
-    sessionStorage.setItem(
-      DRAFT_KEY,
-      JSON.stringify({ transcribedText, entryTitle, storyDate, isPublic, storyType })
-    );
-  }, [transcribedText, entryTitle, storyDate, isPublic, storyType]);
-
+  }, [
+    DRAFT_KEY,
+    draftReady,
+    transcribedText,
+    entryTitle,
+    storyDate,
+    isPublic,
+    storyType,
+  ]);
   useEffect(() => {
     const timer = setTimeout(saveDraft, 500);
     return () => clearTimeout(timer);
   }, [saveDraft]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const capture = mediaRecorderRef.current;
+      if (capture) {
+        capture.onstop = null;
+        if (capture.state === "recording") capture.stop();
+        capture.stream?.getTracks().forEach((track) => track.stop());
+      }
+      if (durationIntervalRef.current)
+        clearInterval(durationIntervalRef.current);
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   // Fetch parent story title when continuing a story
   const { data: parentStory } = useParentStory(parentStoryId);
@@ -164,11 +254,14 @@ export default function RecordPage() {
   // Helper to build auth headers from centralized token
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
     const token = await getAccessToken();
+    if (!mountedRef.current) throw new Error("Account or page changed");
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
   // --- 1. Recording Logic ---
   const startRecording = async () => {
+    if (startingRecordingRef.current || isRecording || isBusy) return;
+    startingRecordingRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -177,6 +270,12 @@ export default function RecordPage() {
           sampleRate: 16000,
         },
       });
+
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      recordingStreamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -190,7 +289,7 @@ export default function RecordPage() {
         const blob = new Blob(chunks, { type: "audio/webm" });
         setAudioBlob(blob);
         stream.getTracks().forEach((track) => track.stop());
-        handleTranscribe(blob);
+        if (mountedRef.current) handleTranscribe(blob);
       };
 
       mediaRecorder.start();
@@ -198,12 +297,14 @@ export default function RecordPage() {
       setRecordingDuration(0);
       durationIntervalRef.current = setInterval(
         () => setRecordingDuration((prev) => prev + 1),
-        1000
+        1000,
       );
       toast.success("Recording started");
     } catch (error) {
       console.error("Error starting recording:", error);
       toast.error("Failed to access microphone.");
+    } finally {
+      startingRecordingRef.current = false;
     }
   };
 
@@ -237,12 +338,16 @@ export default function RecordPage() {
         headers: { ...authHeaders },
         body: formData,
       }).then(async (res) => {
-        const data = await res.json().catch(() => ({ error: "Invalid server response" }));
+        const data = await res
+          .json()
+          .catch(() => ({ error: "Invalid server response" }));
         if (!res.ok) {
           throw new Error(data.error || `Transcription failed (${res.status})`);
         }
         if (!data.text) {
-          throw new Error("Transcription returned empty text. Please try again.");
+          throw new Error(
+            "Transcription returned empty text. Please try again.",
+          );
         }
         return data.text as string;
       });
@@ -302,7 +407,9 @@ export default function RecordPage() {
         error: (err) => {
           setPreEnhanceText(null);
           setIsEnhancing(false);
-          return err instanceof Error && err.message === AI_SETUP_MESSAGE ? AI_SETUP_MESSAGE : "Failed to enhance text.";
+          return err instanceof Error && err.message === AI_SETUP_MESSAGE
+            ? AI_SETUP_MESSAGE
+            : "Failed to enhance text.";
         },
       });
     } catch (err) {
@@ -349,13 +456,16 @@ export default function RecordPage() {
       let audioUrl = null;
       let ipfsHash = null;
       const userId = authInfo.id;
-      
+
       // Capture timestamps exactly when save is clicked
       const actualCreatedDate = new Date().toISOString(); // Real system time
       const backdatedStoryDate = new Date(storyDate).toISOString(); // User selected time
 
       try {
-        if (audioBlob && !isPublic) toast("Private entry saves text only. Cloud audio is currently available for public stories.");
+        if (audioBlob && !isPublic)
+          toast(
+            "Private entry saves text only. Cloud audio is currently available for public stories.",
+          );
         // A. Upload Audio via API route (bypasses RLS, works for wallet & OAuth users)
         if (audioBlob && isPublic) {
           const uploadForm = new FormData();
@@ -375,25 +485,28 @@ export default function RecordPage() {
         }
 
         if (isPublic) {
-        // B. Upload Content to IPFS (Immutable Record)
-        // NEW: We include the custom 'storyDate', 'isPublic' and real timestamp in metadata
-        const ipfsMetadata = {
-          title: entryTitle,
-          content: transcribedText,
-          author: authInfo.wallet_address,
-          audio: audioUrl,
-          date: storyDate, // User-selected date
-          timestamp: actualCreatedDate, // System upload time
-          is_public: isPublic, // Visibility state
-          story_type: storyType,
-          app: "EStories DApp",
-        };
+          // B. Upload Content to IPFS (Immutable Record)
+          // NEW: We include the custom 'storyDate', 'isPublic' and real timestamp in metadata
+          const ipfsMetadata = {
+            title: entryTitle,
+            content: transcribedText,
+            author: authInfo.wallet_address,
+            audio: audioUrl,
+            date: storyDate, // User-selected date
+            timestamp: actualCreatedDate, // System upload time
+            is_public: isPublic, // Visibility state
+            story_type: storyType,
+            app: "EStories DApp",
+          };
 
-        const token = await getAccessToken();
-        const ipfsResult = await ipfsService.uploadMetadata(ipfsMetadata, token, { visibility: "public" });
-        ipfsHash = ipfsResult.hash;
-        console.log("Story pinned to IPFS:", ipfsHash);
-
+          const token = await getAccessToken();
+          const ipfsResult = await ipfsService.uploadMetadata(
+            ipfsMetadata,
+            token,
+            { visibility: "public" },
+          );
+          ipfsHash = ipfsResult.hash;
+          console.log("Story pinned to IPFS:", ipfsHash);
         }
 
         // C. Save to Supabase via API route (bypasses RLS, works for both wallet & OAuth users)
@@ -430,13 +543,19 @@ export default function RecordPage() {
 
         // Vault save — additive, non-blocking (runs after cloud save succeeds)
         try {
-          if (userId && await checkVaultSetup(userId) && checkVaultUnlocked(userId)) {
+          if (
+            userId &&
+            (await checkVaultSetup(userId)) &&
+            checkVaultUnlocked(userId)
+          ) {
             const dek = getDEK(userId);
             const encTitle = await encryptString(entryTitle, dek);
             const encContent = await encryptString(transcribedText, dek);
 
             const now = new Date().toISOString();
-            const checksumData = new TextEncoder().encode(entryTitle + transcribedText);
+            const checksumData = new TextEncoder().encode(
+              entryTitle + transcribedText,
+            );
             const hashBuf = await crypto.subtle.digest("SHA-256", checksumData);
             const { arrayBufferToBase64 } = await import("@/lib/vault/crypto");
 
@@ -475,14 +594,19 @@ export default function RecordPage() {
           has_audio: !!audioBlob && !!audioUrl,
           content_length: transcribedText.length,
         });
-        return { message: isPublic ? "Public story saved" : "Private story saved", storyId: insertedStory?.id };
-      } catch (err: any) {
-        throw new Error(err.message || "Save failed");
+        return {
+          message: isPublic ? "Public story saved" : "Private story saved",
+          storyId: insertedStory?.id,
+        };
+      } catch (err: unknown) {
+        throw new Error(err instanceof Error ? err.message : "Save failed");
       }
     };
 
     toast.promise(promiseToSave(), {
-      loading: isPublic ? "Publishing public story..." : "Saving private story...",
+      loading: isPublic
+        ? "Publishing public story..."
+        : "Saving private story...",
       success: (result) => {
         setIsSaving(false);
         setTranscribedText("");
@@ -492,7 +616,13 @@ export default function RecordPage() {
         setStoryType("personal_journal");
         setPreEnhanceText(null);
         // Clear draft after successful save
-        sessionStorage.removeItem(DRAFT_KEY);
+        try {
+          if (DRAFT_KEY) sessionStorage.removeItem(DRAFT_KEY);
+          if (authInfo)
+            sessionStorage.removeItem(`estories_interview_v1:${authInfo.id}`);
+        } catch {
+          /* Already saved remotely. */
+        }
         // Redirect to the published story page
         if (result.storyId) {
           setTimeout(() => router.push(`/story/${result.storyId}`), 800);
@@ -515,6 +645,7 @@ export default function RecordPage() {
   if (!isConnected && !authInfo) {
     return (
       <div className="text-center space-y-8 py-16">
+        <AuthModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
         <div className="w-24 h-24 mx-auto bg-[hsl(var(--memory-500)/0.15)] rounded-full flex items-center justify-center">
           <Mic className="w-12 h-12 text-[hsl(var(--memory-500))]" />
         </div>
@@ -523,9 +654,11 @@ export default function RecordPage() {
             Sign In to Record
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Connect your Web3 wallet or sign in with Google to start recording stories.
+            Log in with Google to write or record your first story. No wallet
+            needed.
           </p>
         </div>
+        <Button onClick={() => setShowLogin(true)}>Log in</Button>
       </div>
     );
   }
@@ -533,136 +666,106 @@ export default function RecordPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="text-center space-y-4">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="w-16 h-16 mx-auto bg-gradient-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] rounded-full flex items-center justify-center shadow-lg"
-        >
-          <Mic className="w-8 h-8 text-white" />
-        </motion.div>
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
-          Record Your <span className="text-gradient-memory">Story</span>
+        <h1 className="font-display text-3xl md:text-4xl text-foreground">
+          Record Your <span className="text-primary">Story</span>
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-          Capture thoughts and experiences with AI transcription
+          Speak freely, follow a question, or start with a blank page.
         </p>
       </div>
 
-      {/* Recording Controls */}
-      <Card className="card-elevated rounded-xl">
-        <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center space-x-2">
-            <Volume2 className="w-5 h-5" />
-            <span>Audio Recording</span>
+      <fieldset
+        className="grid sm:grid-cols-2 gap-3"
+        disabled={isRecording || isBusy}
+      >
+        <legend className="text-sm font-medium mb-3">
+          How would you like to tell it?
+        </legend>
+        {(
+          [
+            {
+              value: "monologue",
+              title: "Monologue",
+              detail: "Speak freely, or write in your own words.",
+            },
+            {
+              value: "interview",
+              title: "Guided interview",
+              detail: "One question at a time, with optional AI follow-ups.",
+            },
+          ] as const
+        ).map((mode) => (
+          <label
+            key={mode.value}
+            className={`flex gap-3 p-4 border rounded-xl cursor-pointer bg-card ${captureMode === mode.value ? "border-primary" : ""}`}
+          >
+            <input
+              className="mt-1 accent-[var(--primary)]"
+              type="radio"
+              name="capture-mode"
+              value={mode.value}
+              checked={captureMode === mode.value}
+              onChange={() => setCaptureMode(mode.value)}
+            />
+            <span>
+              <span className="block font-medium">{mode.title}</span>
+              <span className="text-sm text-muted-foreground">
+                {mode.detail}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {authInfo && (
+        <GuidedInterview
+          key={authInfo.id}
+          ownerId={authInfo.id}
+          active={captureMode === "interview"}
+          disabled={isBusy}
+          onAddToStory={(turns) =>
+            setTranscribedText((previous) =>
+              appendInterviewTurns(previous, turns),
+            )
+          }
+        />
+      )}
+      <Card
+        hidden={captureMode !== "monologue"}
+        className="rounded-2xl bg-card border"
+      >
+        <CardHeader>
+          <CardTitle className="font-display text-2xl">
+            Audio Recording
           </CardTitle>
           <CardDescription>
-            Speak naturally and let AI handle transcription
+            Speak at your own pace. Review the transcript before saving.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="text-center space-y-6">
-            <AnimatePresence>
-              {isRecording && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  className="inline-flex items-center space-x-2 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 px-4 py-2 rounded-full"
-                >
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  <span className="font-medium">Recording</span>
-                  <Clock className="w-4 h-4" />
-                  <span className="font-mono">
-                    {formatDuration(recordingDuration)}
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Fancy Microphone Button */}
-            <div className="relative flex items-center justify-center">
-              {/* Animated pulse rings */}
-              {isRecording && (
-                <>
-                  <motion.div
-                    className="absolute w-40 h-40 rounded-full border-2 border-red-400/30"
-                    animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-                  />
-                  <motion.div
-                    className="absolute w-48 h-48 rounded-full border border-red-300/20"
-                    animate={{ scale: [1, 1.5, 1], opacity: [0.4, 0, 0.4] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 0.5 }}
-                  />
-                  <motion.div
-                    className="absolute w-56 h-56 rounded-full border border-red-200/10"
-                    animate={{ scale: [1, 1.6, 1], opacity: [0.3, 0, 0.3] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 1 }}
-                  />
-                </>
-              )}
-
-              {/* Idle glow ring */}
-              {!isRecording && !isBusy && (
-                <motion.div
-                  className="absolute w-36 h-36 rounded-full"
-                  style={{
-                    background: "radial-gradient(circle, hsl(var(--memory-500) / 0.15) 0%, transparent 70%)",
-                  }}
-                  animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                />
-              )}
-
-              <motion.div whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}>
-                <Button
-                  size="lg"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isBusy}
-                  className={`relative w-32 h-32 rounded-full text-white shadow-2xl transition-all duration-300 ${
-                    isRecording
-                      ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/25"
-                      : "bg-gradient-to-br from-[hsl(var(--memory-500))] via-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:shadow-[0_0_40px_hsl(var(--memory-500)/0.4)]"
-                  }`}
-                >
-                  {/* Inner ring highlight */}
-                  <span className="absolute inset-2 rounded-full border border-white/20" />
-                  {isRecording ? (
-                    <Square className="w-8 h-8 relative z-10" />
-                  ) : (
-                    <svg
-                      className="w-10 h-10 relative z-10"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect x="9" y="2" width="6" height="12" rx="3" />
-                      <path d="M5 10a7 7 0 0 0 14 0" />
-                      <line x1="12" y1="17" x2="12" y2="21" />
-                      <line x1="8" y1="21" x2="16" y2="21" />
-                    </svg>
-                  )}
-                </Button>
-              </motion.div>
-            </div>
-
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {isRecording ? "Tap to stop recording" : "Tap to start recording"}
-            </p>
-            <div className="flex items-center justify-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center space-x-2">
-                <Languages className="w-4 h-4" />
-                <span>Multi-language</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4" />
-                <span>ElevenLabs Scribe</span>
-              </div>
-            </div>
-          </div>
+        <CardContent className="space-y-5">
+          <Button
+            size="lg"
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isBusy}
+            className={isRecording ? "bg-destructive text-white" : ""}
+          >
+            {isRecording ? (
+              <Square aria-hidden className="size-5" />
+            ) : (
+              <Mic aria-hidden className="size-5" />
+            )}
+            {isRecording ? "Stop recording" : "Start recording"}
+          </Button>
+          <p role="status" className="text-sm text-muted-foreground">
+            {isTranscribing
+              ? "Preparing your transcript..."
+              : isRecording
+                ? `Recording: ${formatDuration(recordingDuration)}`
+                : "You can also type directly in the story editor below."}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Audio is sent for transcription when you stop recording.
+            Transcription depends on service availability.
+          </p>
         </CardContent>
       </Card>
 
@@ -672,7 +775,10 @@ export default function RecordPage() {
           <CardContent className="py-3 px-4 flex items-center gap-3">
             <FileText className="w-4 h-4 text-[hsl(var(--memory-500))] flex-shrink-0" />
             <span className="text-sm text-gray-600 dark:text-gray-300">
-              Continuing: <strong className="text-gray-900 dark:text-white">{parentStoryTitle}</strong>
+              Continuing:{" "}
+              <strong className="text-gray-900 dark:text-white">
+                {parentStoryTitle}
+              </strong>
             </span>
           </CardContent>
         </Card>
@@ -735,7 +841,7 @@ export default function RecordPage() {
                 aria-label="Publish story publicly"
                 aria-checked={isPublic}
                 disabled={isBusy}
-                className={`flex items-center justify-between px-3 py-2 rounded-md border cursor-pointer transition-colors ${isPublic ? 'bg-[hsl(var(--growth-500)/0.1)] border-[hsl(var(--growth-500)/0.3)]' : 'bg-[hsl(var(--void-light))] border-gray-200 dark:border-gray-700'}`}
+                className={`flex items-center justify-between px-3 py-2 rounded-md border cursor-pointer transition-colors ${isPublic ? "bg-[hsl(var(--growth-500)/0.1)] border-[hsl(var(--growth-500)/0.3)]" : "bg-[hsl(var(--void-light))] border-gray-200 dark:border-gray-700"}`}
                 onClick={() => !isBusy && setIsPublic(!isPublic)}
               >
                 <span className="flex items-center gap-2">
@@ -744,54 +850,56 @@ export default function RecordPage() {
                   ) : (
                     <Lock className="w-4 h-4 text-gray-500" />
                   )}
-                  <span className={`text-sm font-medium ${isPublic ? 'text-[hsl(var(--growth-600))]' : 'text-gray-600 dark:text-gray-400'}`}>
-                    {isPublic ? 'Public' : 'Private'}
+                  <span
+                    className={`text-sm font-medium ${isPublic ? "text-[hsl(var(--growth-600))]" : "text-gray-600 dark:text-gray-400"}`}
+                  >
+                    {isPublic ? "Public" : "Private"}
                   </span>
                 </span>
               </button>
             </div>
-
           </div>
 
-            {/* Story Type Selector */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-500">
-                Story Type
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                {STORY_TYPES.map((type) => {
-                  const Icon = STORY_TYPE_ICONS[type.icon];
-                  const colors = STORY_TYPE_COLORS[type.color] || STORY_TYPE_COLORS.memory;
-                  const isSelected = storyType === type.value;
-                  return (
-                    <button
-                      key={type.value}
-                      type="button"
-                      onClick={() => {
-                        if (isBusy) return;
-                        setStoryType(type.value);
-                        // Personal journals default to private, all others to public
-                        setIsPublic(type.value !== "personal_journal");
-                      }}
-                      disabled={isBusy}
-                      className={`
+          {/* Story Type Selector */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-gray-500">
+              Story Type
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {STORY_TYPES.map((type) => {
+                const Icon = STORY_TYPE_ICONS[type.icon];
+                const colors =
+                  STORY_TYPE_COLORS[type.color] || STORY_TYPE_COLORS.memory;
+                const isSelected = storyType === type.value;
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    onClick={() => {
+                      if (isBusy) return;
+                      setStoryType(type.value);
+                      // Personal journals default to private, all others to public
+                      setIsPublic(type.value !== "personal_journal");
+                    }}
+                    disabled={isBusy}
+                    className={`
                         inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium
                         transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
-                        ${isSelected
-                          ? `${colors.bg} ${colors.border} ${colors.text}`
-                          : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
+                        ${
+                          isSelected
+                            ? `${colors.bg} ${colors.border} ${colors.text}`
+                            : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
                         }
                       `}
-                    >
-                      {Icon && <Icon className="w-3.5 h-3.5" />}
-                      <span className="hidden sm:inline">{type.label}</span>
-                      <span className="sm:hidden">{type.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                  >
+                    {Icon && <Icon className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{type.label}</span>
+                    <span className="sm:hidden">{type.shortLabel}</span>
+                  </button>
+                );
+              })}
             </div>
-
+          </div>
         </CardContent>
 
         <CardHeader>
@@ -839,7 +947,10 @@ export default function RecordPage() {
         <CardContent className="space-y-4">
           <Textarea
             ref={textareaRef}
-            placeholder={STORY_TYPES.find((t) => t.value === storyType)?.placeholder || "Your transcribed text will appear here, or you can type directly..."}
+            placeholder={
+              STORY_TYPES.find((t) => t.value === storyType)?.placeholder ||
+              "Your transcribed text will appear here, or you can type directly..."
+            }
             value={transcribedText}
             onChange={(e) => {
               setTranscribedText(e.target.value);
@@ -866,21 +977,31 @@ export default function RecordPage() {
           {/* Word count + AI threshold indicator */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {(() => {
-              const wordCount = transcribedText.trim() ? transcribedText.trim().split(/\s+/).length : 0;
+              const wordCount = transcribedText.trim()
+                ? transcribedText.trim().split(/\s+/).length
+                : 0;
               const readingTime = Math.max(1, Math.ceil(wordCount / 200));
               const aiReady = transcribedText.trim().length >= 50;
               return (
                 <>
-                  <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
-                  <span className="text-gray-300 dark:text-gray-600">&middot;</span>
+                  <span>
+                    {wordCount} {wordCount === 1 ? "word" : "words"}
+                  </span>
+                  <span className="text-gray-300 dark:text-gray-600">
+                    &middot;
+                  </span>
                   <span>{readingTime} min read</span>
-                  <span className="text-gray-300 dark:text-gray-600">&middot;</span>
+                  <span className="text-gray-300 dark:text-gray-600">
+                    &middot;
+                  </span>
                   {aiReady ? (
                     <span className="flex items-center gap-1 text-[hsl(var(--growth-500))]">
                       <CheckCircle2 className="w-3 h-3" /> AI Insights Ready
                     </span>
                   ) : (
-                    <span className="text-gray-400">Write 50+ characters to unlock AI insights</span>
+                    <span className="text-gray-400">
+                      Write 50+ characters to unlock AI insights
+                    </span>
                   )}
                 </>
               );
@@ -925,9 +1046,7 @@ export default function RecordPage() {
             )}
             <Button
               onClick={saveEntry}
-              disabled={
-                !transcribedText.trim() || !entryTitle.trim() || isBusy
-              }
+              disabled={!transcribedText.trim() || !entryTitle.trim() || isBusy}
               className="flex-1 bg-gradient-growth hover:opacity-90"
             >
               {isSaving ? (
@@ -935,47 +1054,63 @@ export default function RecordPage() {
               ) : (
                 <Save className="w-4 h-4 mr-2" />
               )}
-              {isPublic ? 'Publish & Save' : 'Save Privately'}
+              {isPublic ? "Publish & Save" : "Save Privately"}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Eligible saved entries are sent for AI analysis. Transcription sends audio to its provider. Private cloud entries are not end-to-end encrypted; use Local Vault for storage on this device. Public publishing makes content publicly accessible. Private cloud audio is not saved yet.
+            Eligible saved entries are sent for AI analysis. Transcription sends
+            audio to its provider. Private cloud entries are not end-to-end
+            encrypted; use Local Vault for storage on this device. Public
+            publishing makes content publicly accessible. Private cloud audio is
+            not saved yet.
           </p>
           <p className="text-xs text-muted-foreground text-right">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">Ctrl+Enter</kbd> to save
+            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">
+              Ctrl+Enter
+            </kbd>{" "}
+            to save
           </p>
         </CardContent>
       </Card>
 
-
       {/* Recording Tips */}
       <Card className="bg-[hsl(var(--insight-500)/0.05)] border-[hsl(var(--insight-500)/0.2)] rounded-xl">
         <CardHeader>
-          <CardTitle className="text-lg text-gradient-insight">Recording Tips</CardTitle>
+          <CardTitle className="text-lg text-gradient-insight">
+            Recording Tips
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
             <div className="flex items-start space-x-3">
               <div className="w-6 h-6 bg-[hsl(var(--insight-500)/0.15)] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">1</span>
+                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">
+                  1
+                </span>
               </div>
               <p>Speak clearly and moderately</p>
             </div>
             <div className="flex items-start space-x-3">
               <div className="w-6 h-6 bg-[hsl(var(--insight-500)/0.15)] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">2</span>
+                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">
+                  2
+                </span>
               </div>
               <p>Find a quiet environment</p>
             </div>
             <div className="flex items-start space-x-3">
               <div className="w-6 h-6 bg-[hsl(var(--insight-500)/0.15)] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">3</span>
+                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">
+                  3
+                </span>
               </div>
               <p>You can edit the text before saving</p>
             </div>
             <div className="flex items-start space-x-3">
               <div className="w-6 h-6 bg-[hsl(var(--insight-500)/0.15)] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">4</span>
+                <span className="text-xs font-bold text-[hsl(var(--insight-500))]">
+                  4
+                </span>
               </div>
               <p>Stories saved securely on blockchain</p>
             </div>
