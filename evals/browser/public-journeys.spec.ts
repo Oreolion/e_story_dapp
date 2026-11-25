@@ -51,6 +51,18 @@ test("standard login exposes Google and optional wallet access", async ({
     page.getByRole("button", { name: "Continue with a wallet" }),
   ).toBeVisible();
   await expect(page.getByText(/No wallet needed/).last()).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("dialog")).toContainText("Continue with Google");
+  expect(
+    await page.getByRole("dialog").evaluate((dialog) =>
+      dialog.contains(document.activeElement),
+    ),
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Log in", exact: true }),
+  ).toBeFocused();
 });
 
 for (const width of [320, 390, 768, 1440]) {

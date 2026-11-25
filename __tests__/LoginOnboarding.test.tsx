@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 const mocks = vi.hoisted(() => ({
   google: vi.fn(),
   wallet: vi.fn(),
@@ -31,6 +32,24 @@ import { AuthModal } from "@/components/AuthModal";
 import Onboarding from "@/app/onboarding/OnboardingPageClient";
 beforeEach(() => vi.resetAllMocks());
 describe("wallet-optional login and onboarding", () => {
+  it("returns keyboard focus to the login control after dismissal", async () => {
+    function Login() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Log in</button>
+          <AuthModal isOpen={open} onClose={() => setOpen(false)} />
+        </>
+      );
+    }
+    render(<Login />);
+    const opener = screen.getByRole("button", { name: "Log in" });
+    opener.focus();
+    fireEvent.click(opener);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Close", exact: true }));
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
   it("offers Google first and reports failures without dismissing login", async () => {
     mocks.google.mockRejectedValue(new Error("private-provider-detail"));
     const close = vi.fn();

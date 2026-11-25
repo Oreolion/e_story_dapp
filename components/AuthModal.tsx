@@ -23,6 +23,7 @@ export function AuthModal({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const locked = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!isOpen) setError("");
   }, [isOpen]);
@@ -47,7 +48,26 @@ export function AuthModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-md p-7">
+      <DialogContent
+        className="sm:max-w-md p-7"
+        onOpenAutoFocus={() => {
+          returnFocus.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          // This controlled dialog has no Radix DialogTrigger. Preserve the
+          // opener, but let a subsequently opened wallet dialog retain focus.
+          if (
+            !document.querySelector('[role="dialog"]') &&
+            returnFocus.current?.isConnected
+          ) {
+            returnFocus.current.focus({ preventScroll: true });
+          }
+        }}
+      >
         <DialogHeader>
           <p className="eyebrow">Your stories start here</p>
           <DialogTitle className="font-display text-3xl mt-2">
