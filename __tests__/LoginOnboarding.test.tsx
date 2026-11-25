@@ -47,7 +47,7 @@ describe("wallet-optional login and onboarding", () => {
     opener.focus();
     fireEvent.click(opener);
     await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: "Close", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(opener).toHaveFocus());
   });
   it("offers Google first and reports failures without dismissing login", async () => {
