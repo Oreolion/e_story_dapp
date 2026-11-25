@@ -12,7 +12,9 @@ function isAllowedRedirect(url: string, origin: string): boolean {
     if (parsed.origin !== originParsed.origin) return false;
 
     // Must be an allowed path
-    return ALLOWED_REDIRECT_PATHS.some(path => parsed.pathname === path || parsed.pathname.startsWith(path + '/'));
+    return ALLOWED_REDIRECT_PATHS.some(path =>
+      parsed.pathname === path || (path !== '/' && parsed.pathname.startsWith(path + '/'))
+    );
   } catch {
     return false;
   }
