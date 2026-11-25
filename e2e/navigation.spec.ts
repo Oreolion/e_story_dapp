@@ -16,7 +16,7 @@ test("Landing page loads and navigation works", async ({ page }) => {
 
   // 4. Verify Hero Text
   await expect(
-    page.getByRole("heading", { name: /Life moves fast/i }),
+    page.getByRole("heading", { name: /Speak your story, see your patterns/i }),
   ).toBeVisible({ timeout: 10000 });
 
   // 5. Check "See How It Works" button

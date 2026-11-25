@@ -1,7 +1,7 @@
 import "../app/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";
-import { Fraunces, Source_Sans_3 } from "next/font/google";
+import { Inter, Love_Light } from "next/font/google";
 import { ProvidersDynamic } from "../components/ProvidersDynamic";
 import { Navigation } from "../components/Navigation";
 import { Footer } from "../components/Footer";
@@ -11,15 +11,16 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { MetaPixel } from "../components/MetaPixel";
 import { CookieConsent } from "../components/CookieConsent";
 
-const source = Source_Sans_3({
+const source = Inter({
   subsets: ["latin"],
   variable: "--font-source",
   display: "swap",
 });
 const isStaging = process.env.APP_ENV === "staging";
-const editorial = Fraunces({
+const brand = Love_Light({
+  weight: "400",
   subsets: ["latin"],
-  variable: "--font-editorial",
+  variable: "--font-brand",
   display: "swap",
 });
 
@@ -120,7 +121,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${source.variable} ${editorial.variable}`}
+      className={`${source.variable} ${brand.variable}`}
       suppressHydrationWarning
     >
       <head>

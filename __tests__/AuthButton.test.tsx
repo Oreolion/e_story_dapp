@@ -33,4 +33,12 @@ describe("standard login entry", () => {
       screen.getByRole("button", { name: "Continue with a wallet" }),
     ).toBeVisible();
   });
+  it("offers a separate signup entry using the existing Google onboarding", () => {
+    render(<AuthButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
+    expect(screen.getByRole("heading", { name: "Create your eStories account" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeVisible();
+    expect(screen.getByText(/choose your profile/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue with a wallet" })).toBeVisible();
+  });
 });
