@@ -44,11 +44,11 @@ global.MediaRecorder = class {
   stop() {
     this.state = "inactive";
     this.ondataavailable?.({ data: new Blob(["synthetic audio"], { type: "audio/webm" }) });
-    this.onstop();
+    this.onstop?.();
   }
   ondataavailable?: (event: { data: Blob }) => void;
   //   ondataavailable(e: any) {}
-  onstop() {}
+  onstop: (() => void) | null = null;
   //   constructor(stream: any) {}
 } as any;
 
@@ -187,6 +187,26 @@ describe("RecordPage", () => {
   it("shows save button", () => {
     renderWithProviders(<RecordPage />);
     expect(screen.getByText("Save Privately")).toBeInTheDocument();
+  });
+
+  it("stops microphone tracks on unmount without submitting audio", async () => {
+    const stop = vi.fn();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValueOnce({
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream);
+    const outbound = vi.fn();
+    vi.stubGlobal("fetch", outbound);
+    const view = renderWithProviders(<RecordPage />);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+      await screen.findByRole("button", { name: "Stop recording" });
+      view.unmount();
+      expect(stop).toHaveBeenCalled();
+      expect(outbound).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
   it.each([false, true])("saves the intended visibility and publishes only when public=%s", async isPublic => {
     sessionStorage.clear();
