@@ -100,9 +100,9 @@ test("a username conflict retains the profile and supports a successful retry", 
   await page.goto("/onboarding");
   await page.getByLabel("Username", { exact: true }).fill("reserved_writer");
   await page.getByRole("button", { name: "Start my first story" }).click();
-  await expect(page.getByRole("alert")).toContainText(
-    "Your profile could not be saved",
-  );
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Your profile could not be saved" }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue(
     "Synthetic Writer",
