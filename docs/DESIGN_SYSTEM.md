@@ -1,5 +1,7 @@
 # eStory Design System Documentation
 
+> **Historical reference:** The Narrative Luminance guidance below predates the Living Archive implementation. For current web tokens, typography, shell and recording conventions, use [the implemented interface foundation](design/LOGIN_AND_GUIDED_INTERVIEW.md#interface-foundation) and [styles/design-system.css](../styles/design-system.css). Retained legacy token names support screens still awaiting migration; they do not define a second current theme. The global decorative WebGL background is no longer mounted.
+
 > **Design Philosophy:** "Narrative Luminance" — A refined, editorial aesthetic where stories breathe through generous space, subtle motion, and emotional color.
 
 This document serves as a comprehensive guide for maintaining visual consistency and implementing new features in the eStory application.

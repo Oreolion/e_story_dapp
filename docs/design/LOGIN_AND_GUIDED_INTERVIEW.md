@@ -67,6 +67,19 @@ Questions are validated structurally, not proven semantically safe by a schema. 
 
 ## Interface foundation
 
+The current web token source is [styles/design-system.css](../../styles/design-system.css), exposed through the existing Tailwind aliases in [app/globals.css](../../app/globals.css). Semantic values are complete CSS colors; use `var(--primary)`, without an extra `hsl()` wrapper. Compatibility tokens such as `--memory-*` remain HSL channels for existing consumers and must keep their existing `hsl(var(...))` usage until those consumers migrate.
+
+| Token | Light | Dark |
+| --- | --- | --- |
+| Background | `#F5F0E6` | `#14130F` |
+| Foreground | `#181713` | `#F5F0E6` |
+| Card | `#FBF8F0` | `#1C1A16` |
+| Primary | `#8A541C` | `#D69A46` |
+| Primary foreground | `#FFFFFF` | `#181713` |
+| Muted foreground | `#5B574E` | `#BDB6A8` |
+
+Display and brand typography use Fraunces; body and controls use Source Sans 3. Both load through `next/font` with their variables on the root HTML element. Reuse semantic colors, visible focus rings and the existing 44px control sizing instead of introducing page-specific palettes. The earlier [design-system document](../DESIGN_SYSTEM.md) is retained as a historical reference.
+
 The homepage uses the Living Archive paper/ink palette, self-hosted Fraunces and Source Sans 3, and a lightweight illustrative story preview. It keeps the mobile waitlist. No real customer story is used in visual assets. Root layout no longer mounts the global decorative WebGL background. Existing background context consumers remain compatible.
 
 Navigation separates public discovery from the signed-in workspace. Mobile uses a compact header and five workspace destinations; Tracker remains accessible through the account menu and homepage shortcut. Controls have accessible names, a skip link, larger targets and reduced-motion support. Footer links point to actual routes instead of generic social-service homepages or an unconditional operational claim. Onchain verification remains coming soon.
