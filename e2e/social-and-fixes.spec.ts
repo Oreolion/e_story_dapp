@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.slow();
 
 test.describe("Landing Page Fixes", () => {
-  test('"Start a story" link goes to /record, not /api/auth/callback', async ({
+  test('Main writing action opens the recording page', async ({
     page,
   }) => {
     await page.goto("/");
@@ -11,11 +11,11 @@ test.describe("Landing Page Fixes", () => {
       timeout: 30000,
     });
 
-    // Find the "Start a story — Free" button in the hero section
-    const startBtn = page.getByRole("link", {
-      name: "Start a story",
+    // The restored hero retains its original writing action.
+    const startBtn = page.getByRole("button", {
+      name: "Start Writing — Free",
       exact: true,
-    });
+    }).first();
     await expect(startBtn).toBeVisible({ timeout: 10000 });
 
     // Click and verify navigation goes to /record (not /api/auth/callback)
@@ -24,13 +24,13 @@ test.describe("Landing Page Fixes", () => {
     expect(page.url()).toContain("/record");
   });
 
-  test("Hero tagline is visible and not oversized", async ({ page }) => {
+  test("Original hero tagline remains visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("Preparing your experience")).not.toBeVisible({
       timeout: 30000,
     });
 
-    const heading = page.getByRole("heading", { name: /Life moves fast/i });
+    const heading = page.getByRole("heading", { name: /Speak your story, see your patterns/i });
     await expect(heading).toBeVisible({ timeout: 10000 });
   });
 });
