@@ -122,15 +122,11 @@ describe("wallet-optional login and onboarding", () => {
   });
   it("switches between login and signup without invoking either provider", () => {
     render(<AuthModal isOpen onClose={vi.fn()} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sign up", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
     expect(
       screen.getByRole("heading", { name: "Create your eStories account" }),
     ).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Log in", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
     expect(
       screen.getByRole("heading", { name: "Log in to eStories" }),
     ).toBeVisible();
