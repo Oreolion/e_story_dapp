@@ -4,6 +4,8 @@ Prepared 2026-11-24. Status: implementation started; see [the first batch guide]
 
 ## 1. Recommendation
 
+**Correction, 2026-11-25 — current direction:** User review rejected the replacement branding and reduced landing-page content. Preserve the established logo, gold/purple wordmark, blue/purple/amber palette, original hero and useful cards. Improve hierarchy, accessibility, responsive behavior and clear Log in / Sign up entry points within that design. Keep the Google onboarding and guided-interview functionality. Review the revised interface before production promotion. The replacement-branding recommendation below is superseded.
+
 Build on **Living Archive**, the direction in the [existing implementation guide](../UI_UX_IMPLEMENTATION_GUIDE.md): a contemporary editorial product with warm surfaces, confident typography and a recognisable thread connecting voice, text and a saved story. Make creating and revisiting a story the centre of the interface.
 
 The current product needs a consistent system and clearer task flows before it needs more visual effects. Replace the gradient script wordmark, competing blue/purple/amber accents, repetitive feature cards and ambient particles with deliberate composition and useful interaction. Preserve writing, recording, reading and payment behaviour while making their states easier to understand.

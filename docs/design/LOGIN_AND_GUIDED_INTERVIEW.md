@@ -4,7 +4,7 @@ Implementation batch: Living Archive web foundation, 2026-11-24. This document d
 
 ## Experience
 
-The header offers **Log in**. Google is the primary path; wallet login remains available as an alternative. Existing accounts, wallet signatures, OAuth callbacks and same-origin refresh are retained. No password database or new authentication provider is introduced.
+The header offers distinct, bold **Log in** and **Sign up** buttons. Sign up presents account-creation copy and uses the same Google OAuth flow and existing profile onboarding; returning accounts retain the same login behavior. The established logo, brand colors and detailed landing-page sections are retained following user review on 2026-11-25. Google is the primary path; wallet login remains available as an alternative. Existing accounts, wallet signatures, OAuth callbacks and same-origin refresh are retained. No password database or new authentication provider is introduced.
 
 New accounts complete one profile form, then open `/record`. Wallet and Local Vault setup are optional account features. The old onboarding sequence could redirect home immediately after saving a profile, skipping its subsequent steps; there is no longer a required wallet/vault tour to skip.
 

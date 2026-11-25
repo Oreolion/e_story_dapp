@@ -14,9 +14,11 @@ import { Wallet, Loader2 } from "lucide-react";
 export function AuthModal({
   isOpen,
   onClose,
+  intent = "login",
 }: {
   isOpen: boolean;
   onClose: () => void;
+  intent?: "login" | "signup";
 }) {
   const { signInWithGoogle } = useAuth();
   const { openConnectModal } = useConnectModal();
@@ -71,11 +73,12 @@ export function AuthModal({
         <DialogHeader>
           <p className="eyebrow">Your stories start here</p>
           <DialogTitle className="font-display text-3xl mt-2">
-            Log in to eStories
+            {intent === "signup" ? "Create your eStories account" : "Log in to eStories"}
           </DialogTitle>
           <DialogDescription>
-            Use your Google account to write, record and keep your stories. No
-            wallet needed.
+            {intent === "signup"
+              ? "Sign up with Google, choose your profile, and start your first story. No wallet needed."
+              : "Use your Google account to write, record and keep your stories. No wallet needed."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5 py-3">

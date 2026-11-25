@@ -35,6 +35,7 @@ export function AuthButton() {
   const { profile, isLoading, needsOnboarding, signOut } = useAuth();
   const { disconnect } = useDisconnect();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authIntent, setAuthIntent] = useState<"login" | "signup">("login");
 
   const handleSignOut = async () => {
     await signOut();
@@ -62,16 +63,25 @@ export function AuthButton() {
   if (!profile) {
     return (
       <>
-        <Button
-          onClick={() => setShowAuthModal(true)}
-          size="sm"
-          className="px-4"
-        >
-          Log in
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => { setAuthIntent("login"); setShowAuthModal(true); }}
+            className="min-h-11 border-primary/40 px-3 font-bold sm:px-5"
+          >
+            Log in
+          </Button>
+          <Button
+            onClick={() => { setAuthIntent("signup"); setShowAuthModal(true); }}
+            className="min-h-11 px-3 font-bold shadow-sm sm:px-5"
+          >
+            Sign up
+          </Button>
+        </div>
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
+          intent={authIntent}
         />
       </>
     );

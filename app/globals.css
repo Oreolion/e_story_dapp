@@ -215,3 +215,13 @@ body:has([data-workspace-nav]) {
     padding-bottom: 0;
   }
 }
+
+/* Preserve the existing gold / purple eStories wordmark and script font. */
+.brand-wordmark {
+  font-family: var(--font-brand), cursive;
+  font-weight: 700;
+  background: linear-gradient(to right, #d4a04a, #9b7dd4, #6c3dbd);
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: .5px currentColor;
+}

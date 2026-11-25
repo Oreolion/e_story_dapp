@@ -1,28 +1,28 @@
-/* Living Archive semantic tokens. Values are complete CSS colors. */
+/* Existing eStories palette. Complete CSS colors for semantic Tailwind tokens. */
 :root {
   --radius: .75rem;
-  --background: #f5f0e6; --foreground: #181713;
-  --card: #fbf8f0; --card-foreground: var(--foreground);
+  --background: #fafafa; --foreground: #111827;
+  --card: #ffffff; --card-foreground: var(--foreground);
   --popover: var(--card); --popover-foreground: var(--foreground);
-  --primary: #8a541c; --primary-foreground: #ffffff;
-  --secondary: #e9e2d3; --secondary-foreground: var(--foreground);
-  --muted: #e9e2d3; --muted-foreground: #5b574e;
-  --accent: #e5ddcb; --accent-foreground: var(--foreground);
-  --destructive: #a52b2b; --destructive-foreground: #ffffff;
-  --border: #d8cfbe; --input: #c7bba7; --ring: #8a541c;
-  --chart-1: #8a541c; --chart-2: #346b60; --chart-3: #685872; --chart-4: #8b4a43; --chart-5: #627148;
+  --primary: hsl(217 91% 40%); --primary-foreground: #ffffff;
+  --secondary: #f1f5f9; --secondary-foreground: var(--foreground);
+  --muted: #f1f5f9; --muted-foreground: #4b5563;
+  --accent: #eef2ff; --accent-foreground: var(--foreground);
+  --destructive: #b91c1c; --destructive-foreground: #ffffff;
+  --border: #dbe1e9; --input: #cbd5e1; --ring: hsl(217 91% 50%);
+  --chart-1: hsl(217 91% 50%); --chart-2: hsl(258 90% 55%); --chart-3: hsl(38 92% 50%); --chart-4: hsl(160 84% 35%); --chart-5: hsl(330 70% 55%);
   --sidebar: var(--card); --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary); --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: var(--accent); --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border); --sidebar-ring: var(--ring);
 }
 .dark {
-  --background: #14130f; --foreground: #f5f0e6;
-  --card: #1c1a16; --popover: #1c1a16;
-  --primary: #d69a46; --primary-foreground: #181713;
-  --secondary: #302c24; --muted: #302c24; --muted-foreground: #bdb6a8;
-  --accent: #393327; --destructive: #f28d85; --destructive-foreground: #181713;
-  --border: #484033; --input: #5e5444; --ring: #d69a46;
+  --background: #030617; --foreground: #f8fafc;
+  --card: #24252b; --popover: #24252b;
+  --primary: hsl(217 91% 50%); --primary-foreground: #ffffff;
+  --secondary: #191c2b; --muted: #191c2b; --muted-foreground: #aeb7c8;
+  --accent: #20243b; --destructive: #fca5a5; --destructive-foreground: #111827;
+  --border: #343a4c; --input: #475569; --ring: hsl(217 91% 60%);
 }
 
 /**
@@ -38,39 +38,38 @@
 
 :root {
   /* === Typography === */
-  --font-brand: var(--font-editorial);
-  --font-display: var(--font-editorial), Georgia, serif;
+  --font-display: var(--font-source), system-ui, sans-serif;
   --font-body: var(--font-source), 'Segoe UI', sans-serif;
 
   /* === Void Colors (Background Depths) === */
-  --void-deep: 45 14% 7%;
-  --void-medium: 40 12% 10%;
-  --void-light: 40 10% 14%;
-  --void-surface: 40 10% 16%;
+  --void-deep: 233 10% 4%;
+  --void-medium: 233 10% 8%;
+  --void-light: 233 10% 12%;
+  --void-surface: 233 10% 16%;
 
   /* === Memory Blue (Primary - Trust & Stability) === */
-  --memory-50: 32 45% 95%;
-  --memory-100: 32 45% 90%;
-  --memory-200: 32 45% 80%;
-  --memory-300: 32 45% 70%;
-  --memory-400: 32 45% 60%;
-  --memory-500: 32 45% 50%;
-  --memory-600: 32 45% 40%;
-  --memory-700: 32 45% 30%;
-  --memory-800: 32 45% 20%;
-  --memory-900: 32 45% 10%;
+  --memory-50: 217 91% 95%;
+  --memory-100: 217 91% 90%;
+  --memory-200: 217 91% 80%;
+  --memory-300: 217 91% 70%;
+  --memory-400: 217 91% 60%;
+  --memory-500: 217 91% 50%;
+  --memory-600: 217 91% 40%;
+  --memory-700: 217 91% 30%;
+  --memory-800: 217 91% 20%;
+  --memory-900: 217 91% 10%;
 
   /* === Insight Purple (Secondary - Cognition & Wisdom) === */
-  --insight-50: 165 22% 95%;
-  --insight-100: 165 22% 90%;
-  --insight-200: 165 22% 80%;
-  --insight-300: 165 22% 70%;
-  --insight-400: 165 22% 60%;
-  --insight-500: 165 22% 55%;
-  --insight-600: 165 22% 45%;
-  --insight-700: 165 22% 35%;
-  --insight-800: 165 22% 25%;
-  --insight-900: 165 22% 15%;
+  --insight-50: 258 90% 95%;
+  --insight-100: 258 90% 90%;
+  --insight-200: 258 90% 80%;
+  --insight-300: 258 90% 70%;
+  --insight-400: 258 90% 60%;
+  --insight-500: 258 90% 55%;
+  --insight-600: 258 90% 45%;
+  --insight-700: 258 90% 35%;
+  --insight-800: 258 90% 25%;
+  --insight-900: 258 90% 15%;
 
   /* === Story Amber (Accent - Personal Warmth) === */
   --story-50: 38 92% 95%;

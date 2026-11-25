@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { BookOpen } from "lucide-react";
+import { LogoMark } from "./LogoMark";
 import { CookiePreferencesButton } from "./CookieConsent";
 const groups = [
   {
@@ -29,10 +29,10 @@ export function Footer() {
           <div>
             <Link
               href="/"
-              className="inline-flex items-center gap-2 font-display text-2xl"
+              className="inline-flex items-center gap-1"
             >
-              <BookOpen aria-hidden className="size-6 text-primary" />
-              eStories
+              <span aria-hidden="true"><LogoMark size={40} /></span>
+              <span className="brand-wordmark text-4xl">eStories</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
               The small moments. The turning points. A place to keep the stories

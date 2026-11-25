@@ -11,7 +11,6 @@ import {
   Moon,
   Sun,
   Menu,
-  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +22,7 @@ import {
 import { AuthButton } from "./AuthButton";
 import { useAuth } from "./AuthProvider";
 import { NotificationDropdown } from "./NotificationDropdown";
+import { LogoMark } from "./LogoMark";
 
 const workspace = [
   { name: "Home", href: "/", icon: Home },
@@ -44,17 +44,14 @@ export function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex min-h-18 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-18 max-w-7xl flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-2 sm:flex-nowrap sm:px-6 lg:px-8">
           <Link
             href="/"
             aria-label="eStories home"
-            className="flex shrink-0 items-center gap-2 text-2xl font-display tracking-tight"
+            className="flex shrink-0 items-center gap-1"
           >
-            <BookOpen aria-hidden className="size-6 text-primary" />
-            eStories
-            <span className="hidden xl:inline ml-3 border-l pl-3 text-xs tracking-normal font-sans text-muted-foreground">
-              A place for your stories
-            </span>
+            <span aria-hidden="true"><LogoMark size={36} /></span>
+            <span className="brand-wordmark text-3xl">eStories</span>
           </Link>
           <nav
             aria-label="Main navigation"
@@ -71,11 +68,12 @@ export function Navigation() {
               </Link>
             ))}
           </nav>
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 max-[359px]:w-full max-[359px]:justify-end">
             {profile && <NotificationDropdown />}
             <Button
               variant="ghost"
               size="icon"
+              className={profile ? "" : "hidden sm:inline-flex"}
               aria-label="Toggle color theme"
               onClick={() =>
                 setTheme(resolvedTheme === "dark" ? "light" : "dark")
@@ -98,6 +96,7 @@ export function Navigation() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="sm:hidden min-h-11" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>Switch to {resolvedTheme === "dark" ? "light" : "dark"} theme</DropdownMenuItem>
                   {publicLinks.map((item) => (
                     <DropdownMenuItem asChild key={item.href}>
                       <Link href={item.href} className="min-h-11">
