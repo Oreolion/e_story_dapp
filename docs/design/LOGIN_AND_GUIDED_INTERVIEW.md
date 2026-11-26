@@ -6,7 +6,11 @@ Implementation batch: Living Archive web foundation, 2026-11-24. This document d
 
 The header offers distinct, bold **Log in** and **Sign up** buttons. Sign up presents account-creation copy and uses the same Google OAuth flow and existing profile onboarding; returning accounts retain the same login behavior. The established logo, brand colors and detailed landing-page sections are retained following user review on 2026-11-25. Google is the primary path; wallet login remains available as an alternative. Existing accounts, wallet signatures, OAuth callbacks and same-origin refresh are retained. No password database or new authentication provider is introduced.
 
+The login dialog now pairs the established brand assets with a desktop story panel and a compact mobile layout. Google remains the primary action; wallet access is optional. Login and signup can be switched inside the dialog without starting authentication. Privacy and terms links remain accessible, and closing the dialog returns focus to its opener.
+
 New accounts complete one profile form, then open `/record`. Wallet and Local Vault setup are optional account features. The old onboarding sequence could redirect home immediately after saving a profile, skipping its subsequent steps; there is no longer a required wallet/vault tour to skip.
+
+Profile setup shows account/profile/first-story progress and a saving state. Completed users are redirected to recording instead of being shown an editable setup form. Tests cover duplicate submissions, invalid usernames, account changes, save errors, server ownership checks, and successful persistence even if the welcome email fails. Browser tests exercise the real client auth context and router against synthetic post-authentication responses, including reload and username-conflict recovery. These checks do not establish that a live Google OAuth consent/callback round trip has succeeded.
 
 The recording page offers two modes:
 
@@ -71,16 +75,16 @@ The current web token source is [styles/design-system.css](../../styles/design-s
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| Background | `#F5F0E6` | `#14130F` |
-| Foreground | `#181713` | `#F5F0E6` |
-| Card | `#FBF8F0` | `#1C1A16` |
-| Primary | `#8A541C` | `#D69A46` |
-| Primary foreground | `#FFFFFF` | `#181713` |
-| Muted foreground | `#5B574E` | `#BDB6A8` |
+| Background | `#FAFAFA` | `#030617` |
+| Foreground | `#111827` | `#F8FAFC` |
+| Card | `#FFFFFF` | `#24252B` |
+| Primary | `hsl(217 91% 40%)` | `hsl(217 91% 50%)` |
+| Primary foreground | `#FFFFFF` | `#FFFFFF` |
+| Muted foreground | `#4B5563` | `#AEB7C8` |
 
-Display and brand typography use Fraunces; body and controls use Source Sans 3. Both load through `next/font` with their variables on the root HTML element. Reuse semantic colors, visible focus rings and the existing 44px control sizing instead of introducing page-specific palettes. The earlier [design-system document](../DESIGN_SYSTEM.md) is retained as a historical reference.
+Body and display typography use Inter; the established wordmark uses Love Light. Both load through `next/font` with their variables on the root HTML element. Reuse semantic colors, visible focus rings and the existing 44px control sizing. The earlier [design-system document](../DESIGN_SYSTEM.md) is retained as a historical reference.
 
-The homepage uses the Living Archive paper/ink palette, self-hosted Fraunces and Source Sans 3, and a lightweight illustrative story preview. It keeps the mobile waitlist. No real customer story is used in visual assets. Root layout no longer mounts the global decorative WebGL background. Existing background context consumers remain compatible.
+The homepage retains eStories' blue, purple and gold branding, logo and detailed feature sections, alongside a lightweight illustrative story preview. It keeps the mobile waitlist. No real customer story is used in visual assets. Root layout no longer mounts the global decorative WebGL background. Existing background context consumers remain compatible.
 
 Navigation separates public discovery from the signed-in workspace. Mobile uses a compact header and five workspace destinations; Tracker remains accessible through the account menu and homepage shortcut. Controls have accessible names, a skip link, larger targets and reduced-motion support. Footer links point to actual routes instead of generic social-service homepages or an unconditional operational claim. Onchain verification remains coming soon.
 
@@ -89,6 +93,20 @@ The cookie banner is in document flow, with equal optional/essential choices and
 ## Verification and rollout
 
 Run the focused unit/API tests, the complete web/evaluation suites, lint, web/evaluation TypeScript checks and the isolated production build. Public Playwright journeys cover login entry, privacy/deletion, the anonymous recording boundary, the story preview and overflow at 320, 390, 768 and 1440 CSS pixels in Chromium and Firefox. Use computer use to inspect mobile/desktop, light/dark and keyboard/modal behavior on the candidate.
+
+For reproducible local browser acceptance, use the existing isolated runner with locked dependencies and installed Chromium/Firefox engines:
+
+```sh
+node scripts/verify-isolated.mjs --build
+```
+
+Use Node 22 to match CI. This runner excludes local credential files, supplies synthetic settings, builds once, checks that the served build manifest matches that artifact, runs every browser evaluation against `next start`, and stops its own server. Do not use `next dev` or modify the source during release acceptance: on-demand compilation and hot reload can invalidate timing and navigation evidence. The CI Build job also runs the full browser suite on its compiled artifact. A loading timeout or interrupted run is a failure, not evidence of onboarding success.
+
+The custom Webpack resolver keeps the build worker explicitly enabled, alongside Next 15's memory optimizations, to reduce peak build memory on constrained runners. These settings change compilation, not authentication, providers or runtime resource limits. CI and the hosted preview must both pass; a successful CI build alone does not establish that Vercel's resource limits are satisfied. See the [Next.js memory guide](https://nextjs.org/docs/app/guides/memory-usage).
+
+Callback unit tests exercise the real route with a synthetic code-exchange boundary, including missing/failed exchange, allowed destinations and open-redirect rejection. Browser username-conflict assertions select the form's error text rather than Next.js's separate route-announcer alert. Neither check replaces the live provider test below.
+
+For live Google verification, bind the test to the candidate URL and commit. The Supabase redirect allowlist must contain that exact origin's `/api/auth/callback`; a production callback entry does not authorize a new preview URL. Use a dedicated account and stop for account selection, consent or credentials. Confirm the callback returns to the candidate, the new profile saves, recording opens, reload preserves completion and sign-out works. Never record authorization codes, session tokens or private account data in screenshots, traces or issue reports. Do not broaden the allowlist to arbitrary preview domains to make a test pass.
 
 Live Google OAuth, a physical-device microphone, adaptive interview quality and provider fallback require controlled synthetic accounts/provider setup; mock tests do not establish those real integrations. No real journals, mainnet payments or paid inference are required for this batch's deterministic checks.
 

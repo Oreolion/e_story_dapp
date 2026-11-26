@@ -5,7 +5,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BookOpen, ArrowRight, Loader2 } from "lucide-react";
+import { Check, ArrowRight, Loader2 } from "lucide-react";
+import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
+import { LogoMark } from "@/components/LogoMark";
 import { trackCompleteRegistration } from "@/lib/meta-pixel";
 export default function OnboardingPageClient() {
   const { profile, needsOnboarding, isLoading, completeOnboarding } = useAuth();
@@ -67,88 +69,114 @@ export default function OnboardingPageClient() {
       setPending(false);
     }
   };
-  if (isLoading || !profile)
+  if (isLoading || !profile || !needsOnboarding)
     return (
       <p role="status" className="py-20 text-center">
         Preparing your account…
       </p>
     );
   return (
-    <div className="max-w-lg mx-auto py-10 sm:py-16">
-      <BookOpen aria-hidden className="size-8 text-primary mb-8" />
-      <p className="eyebrow">Make yourself at home</p>
-      <h1 className="font-display text-4xl mt-3">What should we call you?</h1>
-      <p className="text-muted-foreground mt-4 mb-8">
-        One quick introduction, then your first story. Your stories are private
-        unless you choose to publish them. No wallet or vault setup is required.
-      </p>
-      <form
-        onSubmit={submit}
-        className="rounded-2xl border bg-card p-6 space-y-5"
-        aria-busy={pending}
-      >
-        <div className="space-y-2">
-          <Label htmlFor="onboard-name">Name</Label>
-          <Input
-            id="onboard-name"
-            autoComplete="name"
-            required
-            minLength={2}
-            maxLength={100}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={pending}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="onboard-username">Username</Label>
-          <Input
-            id="onboard-username"
-            autoComplete="username"
-            required
-            pattern="[a-zA-Z0-9_]{3,20}"
-            maxLength={20}
-            aria-describedby="username-help"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={pending}
-          />
-          <p id="username-help" className="text-xs text-muted-foreground">
-            3–20 letters, numbers or underscores. Shown with stories you
-            publish.
+    <div className="mx-auto max-w-5xl py-6 sm:py-12">
+      <div className="grid overflow-hidden rounded-2xl border bg-card shadow-sm md:grid-cols-[.85fr_1.15fr]">
+        <AuthBrandPanel profileSetup />
+        <div className="p-6 sm:p-9 lg:p-12">
+          <div className="mb-7 flex items-center gap-1 md:hidden">
+            <span aria-hidden="true">
+              <LogoMark size={36} />
+            </span>
+            <span className="brand-wordmark text-3xl">eStories</span>
+          </div>
+          <ol
+            aria-label="Account setup progress"
+            className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-muted-foreground"
+          >
+            <li className="flex items-center gap-1.5">
+              <Check aria-hidden="true" className="size-4 text-primary" />
+              Account
+            </li>
+            <li aria-current="step" className="text-foreground">
+              2 · Profile
+            </li>
+            <li>3 · First story</li>
+          </ol>
+          <p className="eyebrow">Make yourself at home</p>
+          <h1 className="text-3xl font-semibold leading-tight tracking-tight mt-3 sm:text-4xl">
+            What should we call you?
+          </h1>
+          <p className="text-muted-foreground mt-4 mb-8">
+            One quick introduction, then your first story. Your stories are
+            private unless you choose to publish them. No wallet or vault setup
+            is required.
+          </p>
+          <form onSubmit={submit} className="space-y-5" aria-busy={pending}>
+            <div className="space-y-2">
+              <Label htmlFor="onboard-name">Name</Label>
+              <Input
+                id="onboard-name"
+                autoComplete="name"
+                required
+                minLength={2}
+                maxLength={100}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={pending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="onboard-username">Username</Label>
+              <Input
+                id="onboard-username"
+                autoComplete="username"
+                required
+                pattern="[a-zA-Z0-9_]{3,20}"
+                maxLength={20}
+                aria-describedby="username-help"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={pending}
+              />
+              <p id="username-help" className="text-xs text-muted-foreground">
+                3–20 letters, numbers or underscores. Shown with stories you
+                publish.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="onboard-email">Email</Label>
+              <Input
+                id="onboard-email"
+                autoComplete="email"
+                type="email"
+                required
+                maxLength={254}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={pending}
+              />
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={pending}
+              className="min-h-12 w-full font-bold"
+            >
+              {pending ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : (
+                <ArrowRight aria-hidden className="size-4" />
+              )}
+              {pending ? "Saving your profile…" : "Start my first story"}
+            </Button>
+          </form>
+          <p className="mt-5 text-sm text-muted-foreground">
+            You can explore optional wallet and Local Vault features later from
+            your profile.
           </p>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="onboard-email">Email</Label>
-          <Input
-            id="onboard-email"
-            autoComplete="email"
-            type="email"
-            required
-            maxLength={254}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={pending}
-          />
-        </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <Button type="submit" disabled={pending} className="w-full">
-          {pending ? (
-            <Loader2 aria-hidden className="size-4 animate-spin" />
-          ) : (
-            <ArrowRight aria-hidden className="size-4" />
-          )}
-          Start my first story
-        </Button>
-      </form>
-      <p className="mt-5 text-sm text-muted-foreground">
-        You can explore optional wallet and Local Vault features later from your
-        profile.
-      </p>
+      </div>
     </div>
   );
 }

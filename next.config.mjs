@@ -17,6 +17,10 @@ const nextConfig = {
   // Size limits are enforced in middleware (see middleware.ts) and
   // individual API routes via content-length checks.
   experimental: {
+    // Keep compilation isolated and reduce peak Webpack memory on free build runners.
+    // The custom resolver below otherwise opts Next out of its build worker.
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
     staleTimes: {
       dynamic: 0,
       static: 0,
