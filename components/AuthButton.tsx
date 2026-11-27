@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import { useDisconnect } from "wagmi";
 import { AuthModal } from "./AuthModal";
+import { authDestination, clearDestination, pendingDestination, rememberDestination } from "@/lib/auth/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,16 +39,22 @@ export function AuthButton() {
   const [authIntent, setAuthIntent] = useState<"login" | "signup">("login");
 
   const handleSignOut = async () => {
+    clearDestination();
     await signOut();
     disconnect();
   };
 
   // Redirect to onboarding page when needed (unless already there)
   useEffect(() => {
-    if (needsOnboarding && profile && pathname !== "/onboarding") {
-      router.push("/onboarding");
-    }
-  }, [needsOnboarding, profile, pathname, router]);
+    if (new URLSearchParams(window.location.search).has("auth_error")) { clearDestination(); return; }
+    const intent = pendingDestination();
+    const target = authDestination({ loading: isLoading, authenticated: !!profile, onboarding: needsOnboarding, pathname, intent });
+    if (!target) return;
+    if (target === "/onboarding") {
+      if (!intent && pathname !== "/" && pathname !== "/welcome" && pathname !== "/home") rememberDestination(pathname + window.location.search);
+    } else clearDestination();
+    if (target !== pathname) router.replace(target);
+  }, [needsOnboarding, profile, isLoading, pathname, router]);
 
   // Loading — skeleton prevents "Connect" flash after OAuth redirect
   if (isLoading) {

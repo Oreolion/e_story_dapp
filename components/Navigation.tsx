@@ -25,7 +25,7 @@ import { NotificationDropdown } from "./NotificationDropdown";
 import { LogoMark } from "./LogoMark";
 
 const workspace = [
-  { name: "Home", href: "/", icon: Home },
+  { name: "Home", href: "/home", icon: Home },
   { name: "Archive", href: "/library", icon: Archive },
   { name: "Create", href: "/record", icon: Mic },
   { name: "Discover", href: "/social", icon: Users },
@@ -46,7 +46,7 @@ export function Navigation() {
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex min-h-18 max-w-7xl flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-2 sm:flex-nowrap sm:px-6 lg:px-8">
           <Link
-            href="/"
+            href={profile ? "/home" : "/"}
             aria-label="eStories home"
             className="flex shrink-0 items-center gap-1"
           >

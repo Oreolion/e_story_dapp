@@ -15,14 +15,17 @@ import { Wallet, Loader2, X, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { LogoMark } from "./LogoMark";
 import { AuthBrandPanel } from "./auth/AuthBrandPanel";
+import { clearDestination, rememberDestination } from "@/lib/auth/navigation";
 export function AuthModal({
   isOpen,
   onClose,
   intent = "login",
+  returnTo,
 }: {
   isOpen: boolean;
   onClose: () => void;
   intent?: "login" | "signup";
+  returnTo?: string;
 }) {
   const { signInWithGoogle } = useAuth();
   const { openConnectModal } = useConnectModal();
@@ -46,8 +49,10 @@ export function AuthModal({
     setPending(true);
     setError("");
     try {
+      rememberDestination(returnTo ?? window.location.pathname + window.location.search);
       await signInWithGoogle();
     } catch {
+      clearDestination();
       setError("Google sign-in could not start. Please try again.");
     } finally {
       locked.current = false;
@@ -167,6 +172,7 @@ export function AuthModal({
               variant="outline"
               disabled={pending || !openConnectModal}
               onClick={() => {
+                rememberDestination(returnTo ?? window.location.pathname + window.location.search);
                 onClose();
                 openConnectModal?.();
               }}

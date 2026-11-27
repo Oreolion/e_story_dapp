@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useId } from "react";
 import Link from "next/link";
+import { StoryScene } from "@/components/landing/StoryScene";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/components/AuthProvider";
@@ -135,10 +136,12 @@ const steps = [
 
 function FAQItem({ question, answer }: { question: string; answer: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const panelId = useId();
   return (
     <div className="border-b border-gray-200 dark:border-gray-700 last:border-0">
       <button
         aria-expanded={isOpen}
+        aria-controls={panelId}
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between py-5 text-left"
       >
@@ -153,6 +156,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
       </button>
       {isOpen && (
         <motion.div
+          id={panelId}
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           transition={{ duration: 0.2 }}
@@ -167,7 +171,11 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
   );
 }
 
-export default function HomePage() {
+export default function HomePage({
+  publicWelcome = false,
+}: {
+  publicWelcome?: boolean;
+}) {
   const { profile } = useAuth();
   const isConnected = Boolean(profile);
   const router = useRouter();
@@ -207,7 +215,10 @@ export default function HomePage() {
 
       setWaitlistSubmitted(true);
       setEmail("");
-      trackLead({ content_name: "Mobile App Waitlist", content_category: "pre_launch" });
+      trackLead({
+        content_name: "Mobile App Waitlist",
+        content_category: "pre_launch",
+      });
     } catch {
       setWaitlistError("Network error. Please check your connection.");
     } finally {
@@ -216,216 +227,160 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-24 md:space-y-32">
-      {/* ============================================================
-          HERO SECTION
-          Job: Stop the scroll. Create emotional resonance. Get the click.
-          ============================================================ */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="text-center space-y-8 pt-8 md:pt-20"
-      >
-        <div className="space-y-6 max-w-3xl mx-auto">
-          {/* Trust signals — benefit-oriented, not tech-oriented */}
-          <div className="flex flex-wrap justify-center gap-3">
-            <span className="badge-subtle inline-flex items-center gap-2">
-              <Lock className="w-3.5 h-3.5" />
+    <div className="landing-page space-y-24 md:space-y-32">
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="min-w-0">
+          <p className="landing-kicker">
+            A LIFE IS MADE OF STORIES. KEEP YOURS.
+          </p>
+          <h1 id="landing-title">
+            Speak your story,
+            <br />
+            <span>see your patterns,</span>
+            <br />
+            <em>own and preserve your legacy.</em>
+          </h1>
+          <p className="landing-intro">
+            Your voice, your meaning, your story. Write about anything: personal
+            stories, history, culture, geopolitics. Record a monologue, write
+            freely, or build a story through a guided interview.
+          </p>
+          <div className="landing-actions">
+            <Button
+              asChild
+              size="lg"
+              className="bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] text-white"
+            >
+              <Link href="/record">
+                {isConnected ? "Record a Story" : "Start Writing — Free"}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <a href="#how-it-works">See How It Works</a>
+            </Button>
+          </div>
+          <div className="landing-assurance">
+            <span>
+              <Lock size={13} />
               Private by default
             </span>
-            <span className="badge-subtle inline-flex items-center gap-2">
-              <ShieldCheck className="w-3.5 h-3.5" />
+            <span>
+              <ShieldCheck size={13} />
               Your data, your ownership
             </span>
           </div>
-
-          {/* Main heading — speak, see patterns, own legacy */}
-          <h1 className="font-semibold tracking-tight text-4xl md:text-5xl lg:text-5xl leading-[1.1]">
-            <span className="text-foreground">Speak your story, see your patterns,</span>
-            <br />
-            <span className="text-gradient-cosmic">own and preserve your legacy.</span>
-          </h1>
-
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Your voice, your meaning, your story. Write about anything:
-            personal stories, history, culture, geopolitics. Record a monologue,
-            write freely, or build a story through a guided interview.
-          </p>
         </div>
-
-        {/* CTAs — Google OAuth primary, Explore secondary */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-          {isConnected ? (
-            <Button
-              size="lg"
-              onClick={() => router.push("/record")}
-              className="bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))] text-white text-lg px-8 h-12"
-            >
-              <Mic className="w-5 h-5 mr-2" />
-              Record a Story
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              onClick={() => router.push("/record")}
-              className="bg-linear-to-r from-[hsl(var(--memory-600))] to-[hsl(var(--insight-600))] hover:from-[hsl(var(--memory-500))] hover:to-[hsl(var(--insight-500))] text-white text-lg px-8 h-12"
-            >
-              Start Writing — Free
-            </Button>
-          )}
-
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => {
-              document
-                .getElementById("how-it-works")
-                ?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className="text-lg px-8 h-12 border-[hsl(var(--memory-500)/0.2)] hover:border-[hsl(var(--memory-500)/0.4)] hover:bg-[hsl(var(--memory-500)/0.05)]"
-          >
-            See How It Works
-          </Button>
-        </div>
-      </motion.section>
-
-      {profile && (
+        <StoryScene />
+      </section>
+      {publicWelcome && profile && (
         <section className="rounded-xl border bg-card p-6 sm:p-8">
-          <h2 className="text-2xl font-semibold">Welcome back{profile.name ? ', ' + profile.name : ''}</h2>
-          <p className="mt-2 text-muted-foreground">Ready to capture your next story?</p>
-          <nav aria-label="Your workspace shortcuts" className="mt-5 flex flex-wrap gap-3">
-            <Button asChild><Link href="/record">Record a Story</Link></Button>
-            <Button asChild variant="outline"><Link href="/library">Open your archive</Link></Button>
-            <Button asChild variant="outline"><Link href="/tracker">Your tracker</Link></Button>
-            <Button asChild variant="outline"><Link href="/profile">Your profile</Link></Button>
+          <h2 className="text-2xl font-semibold">
+            Welcome back{profile.name ? ", " + profile.name : ""}
+          </h2>
+          <p className="mt-2 text-muted-foreground">
+            Ready to capture your next story?
+          </p>
+          <nav
+            aria-label="Your workspace shortcuts"
+            className="mt-5 flex flex-wrap gap-3"
+          >
+            <Button asChild>
+              <Link href="/record">Record a Story</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/library">Open your archive</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/tracker">Your tracker</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/profile">Your profile</Link>
+            </Button>
           </nav>
         </section>
       )}
 
-      {/* ============================================================
-          HOW IT WORKS — 3 steps, clarity over cleverness
-          ============================================================ */}
-      <section id="how-it-works" className="space-y-12 scroll-mt-20">
-        <div className="text-center space-y-4">
-          <h2 className="font-semibold tracking-tight text-3xl md:text-4xl text-foreground">
+      <section id="how-it-works" className="scroll-mt-24">
+        <p className="landing-chapter-rule">01 / FROM A MOMENT TO A CHAPTER</p>
+        <div className="landing-section-heading mt-6">
+          <h2>
             How <span className="text-gradient-insight">eStories</span> works
           </h2>
-          <p className="text-muted-foreground max-w-lg mx-auto">
-            Speak or write. Reflect. Keep what matters.
-          </p>
+          <p>Speak or write. Reflect. Keep what matters.</p>
         </div>
-
-        <div className="relative">
-          {/* Connection line */}
-          <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-px bg-[hsl(var(--memory-500)/0.2)]" />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            {steps.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.step} className="text-center">
-                  <div className="relative inline-flex flex-col items-center">
-                    <div className="w-10 h-10 rounded-full bg-[hsl(var(--void-surface))] border border-[hsl(var(--memory-500)/0.3)] flex items-center justify-center text-sm font-medium text-[hsl(var(--memory-500))] mb-4">
-                      {item.step}
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-[hsl(var(--memory-500)/0.1)] flex items-center justify-center mb-4">
-                      <Icon className="w-6 h-6 text-[hsl(var(--memory-500))]" />
-                    </div>
-                    <h3 className="font-semibold text-foreground text-lg mb-2">
-                      {item.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed max-w-[250px]">
-                      {item.description}
-                    </p>
-                  </div>
+        <div className="landing-steps">
+          {steps.map((item) => {
+            const Icon = item.icon;
+            return (
+              <article className="landing-step" key={item.step}>
+                <div className="landing-step-index">
+                  <span>0{item.step}</span>
+                  <Icon size={23} strokeWidth={1.4} />
                 </div>
-              );
-            })}
-          </div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+                <div className="landing-step-art" aria-hidden="true">
+                  {
+                    [
+                      "?I want to remember this.?",
+                      "A thought becomes a thread.",
+                      "A chapter, on your terms.",
+                    ][item.step - 1]
+                  }
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
-
-      {/* ============================================================
-          FEATURES — human benefits, not tech specs
-          ============================================================ */}
-      <section className="space-y-12">
-        <div className="text-center space-y-4">
-          <h2 className="font-semibold tracking-tight text-3xl md:text-4xl text-foreground">
+      <section>
+        <p className="landing-chapter-rule">
+          02 / ROOM FOR YOUR WHOLE PERSPECTIVE
+        </p>
+        <div className="landing-section-heading mt-6">
+          <h2>
             Built for people who{" "}
             <span className="text-gradient-memory">think deeply</span>
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            A storytelling experience designed for reflection and craft, not engagement
-            metrics. Write personal stories, history, culture, geopolitics — anything that matters to you.
+          <p>
+            A storytelling experience designed for reflection and craft, not
+            engagement metrics. Write personal stories, history, culture,
+            geopolitics — anything that matters to you.
           </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <Card
-                key={feature.title}
-                className="card-elevated hover-shadow-subtle"
-              >
-                <CardHeader>
-                  <div className="w-10 h-10 rounded-lg bg-[hsl(var(--memory-500)/0.1)] flex items-center justify-center mb-3">
-                    <Icon className="w-5 h-5 text-[hsl(var(--memory-500))]" />
-                  </div>
-                  <CardTitle role="heading" aria-level={3} className="text-lg">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="landing-feature-list">
+          {features.map((feature, index) => (
+            <article className="landing-feature" key={feature.title}>
+              <span aria-hidden="true">0{index + 1}</span>
+              <div>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
-
-      {/* ============================================================
-          WHY NOW — the cultural moment (NEW section)
-          ============================================================ */}
-      <section className="space-y-12">
-        <div className="text-center space-y-4">
-          <h2 className="font-semibold tracking-tight text-3xl md:text-4xl text-foreground">
+      <section className="landing-reasons">
+        <div className="landing-section-heading">
+          <h2>
             Why your voice matters{" "}
             <span className="text-gradient-story">more than ever</span>
           </h2>
+          <p>
+            The details only you can tell. The moments only you remember. A
+            record in your own words.
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {whyNowCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <Card
-                key={card.statLabel}
-                className="card-elevated hover-shadow-subtle"
-              >
-                <CardContent className="pt-6 space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[hsl(var(--story-500)/0.1)] flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-[hsl(var(--story-500))]" />
-                    </div>
-                    <div>
-                      <span className="text-2xl font-semibold text-foreground">
-                        {card.stat}
-                      </span>
-                      <span className="text-sm text-muted-foreground ml-1.5">
-                        {card.statLabel}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-muted-foreground leading-relaxed text-[15px]">
-                    {card.description}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="landing-reason-grid">
+          {whyNowCards.map((card) => (
+            <article key={card.statLabel}>
+              <h3>
+                <em>{card.stat}</em> {card.statLabel}
+              </h3>
+              <p>{card.description}</p>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -445,14 +400,14 @@ export default function HomePage() {
             <Quote className="w-6 h-6 text-[hsl(var(--memory-500)/0.3)]" />
             <p className="text-muted-foreground italic leading-relaxed text-lg">
               &ldquo;I built eStories because I needed it — a tool with less
-              friction that could also help me improve over time. Other platforms
-              force you to type, which makes storytelling and writing harder. My most
-              important thoughts ended up trapped on services I didn&apos;t control.
-              Your stories and your voice shouldn&apos;t belong to a company — they
-              should belong to you. We are living through one of the most important
-              periods in human history. People should write more, care more about
-              their stories, and take ownership of how their histories are
-              written.&rdquo;
+              friction that could also help me improve over time. Other
+              platforms force you to type, which makes storytelling and writing
+              harder. My most important thoughts ended up trapped on services I
+              didn&apos;t control. Your stories and your voice shouldn&apos;t
+              belong to a company — they should belong to you. We are living
+              through one of the most important periods in human history. People
+              should write more, care more about their stories, and take
+              ownership of how their histories are written.&rdquo;
             </p>
             <div className="flex items-center gap-3 pt-4 border-t border-[hsl(var(--memory-500)/0.1)]">
               <div className="w-10 h-10 rounded-full bg-[hsl(var(--memory-500)/0.15)] flex items-center justify-center text-[hsl(var(--memory-500))] font-medium text-sm">
@@ -514,16 +469,20 @@ export default function HomePage() {
       <section id="pricing" className="space-y-12 scroll-mt-20">
         <div className="text-center space-y-4">
           <h2 className="font-semibold tracking-tight text-3xl md:text-4xl text-foreground">
-            Simple,{" "}
-            <span className="text-gradient-cosmic">affordable</span> pricing
+            Simple, <span className="text-gradient-cosmic">affordable</span>{" "}
+            pricing
           </h2>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Start with a free account. Compare the plans for writing,
-            organizing your archive and sharing your work.
+            Start with a free account. Compare the plans for writing, organizing
+            your archive and sharing your work.
           </p>
         </div>
 
-        <p className="mx-auto max-w-2xl text-center text-sm text-muted-foreground">AI features are currently unavailable in production. Writing, editing and saving remain available. AI availability and usage limits apply to every plan; onchain verification is coming soon.</p>
+        <p className="mx-auto max-w-2xl text-center text-sm text-muted-foreground">
+          AI features are currently unavailable in production. Writing, editing
+          and saving remain available. AI availability and usage limits apply to
+          every plan; onchain verification is coming soon.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {/* Free Plan */}
           <Card className="card-elevated flex flex-col">
@@ -531,7 +490,9 @@ export default function HomePage() {
               <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--memory-500)/0.1)] rounded-full flex items-center justify-center">
                 <Mic className="w-6 h-6 text-[hsl(var(--memory-500))]" />
               </div>
-              <CardTitle role="heading" aria-level={3}>Free</CardTitle>
+              <CardTitle role="heading" aria-level={3}>
+                Free
+              </CardTitle>
               <div className="mt-2">
                 <span className="text-4xl font-bold text-foreground">$0</span>
                 <span className="text-muted-foreground ml-1">forever</span>
@@ -578,9 +539,13 @@ export default function HomePage() {
               <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--story-500)/0.1)] rounded-full flex items-center justify-center">
                 <Sparkles className="w-6 h-6 text-[hsl(var(--story-500))]" />
               </div>
-              <CardTitle role="heading" aria-level={3}>Storyteller</CardTitle>
+              <CardTitle role="heading" aria-level={3}>
+                Storyteller
+              </CardTitle>
               <div className="mt-2">
-                <span className="text-4xl font-bold text-foreground">$2.99</span>
+                <span className="text-4xl font-bold text-foreground">
+                  $2.99
+                </span>
                 <span className="text-muted-foreground ml-1">/month</span>
               </div>
               <CardDescription className="mt-2">
@@ -620,9 +585,13 @@ export default function HomePage() {
               <div className="w-12 h-12 mx-auto mb-3 bg-[hsl(var(--insight-500)/0.1)] rounded-full flex items-center justify-center">
                 <Crown className="w-6 h-6 text-[hsl(var(--insight-500))]" />
               </div>
-              <CardTitle role="heading" aria-level={3}>Creator</CardTitle>
+              <CardTitle role="heading" aria-level={3}>
+                Creator
+              </CardTitle>
               <div className="mt-2">
-                <span className="text-4xl font-bold text-foreground">$7.99</span>
+                <span className="text-4xl font-bold text-foreground">
+                  $7.99
+                </span>
                 <span className="text-muted-foreground ml-1">/month</span>
               </div>
               <CardDescription className="mt-2">
@@ -777,7 +746,10 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <form onSubmit={handleWaitlistSubmit} className="flex flex-col sm:flex-row gap-2">
+                <form
+                  onSubmit={handleWaitlistSubmit}
+                  className="flex flex-col sm:flex-row gap-2"
+                >
                   <input
                     type="email"
                     aria-label="Email address for mobile launch updates"

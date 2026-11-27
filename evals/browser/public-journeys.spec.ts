@@ -97,6 +97,7 @@ for (const width of [320, 390, 768, 1440]) {
       ),
     ).toBe(true);
     await page.getByRole("button", { name: "Essential only" }).click();
+    if ([390, 1440].includes(width)) await page.screenshot({ path: `output/playwright/review/${test.info().project.name}-${width}-landing.png` });
     const signup = page.getByRole("button", { name: "Sign up", exact: true });
     await expect(signup).toBeVisible();
     await expect(

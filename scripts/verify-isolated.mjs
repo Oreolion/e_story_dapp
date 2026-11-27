@@ -185,7 +185,7 @@ if (mode === '--build' && !process.exitCode) {
     }
     if (!ready) throw new Error('The isolated production server did not become ready');
     environment.EVAL_BASE_URL = 'http://127.0.0.1:3001';
-    if (!(await run(['browser-tests', ['node_modules/@playwright/test/cli.js', 'test', '--config', 'evals/playwright.config.ts'], 5 * minute]))) process.exitCode = 1;
+    if (!(await run(['browser-tests', ['node_modules/@playwright/test/cli.js', 'test', '--config', 'evals/playwright.config.ts'], 12 * minute]))) process.exitCode = 1;
   } catch (error) {
     fs.writeFileSync(path.join(directory, 'browser-start-failure.json'), JSON.stringify({ sourceSha256, error: error.message }));
     console.error(error.message);

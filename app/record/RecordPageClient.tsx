@@ -1,4 +1,5 @@
 "use client";
+import { RecorderControl } from "@/components/record/RecorderControl";
 import { GuidedInterview } from "@/components/story/GuidedInterview";
 import { AuthModal } from "@/components/AuthModal";
 import { z } from "zod";
@@ -128,6 +129,7 @@ function RecordStudio() {
     "monologue",
   );
   const [showLogin, setShowLogin] = useState(false);
+  const [requestingMicrophone, setRequestingMicrophone] = useState(false);
   // State Management
   const [isRecording, setIsRecording] = useState(false);
   const [transcribedText, setTranscribedText] = useState("");
@@ -152,7 +154,7 @@ function RecordStudio() {
   const [preEnhanceText, setPreEnhanceText] = useState<string | null>(null);
 
   // Derived: anything in-flight blocks the mic button
-  const isBusy = isTranscribing || isEnhancing || isSaving;
+  const isBusy = isTranscribing || isEnhancing || isSaving || requestingMicrophone;
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -262,6 +264,7 @@ function RecordStudio() {
   const startRecording = async () => {
     if (startingRecordingRef.current || isRecording || isBusy) return;
     startingRecordingRef.current = true;
+    setRequestingMicrophone(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -305,6 +308,7 @@ function RecordStudio() {
       toast.error("Failed to access microphone.");
     } finally {
       startingRecordingRef.current = false;
+      if (mountedRef.current) setRequestingMicrophone(false);
     }
   };
 
@@ -664,7 +668,7 @@ function RecordStudio() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+    <div className="min-w-0 max-w-4xl mx-auto space-y-8 pb-20">
       <div className="text-center space-y-4">
         <h1 className="font-display text-3xl md:text-4xl text-foreground">
           Record Your <span className="text-primary">Story</span>
@@ -676,7 +680,7 @@ function RecordStudio() {
 
       <fieldset
         className="grid sm:grid-cols-2 gap-3"
-        disabled={isRecording || isBusy}
+        disabled={isRecording || isBusy || requestingMicrophone}
       >
         <legend className="text-sm font-medium mb-3">
           How would you like to tell it?
@@ -742,19 +746,7 @@ function RecordStudio() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <Button
-            size="lg"
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={isBusy}
-            className={isRecording ? "bg-destructive text-white" : ""}
-          >
-            {isRecording ? (
-              <Square aria-hidden className="size-5" />
-            ) : (
-              <Mic aria-hidden className="size-5" />
-            )}
-            {isRecording ? "Stop recording" : "Start recording"}
-          </Button>
+          <RecorderControl recording={isRecording} requesting={requestingMicrophone} busy={isBusy} onToggle={isRecording ? stopRecording : startRecording} />
           <p role="status" className="text-sm text-muted-foreground">
             {isTranscribing
               ? "Preparing your transcript..."

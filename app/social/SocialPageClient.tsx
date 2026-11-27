@@ -1,25 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "../../components/Provider";
 import { useAuth } from "../../components/AuthProvider";
 import { useBackgroundMode } from "@/contexts/BackgroundContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import {
-  TrendingUp,
-  Users,
-  Star,
-  BookOpen,
-  Zap,
-  Search,
-} from "lucide-react";
+import { Users, BookOpen, Search } from "lucide-react";
 import { BrandedLoader } from "@/components/ui/branded-loader";
 import { toast } from "react-hot-toast";
 import { StoryCard } from "../../components/StoryCard";
@@ -42,58 +33,43 @@ interface AuthorProfile {
   isFollowing: boolean;
 }
 
-export interface FeaturedWriterType {
-  name: string;
-  username: string;
-  avatar: string;
-  followers: number;
-  stories: number;
-  speciality: string;
-}
-
-// Mock data for sidebar (keep as requested)
-const featuredWriters: FeaturedWriterType[] = [
-  {
-    name: "David Kim",
-    username: "@davidk",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=david",
-    followers: 2100,
-    stories: 45,
-    speciality: "Life Philosophy",
-  },
-  {
-    name: "Anna Thompson",
-    username: "@annat",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=anna",
-    followers: 1800,
-    stories: 38,
-    speciality: "Travel Adventures",
-  },
-  {
-    name: "James Wilson",
-    username: "@jamesw",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=james",
-    followers: 1450,
-    stories: 52,
-    speciality: "Tech Stories",
-  },
-];
-
-export default function SocialPage() {
+export default function SocialPage({ home = false }: { home?: boolean }) {
   const { isConnected } = useApp();
   const { address } = useAccount();
-  const { getAccessToken, isLoading: isAuthLoading } = useAuth();
+  const { profile, getAccessToken, isLoading: isAuthLoading } = useAuth();
+  const viewerKey = profile?.id ?? "anonymous";
+  const pathname = usePathname();
+  const router = useRouter();
+  const params = useSearchParams();
   const qc = useQueryClient();
 
   // Set background mode for this page
   useBackgroundMode("social");
 
   // State
-  const [activeTab, setActiveTab] = useState("feed");
+  const activeTab = ["feed", "trending", "following"].includes(
+    params.get("tab") ?? "",
+  )
+    ? params.get("tab")!
+    : "feed";
+  const setActiveTab = (tab: string) =>
+    router.replace(`${pathname}?tab=${tab}`, { scroll: false });
   const [unlockedStories, setUnlockedStories] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  const filter = `${viewerKey}:${activeTab}:${search}`;
+  const [paging, setPaging] = useState<{
+    filter: string;
+    cursors: (string | null)[];
+  }>({ filter: "", cursors: [null] });
+  const cursors = paging.filter === filter ? paging.cursors : [null];
+  const cursor = cursors[cursors.length - 1];
 
   // Hooks
   const eStoryToken = useEStoryToken();
@@ -104,13 +80,29 @@ export default function SocialPage() {
   // ==============================
 
   // 1. Fetch stories feed
-  const { data: feedData, isLoading: isFeedLoading } = useQuery({
-    queryKey: ["stories", "feed"],
+  const {
+    data: feedData,
+    isLoading: isFeedLoading,
+    isError: feedError,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ["stories", "feed", viewerKey, activeTab, search, cursor],
     queryFn: async () => {
       const token = await getAccessToken();
-      return apiGet<{ stories: any[] }>(token, "/api/stories/feed");
+      const query = new URLSearchParams({
+        pagination: "cursor",
+        limit: "20",
+        scope: activeTab === "feed" ? "latest" : activeTab,
+        q: search,
+      });
+      if (cursor) query.set("cursor", cursor);
+      return apiGet<{ stories: any[]; nextCursor: string | null }>(
+        token,
+        `/api/stories/feed?${query}`,
+      );
     },
-    enabled: !isAuthLoading,
+    enabled: !isAuthLoading && (activeTab !== "following" || !!profile),
     staleTime: 30_000,
   });
 
@@ -119,41 +111,40 @@ export default function SocialPage() {
   // 2. Batch follow status (dependent on stories)
   const authorIds = useMemo(
     () =>
-      [...new Set(rawStories.map((s) => s.author?.id).filter(Boolean))] as string[],
-    [rawStories]
+      [
+        ...new Set(rawStories.map((s) => s.author?.id).filter(Boolean)),
+      ] as string[],
+    [rawStories],
   );
 
   const { data: followData } = useQuery({
-    queryKey: ["social", "follow", "batch", authorIds],
+    queryKey: ["social", "follow", "batch", viewerKey, authorIds],
     queryFn: async () => {
       if (authorIds.length === 0) return { following: {} };
       const token = await getAccessToken();
       return apiGet<{ following: Record<string, boolean> }>(
         token,
-        `/api/social/follow?followed_ids=${authorIds.join(",")}`
+        `/api/social/follow?followed_ids=${authorIds.join(",")}`,
       );
     },
-    enabled: authorIds.length > 0 && !isAuthLoading,
+    enabled: authorIds.length > 0 && !isAuthLoading && !!profile,
     staleTime: 10_000,
   });
 
   // 3. Batch like status (dependent on stories)
-  const storyIds = useMemo(
-    () => rawStories.map((s) => s.id),
-    [rawStories]
-  );
+  const storyIds = useMemo(() => rawStories.map((s) => s.id), [rawStories]);
 
   const { data: likeData } = useQuery({
-    queryKey: ["social", "like", "batch", storyIds],
+    queryKey: ["social", "like", "batch", viewerKey, storyIds],
     queryFn: async () => {
       if (storyIds.length === 0) return { liked: {} };
       const token = await getAccessToken();
       return apiGet<{ liked: Record<string, boolean> }>(
         token,
-        `/api/social/like/status?story_ids=${storyIds.join(",")}`
+        `/api/social/like/status?story_ids=${storyIds.join(",")}`,
       );
     },
-    enabled: storyIds.length > 0 && !isAuthLoading,
+    enabled: storyIds.length > 0 && !isAuthLoading && !!profile,
     staleTime: 10_000,
   });
 
@@ -168,13 +159,11 @@ export default function SocialPage() {
         const author: AuthorProfile = {
           id: s.author.id,
           name: s.author.name || "Anonymous Writer",
-          username:
-            s.author.username ||
-            `@user${s.author.wallet_address?.slice(0, 4)}`,
+          username: s.author.username || "writer",
           avatar: s.author.avatar,
           wallet_address: s.author.wallet_address,
           followers: s.author.followers_count ?? 0,
-          badges: s.author.badges ?? ["Storyteller"],
+          badges: s.author.badges ?? [],
           isFollowing: followingMap[s.author.id] || false,
         };
 
@@ -194,7 +183,7 @@ export default function SocialPage() {
           hasAudio: s.has_audio ?? false,
           audio_url: s.audio_url,
           mood: s.mood || "neutral",
-          tags: s.tags && s.tags.length > 0 ? s.tags : ["life", "story"],
+          tags: s.tags ?? [],
           paywallAmount: s.paywall_amount ?? 0,
           is_public: true,
           story_date: s.story_date || s.created_at,
@@ -223,24 +212,28 @@ export default function SocialPage() {
         "social",
         "like",
         "batch",
+        viewerKey,
         storyIds,
       ]);
 
-      qc.setQueryData(["social", "like", "batch", storyIds], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          liked: { ...old.liked, [storyId]: !old.liked?.[storyId] },
-        };
-      });
+      qc.setQueryData(
+        ["social", "like", "batch", viewerKey, storyIds],
+        (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            liked: { ...old.liked, [storyId]: !old.liked?.[storyId] },
+          };
+        },
+      );
 
       return { previous };
     },
     onError: (_err, _storyId, context) => {
       if (context?.previous) {
         qc.setQueryData(
-          ["social", "like", "batch", storyIds],
-          context.previous
+          ["social", "like", "batch", viewerKey, storyIds],
+          context.previous,
         );
       }
       toast.error("Like action failed");
@@ -263,26 +256,29 @@ export default function SocialPage() {
       await qc.cancelQueries({ queryKey: ["social", "follow", "batch"] });
       const previous = qc.getQueryData<{
         following: Record<string, boolean>;
-      }>(["social", "follow", "batch", authorIds]);
+      }>(["social", "follow", "batch", viewerKey, authorIds]);
 
-      qc.setQueryData(["social", "follow", "batch", authorIds], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          following: {
-            ...old.following,
-            [authorId]: !old.following?.[authorId],
-          },
-        };
-      });
+      qc.setQueryData(
+        ["social", "follow", "batch", viewerKey, authorIds],
+        (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            following: {
+              ...old.following,
+              [authorId]: !old.following?.[authorId],
+            },
+          };
+        },
+      );
 
       return { previous };
     },
     onError: (_err, _authorId, context) => {
       if (context?.previous) {
         qc.setQueryData(
-          ["social", "follow", "batch", authorIds],
-          context.previous
+          ["social", "follow", "batch", viewerKey, authorIds],
+          context.previous,
         );
       }
       toast.error("Follow action failed");
@@ -324,11 +320,7 @@ export default function SocialPage() {
     }
   };
 
-  const handleLike = (storyNumericId: string) => {
-    const story = stories.find((s) => s.numeric_id === storyNumericId);
-    if (!story) return;
-    likeMutation.mutate(String(story.id));
-  };
+  const handleLike = (storyId: string) => likeMutation.mutate(storyId);
 
   const handleFollow = (authorId: string) => {
     if (!authorId) return;
@@ -346,17 +338,7 @@ export default function SocialPage() {
   };
 
   // Filter Logic
-  const filteredStories = stories.filter((story) => {
-    const matchesSearch =
-      story.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      story.content.toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (activeTab === "trending") return matchesSearch && story.likes > 5;
-    if (activeTab === "following")
-      return matchesSearch && story.author_wallet?.isFollowing;
-
-    return matchesSearch;
-  });
+  const filteredStories = stories;
 
   // --- Render ---
 
@@ -371,7 +353,7 @@ export default function SocialPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="min-w-0 max-w-6xl mx-auto space-y-8 pb-20">
       {/* Header */}
       <div className="text-center space-y-4">
         <motion.div
@@ -382,68 +364,53 @@ export default function SocialPage() {
           <Users className="w-8 h-8 text-white" />
         </motion.div>
         <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
-          Discover <span className="text-gradient-memory">Stories</span>
+          {home ? (
+            <>Your next chapter starts here.</>
+          ) : (
+            <>
+              Discover <span className="text-gradient-memory">Stories</span>
+            </>
+          )}
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-          Explore narratives from storytellers preserving what matters
+          {home
+            ? "Read a new perspective. Revisit your archive. Put a little of your day into words."
+            : "Explore narratives from storytellers preserving what matters"}
         </p>
       </div>
 
-      {/* Stats Bar */}
-      <Card role="region" aria-label="Community statistics" className="card-elevated bg-[hsl(var(--memory-500)/0.05)] border-[hsl(var(--memory-500)/0.2)]">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="text-center space-y-2">
-              <BookOpen className="w-6 h-6 mx-auto text-[hsl(var(--memory-500))]" />
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {stories.length}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Published Stories
-              </div>
-            </div>
-            <div className="text-center space-y-2">
-              <Users className="w-6 h-6 mx-auto text-[hsl(var(--insight-500))]" />
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {new Set(stories.map((s) => s.author?.id).filter(Boolean)).size}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Active Writers
-              </div>
-            </div>
-            <div className="text-center space-y-2">
-              <TrendingUp className="w-6 h-6 mx-auto text-[hsl(var(--growth-500))]" />
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                #mindful
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Trending
-              </div>
-            </div>
-            <div className="text-center space-y-2">
-              <Star className="w-6 h-6 mx-auto text-[hsl(var(--story-500))]" />
-              <div className="text-xl font-bold text-gray-900 dark:text-white">
-                {isConnected && eStoryToken?.balance !== undefined
-                  ? `${Number(eStoryToken.balance / BigInt(1e18)).toFixed(0)}`
-                  : "0"}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Your $ESTORY
-              </div>
-            </div>
+      {home && (
+        <div className="rounded-2xl border border-l-[3px] border-l-[hsl(var(--story-500))] bg-card p-6 flex flex-wrap items-center justify-between gap-6">
+          <div className="min-w-0">
+            <p className="eyebrow">A space for your perspective</p>
+            <p className="mt-2 text-lg font-medium break-words">
+              {profile?.name
+                ? `Welcome back, ${profile.name}.`
+                : "What would you like to remember?"}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/record">Create a story</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/library">Open your archive</Link>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left/Center: Story Feed */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 lg:col-span-2 space-y-6">
           {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="Search stories or tags..."
+              aria-label="Search stories"
+              maxLength={80}
+              placeholder="Search titles or story text..."
               className="pl-10 bg-white/50 dark:bg-gray-800/50"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -460,138 +427,150 @@ export default function SocialPage() {
 
             {/* Feed Content */}
             <div className="space-y-6">
-              <AnimatePresence mode="popLayout">
-                {filteredStories.length > 0 ? (
-                  filteredStories.map((story, index) => (
-                    <motion.div
-                      key={story.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <Link href={`/story/${story.id}`} passHref>
+              {feedError ? (
+                <div role="alert" className="rounded-xl border p-6">
+                  <h2 className="font-semibold">
+                    Stories are temporarily unavailable
+                  </h2>
+                  <p className="my-3 text-muted-foreground">
+                    Try loading the feed again. Your archive is available
+                    separately.
+                  </p>
+                  <Button variant="outline" onClick={() => refetch()}>
+                    Retry feed
+                  </Button>
+                </div>
+              ) : activeTab === "following" && !profile ? (
+                <p className="rounded-xl border p-6">
+                  Log in to see stories from people you follow.
+                </p>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {filteredStories.length > 0 ? (
+                    filteredStories.map((story, index) => (
+                      <motion.div
+                        key={story.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{
+                          duration: 0.18,
+                          delay: Math.min(index, 3) * 0.03,
+                        }}
+                      >
                         <StoryCard
+                          linkTitle
                           story={{
                             ...story,
                             isPaid:
                               story.isPaid ||
                               unlockedStories.has(String(story.id)),
                           }}
-                          onFollow={() =>
-                            handleFollow(story.author?.id || "")
-                          }
+                          onFollow={() => handleFollow(story.author?.id || "")}
                           onShare={() => handleShare(String(story.id))}
-                          onLike={() => handleLike(String(story.numeric_id))}
+                          onLike={() => handleLike(String(story.id))}
                           onUnlock={() => handleUnlock(story.numeric_id)}
                         />
-                      </Link>
-                    </motion.div>
-                  ))
-                ) : (
-                  <div className="text-center py-16 text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <h3 className="text-xl font-semibold">No stories found</h3>
-                    <p>Be the first to share your story!</p>
-                  </div>
-                )}
-              </AnimatePresence>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="text-center py-16 text-gray-500">
+                      <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <h3 className="text-xl font-semibold">
+                        No stories found
+                      </h3>
+                      <p>
+                        {search
+                          ? "Try different words from the title or story."
+                          : activeTab === "following"
+                            ? "Follow a writer in Discover to find their next story here."
+                            : "A quiet moment is a good place to begin."}
+                      </p>
+                      <Button asChild variant="outline" className="mt-4">
+                        <Link
+                          href={
+                            activeTab === "following" ? "/social" : "/record"
+                          }
+                        >
+                          {activeTab === "following"
+                            ? "Discover writers"
+                            : "Create a story"}
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </AnimatePresence>
+              )}
             </div>
           </Tabs>
+          <nav
+            aria-label="Feed pages"
+            className="flex flex-wrap items-center justify-between gap-3"
+          >
+            <Button
+              variant="outline"
+              disabled={cursors.length < 2 || isFetching}
+              onClick={() =>
+                setPaging({ filter, cursors: cursors.slice(0, -1) })
+              }
+            >
+              Previous stories
+            </Button>
+            <span className="text-xs text-muted-foreground" role="status">
+              Page {cursors.length}
+              {isFetching ? " - Loading..." : ""}
+            </span>
+            <Button
+              variant="outline"
+              disabled={!feedData?.nextCursor || isFetching || feedError}
+              onClick={() =>
+                setPaging({
+                  filter,
+                  cursors: [...cursors, feedData!.nextCursor],
+                })
+              }
+            >
+              Next stories
+            </Button>
+          </nav>
         </div>
 
-        {/* Right: Sidebar */}
-        <div className="space-y-6">
-          {/* Featured Writers */}
-          <Card className="card-elevated sticky top-24">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Star className="w-5 h-5 text-[hsl(var(--story-500))]" />
-                <span>Featured Writers</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {featuredWriters.map((writer) => (
-                <div
-                  key={writer.username}
-                  className="flex items-center justify-between group"
-                >
-                  <div className="flex items-center space-x-3">
-                    <Avatar className="w-10 h-10 border-2 border-transparent group-hover:border-[hsl(var(--memory-400))] transition-all">
-                      <AvatarImage src={writer.avatar} alt={writer.name || "Writer"} />
-                      <AvatarFallback>{writer.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="font-medium text-sm">{writer.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {writer.speciality}
-                      </div>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="outline" className="h-8 text-xs">
-                    Follow
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Trending Topics */}
-          <Card className="card-elevated">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Zap className="w-5 h-5 text-[hsl(var(--growth-500))]" />
-                <span>Trending Topics</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "#mindfulness",
-                  "#tech",
-                  "#travel",
-                  "#wellness",
-                  "#crypto",
-                  "#dreams",
-                  "#nature",
-                  "#future",
-                ].map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-[hsl(var(--memory-500)/0.15)] transition-colors"
-                    onClick={() => setSearchQuery(tag)}
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Community Impact */}
-          <Card className="card-elevated bg-[hsl(var(--growth-500)/0.05)] border-[hsl(var(--growth-500)/0.2)]">
-            <CardHeader>
-              <CardTitle className="text-lg text-gradient-growth">Community Impact</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Total Paid
-                </span>
-                <span className="font-bold text-[hsl(var(--growth-500))]">
-                  45.2K $ESTORY
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Shared
-                </span>
-                <span className="font-bold text-[hsl(var(--growth-600))]">12.5K Stories</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <aside
+          className="min-w-0 space-y-6"
+          aria-label="Your storytelling space"
+        >
+          <div className="rounded-2xl border bg-card p-6 lg:sticky lg:top-28">
+            <p className="eyebrow">There is a story in the everyday</p>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
+              Keep a moment. Find a thread.
+            </h2>
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+              A conversation that stayed with you. A place you remember.
+              Something you see differently now.
+            </p>
+            <Button asChild className="mt-6 w-full">
+              <Link href="/record">Start with your own words</Link>
+            </Button>
+            <div className="mt-6 border-t pt-4 text-sm space-y-4">
+              <Link
+                className="block underline underline-offset-4"
+                href="/library"
+              >
+                Revisit your archive
+              </Link>
+              <Link
+                className="block underline underline-offset-4"
+                href="/welcome"
+              >
+                The idea behind eStories
+              </Link>
+            </div>
+            <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
+              Your private entries stay in your archive. Only stories chosen for
+              publication appear in this feed.
+            </p>
+          </div>
+        </aside>
       </div>
     </div>
   );

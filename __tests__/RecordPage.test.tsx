@@ -208,6 +208,26 @@ describe("RecordPage", () => {
       vi.unstubAllGlobals();
     }
   });
+  it("shows permission waiting, prevents duplicate starts and releases a late stream after unmount", async () => {
+    let grant!: (value: MediaStream) => void;
+    const stop = vi.fn();
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementationOnce(() => new Promise(resolve => { grant = resolve; }));
+    const outbound = vi.fn();
+    vi.stubGlobal("fetch", outbound);
+    const view = renderWithProviders(<RecordPage />);
+    try {
+      const microphone = screen.getByRole("button", { name: "Start recording" });
+      fireEvent.click(microphone);
+      expect(screen.getByRole("button", { name: "Waiting for microphone permission" })).toBeDisabled();
+      fireEvent.click(microphone);
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Your voice is being recorded")).not.toBeInTheDocument();
+      view.unmount();
+      grant({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+      await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+      expect(outbound).not.toHaveBeenCalled();
+    } finally { view.unmount(); vi.unstubAllGlobals(); }
+  });
   it.each([false, true])("saves the intended visibility and publishes only when public=%s", async isPublic => {
     sessionStorage.clear();
     const outbound = vi.fn(async (url: string, init?: RequestInit) => {

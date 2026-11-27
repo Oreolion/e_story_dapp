@@ -5,6 +5,7 @@ const groups = [
   {
     title: "Your stories",
     links: [
+      ["About eStories", "/welcome"],
       ["Create a story", "/record"],
       ["Your archive", "/library"],
       ["Discover stories", "/social"],

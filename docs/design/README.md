@@ -1,4 +1,6 @@
-﻿# Design documentation
+# Design documentation
+
+- [Landing, Home feed and recorder rework](LANDING_FEED_RECORDER_REWORK_PLAN.md): current brand-preserving direction and acceptance criteria. This supersedes earlier proposals to replace the brand or logo.
 
 - [Platform design upgrade plan](PLATFORM_DESIGN_UPGRADE_PLAN.md): review evidence, direction, page backlog and release batches.
 - [Login and guided interview implementation](LOGIN_AND_GUIDED_INTERVIEW.md): first web batch, workflows, privacy boundaries, limits and verification.

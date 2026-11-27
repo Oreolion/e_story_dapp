@@ -44,9 +44,11 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/meta-pixel", () => ({ trackCompleteRegistration: vi.fn() }));
 import { AuthModal } from "@/components/AuthModal";
+import { clearDestination, rememberDestination } from "@/lib/auth/navigation";
 import Onboarding from "@/app/onboarding/OnboardingPageClient";
 beforeEach(() => {
   vi.resetAllMocks();
+  clearDestination();
   mocks.profile = {
     id: "synthetic-google",
     name: "Writer",
@@ -88,7 +90,7 @@ describe("wallet-optional login and onboarding", () => {
     expect(close).not.toHaveBeenCalled();
     expect(mocks.wallet).not.toHaveBeenCalled();
   });
-  it("completes a Google profile and goes straight to recording", async () => {
+  it("completes a Google profile and opens Home by default", async () => {
     mocks.complete.mockResolvedValue(undefined);
     render(<Onboarding />);
     expect(screen.getByLabelText("Name")).toHaveValue("Writer");
@@ -96,15 +98,23 @@ describe("wallet-optional login and onboarding", () => {
       target: { value: "writer_1" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Start my first story" }),
+      screen.getByRole("button", { name: "Open my home feed" }),
     );
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/record"));
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/home"));
     expect(mocks.complete).toHaveBeenCalledWith({
       name: "Writer",
       username: "writer_1",
       email: "writer@example.com",
     });
     expect(mocks.wallet).not.toHaveBeenCalled();
+  });
+  it("preserves an explicit recording task through onboarding", async () => {
+    rememberDestination("/record?parentId=example");
+    mocks.complete.mockResolvedValue(undefined);
+    render(<Onboarding />);
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "writer_1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start my first story" }));
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/record?parentId=example"));
   });
   it("keeps the form on persistence failure and does not claim completion", async () => {
     mocks.complete.mockRejectedValue(new Error("private-database-detail"));
@@ -113,7 +123,7 @@ describe("wallet-optional login and onboarding", () => {
       target: { value: "writer_1" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Start my first story" }),
+      screen.getByRole("button", { name: "Open my home feed" }),
     );
     expect(await screen.findByRole("alert")).not.toHaveTextContent(
       "private-database-detail",
@@ -161,7 +171,7 @@ describe("wallet-optional login and onboarding", () => {
     });
     fireEvent.submit(
       screen
-        .getByRole("button", { name: "Start my first story" })
+        .getByRole("button", { name: "Open my home feed" })
         .closest("form")!,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("3–20");
@@ -181,7 +191,7 @@ describe("wallet-optional login and onboarding", () => {
       target: { value: "writer_1" },
     });
     const form = screen
-      .getByRole("button", { name: "Start my first story" })
+      .getByRole("button", { name: "Open my home feed" })
       .closest("form")!;
     fireEvent.submit(form);
     fireEvent.submit(form);
@@ -191,7 +201,7 @@ describe("wallet-optional login and onboarding", () => {
       screen.getByRole("button", { name: "Saving your profile…" }),
     ).toBeDisabled();
     await act(async () => finish());
-    expect(mocks.replace).toHaveBeenCalledWith("/record");
+    expect(mocks.replace).toHaveBeenCalledWith("/home");
   });
   it("redirects signed-out visitors without presenting an editable profile", () => {
     mocks.profile = null;
@@ -199,11 +209,11 @@ describe("wallet-optional login and onboarding", () => {
     expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
     expect(mocks.replace).toHaveBeenCalledWith("/");
   });
-  it("sends already-onboarded users to recording without asking again", () => {
+  it("sends already-onboarded users to Home without asking again", () => {
     mocks.needsOnboarding = false;
     render(<Onboarding />);
     expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
-    expect(mocks.replace).toHaveBeenCalledWith("/record");
+    expect(mocks.replace).toHaveBeenCalledWith("/home");
   });
   it("prefills the newly selected account instead of retaining another account's input", async () => {
     const view = render(<Onboarding />);
