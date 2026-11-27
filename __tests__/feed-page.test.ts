@@ -33,6 +33,19 @@ describe("bounded feed requests", () => {
       `and(created_at.eq.${row.created_at},id.lt.${row.id})`,
     );
   });
+  it("accepts a null timestamp only with a valid story identity", () => {
+    const row = {
+      id: "11111111-1111-4111-8111-111111111111",
+      created_at: null,
+    };
+    expect(
+      feedPageInput(new URLSearchParams({ cursor: encodeFeedCursor(row) }))
+        .cursor,
+    ).toEqual(row);
+    expect(cursorFilter(row)).toBe(
+      `and(created_at.is.null,id.lt.${row.id}),created_at.not.is.null`,
+    );
+  });
   it.each(["0", "51", "-1", "1.5", "100000", "20junk"])(
     "rejects an unbounded/invalid page size %s",
     (limit) =>

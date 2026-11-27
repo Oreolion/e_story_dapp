@@ -67,7 +67,7 @@ export async function paginatedFeed(req: NextRequest) {
         "id, numeric_id, title, content, created_at, likes, comments_count, shares, has_audio, mood, tags, paywall_amount, teaser, is_public, author_id, author_wallet, story_date, view_count",
       )
       .eq("is_public", true)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false, nullsFirst: true })
       .order("id", { ascending: false })
       .limit(input.limit + 1);
     if (blocked.length)

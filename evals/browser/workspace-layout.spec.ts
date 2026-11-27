@@ -50,13 +50,15 @@ async function fixture(page: Page, baseURL: string) {
     const req = route.request();
     const url = new URL(req.url());
     if (
-      url.hostname === "synthetic.invalid" &&
+      ["synthetic.invalid", "placeholder.supabase.co"].includes(url.hostname) &&
       url.pathname.startsWith("/rest/v1/")
     )
-      return route.fulfill({
-        json: url.pathname.endsWith("/stories") ? [story] : [],
-        headers: { "content-range": "0-0/0" },
-      });
+      return ["GET", "HEAD"].includes(req.method())
+        ? route.fulfill({
+            json: url.pathname.endsWith("/stories") ? [story] : [],
+            headers: { "content-range": "0-0/0" },
+          })
+        : route.abort();
     if (url.origin !== origin) return route.abort();
     if (!url.pathname.startsWith("/api/")) return route.continue();
     if (url.pathname === "/api/user/profile")

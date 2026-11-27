@@ -1,7 +1,7 @@
 const timestamp =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export type FeedCursor = { created_at: string; id: string };
+export type FeedCursor = { created_at: string | null; id: string };
 export function encodeFeedCursor(row: FeedCursor) {
   return Buffer.from(
     JSON.stringify({ created_at: row.created_at, id: row.id }),
@@ -27,9 +27,10 @@ export function feedPageInput(params: URLSearchParams) {
     if (
       !value ||
       Object.keys(value).length !== 2 ||
-      typeof value.created_at !== "string" ||
-      !timestamp.test(value.created_at) ||
-      !Number.isFinite(Date.parse(value.created_at)) ||
+      (value.created_at !== null &&
+        (typeof value.created_at !== "string" ||
+          !timestamp.test(value.created_at) ||
+          !Number.isFinite(Date.parse(value.created_at)))) ||
       typeof value.id !== "string" ||
       !uuid.test(value.id)
     )
@@ -41,6 +42,8 @@ export function feedPageInput(params: URLSearchParams) {
 
 export function cursorFilter(cursor: FeedCursor) {
   // Both fields have been validated; do not interpolate arbitrary PostgREST syntax.
+  if (cursor.created_at === null)
+    return `and(created_at.is.null,id.lt.${cursor.id}),created_at.not.is.null`;
   return `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`;
 }
 

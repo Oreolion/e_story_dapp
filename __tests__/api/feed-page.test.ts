@@ -71,7 +71,7 @@ describe("bounded public feed", () => {
     expect(queries.stories.limit).toHaveBeenCalledWith(21);
     expect(queries.stories.eq).toHaveBeenCalledWith("is_public", true);
     expect(queries.stories.order.mock.calls).toEqual([
-      ["created_at", { ascending: false }],
+      ["created_at", { ascending: false, nullsFirst: true }],
       ["id", { ascending: false }],
     ]);
     expect(queries.stories.select.mock.calls[0][0]).not.toContain("audio_url");
@@ -94,6 +94,16 @@ describe("bounded public feed", () => {
     await paginatedFeed(request(`limit=1&cursor=${body.nextCursor}`));
     expect(queries.stories.or).toHaveBeenCalledWith(
       `created_at.lt.${row.created_at},and(created_at.eq.${row.created_at},id.lt.${row.id})`,
+    );
+  });
+  it("keeps legacy undated stories pageable before dated stories", async () => {
+    results.stories.data = [{ ...row, created_at: null }, row];
+    const body = await (await paginatedFeed(request("limit=1"))).json();
+    expect(body.stories).toHaveLength(1);
+    expect(body.stories[0].created_at).toBeNull();
+    await paginatedFeed(request(`cursor=${body.nextCursor}`));
+    expect(queries.stories.or).toHaveBeenCalledWith(
+      `and(created_at.is.null,id.lt.${row.id}),created_at.not.is.null`,
     );
   });
   it("applies both directions of blocks before pagination and follows only the current viewer", async () => {
