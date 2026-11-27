@@ -38,6 +38,9 @@ test.describe("Landing Page Fixes", () => {
 });
 
 test.describe("Social Page", () => {
+  // A controlling service worker can bypass page.route() in WebKit. These
+  // fixture tests must use their synthetic feed, rather than the dummy backend.
+  test.use({ serviceWorkers: "block" });
   test.beforeEach(async ({ context, baseURL }) => {
     const origin = new URL(baseURL!).origin;
     await context.route("**/*", (route) =>
