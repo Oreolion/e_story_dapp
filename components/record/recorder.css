@@ -1,0 +1,126 @@
+.recorder-stage {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 290px;
+  padding: 40px 12px 20px;
+}
+.recorder-button {
+  z-index: 1;
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: linear-gradient(
+    145deg,
+    hsl(var(--memory-500)),
+    hsl(var(--insight-600))
+  );
+  box-shadow:
+    inset 0 1px 1px #ffffff50,
+    0 8px 28px hsl(var(--memory-500) / 0.3);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.recorder-button:hover:enabled {
+  transform: scale(1.04);
+}
+.recorder-button:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 8px;
+}
+.recorder-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.recorder-button svg {
+  width: 36px;
+  height: 36px;
+}
+.recorder-halo {
+  position: absolute;
+  top: 20px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    hsl(var(--insight-500) / 0.22),
+    hsl(var(--memory-500) / 0.08) 55%,
+    transparent 70%
+  );
+  pointer-events: none;
+}
+.recorder-stage[data-recording="false"] .recorder-halo {
+  animation: recorder-breathe 4s ease-in-out infinite;
+}
+.recorder-orbit {
+  position: absolute;
+  top: 36px;
+  width: 168px;
+  height: 168px;
+  border: 1px solid hsl(var(--memory-500) / 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.recorder-orbit + .recorder-orbit {
+  top: 14px;
+  width: 212px;
+  height: 212px;
+  border-color: hsl(var(--insight-500) / 0.12);
+}
+.recorder-stage[data-recording="true"] .recorder-button {
+  background: linear-gradient(135deg, #dc355d, #a02c65);
+  box-shadow: 0 0 36px #dc355d40;
+}
+.recorder-stage[data-recording="true"] .recorder-orbit {
+  animation: recorder-ripple 2s ease-out infinite;
+  border-color: #dc355d50;
+}
+.recorder-stage[data-recording="true"] .recorder-orbit + .recorder-orbit {
+  animation-delay: 1s;
+}
+.recorder-stage p {
+  z-index: 1;
+  margin-top: 64px;
+  max-width: 28rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+@keyframes recorder-ripple {
+  from {
+    transform: scale(0.82);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+@keyframes recorder-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .recorder-stage * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.recorder-stage[data-animated="false"] * {
+  animation-play-state: paused;
+}

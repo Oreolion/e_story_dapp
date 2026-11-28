@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 
 const sdk = vi.hoisted(() => ({ init: vi.fn() }));
@@ -63,10 +63,17 @@ describe.each(configurations)("%s telemetry privacy", (_runtime, load) => {
   });
 });
 
+let installedSentry: typeof import("@sentry/nextjs");
+beforeAll(() => {
+  // Cold-loading the installed Next SDK can exceed five seconds on Windows.
+  // Keep setup separate from the bounded transport/privacy assertions below.
+  installedSentry = createRequire(import.meta.url)("@sentry/nextjs");
+}, 30_000);
+
 it("removes credentials before the real installed Sentry SDK hands events to its transport", async () => {
   const options = await configuration(configurations[0][1]);
   // Load the real CJS SDK without Vite transforming its large Next dependency graph.
-  const sentry = createRequire(import.meta.url)("@sentry/nextjs") as typeof import("@sentry/nextjs");
+  const sentry = installedSentry;
   const envelopes: unknown[] = [];
   sentry.init({ ...options, enabled: true, dsn: "https://synthetic@telemetry.invalid/1", defaultIntegrations: false,
     tracesSampleRate: 0, sendClientReports: false,

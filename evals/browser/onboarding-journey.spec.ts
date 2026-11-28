@@ -76,17 +76,17 @@ test("new authenticated account completes its profile and stays onboarded after 
     "writer@example.com",
   );
   await page.getByLabel("Username", { exact: true }).fill("synthetic_writer");
-  await page.getByRole("button", { name: "Start my first story" }).click();
-  await expect(page).toHaveURL(/\/record$/);
+  await page.getByRole("button", { name: "Open my home feed" }).click();
+  await expect(page).toHaveURL(/\/home$/);
   await expect(
-    page.getByRole("heading", { name: "Record Your Story" }),
+    page.getByRole("heading", { name: "Your next chapter starts here." }),
   ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Record Your Story" }),
+    page.getByRole("heading", { name: "Your next chapter starts here." }),
   ).toBeVisible();
   await page.goto("/onboarding");
-  await expect(page).toHaveURL(/\/record$/);
+  await expect(page).toHaveURL(/\/home$/);
   expect(fixture.writes).toHaveLength(1);
   expect(fixture.unexpectedWrites).toEqual([]);
 });
@@ -99,7 +99,7 @@ test("a username conflict retains the profile and supports a successful retry", 
   const fixture = await syntheticAccount(page, baseURL!, true);
   await page.goto("/onboarding");
   await page.getByLabel("Username", { exact: true }).fill("reserved_writer");
-  await page.getByRole("button", { name: "Start my first story" }).click();
+  await page.getByRole("button", { name: "Open my home feed" }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "Your profile could not be saved" }),
   ).toBeVisible();
@@ -121,8 +121,8 @@ test("a username conflict retains the profile and supports a successful retry", 
     ),
   ).toBe(true);
   await page.getByLabel("Username", { exact: true }).fill("available_writer");
-  await page.getByRole("button", { name: "Start my first story" }).click();
-  await expect(page).toHaveURL(/\/record$/);
+  await page.getByRole("button", { name: "Open my home feed" }).click();
+  await expect(page).toHaveURL(/\/home$/);
   expect(fixture.writes).toHaveLength(2);
   expect(fixture.unexpectedWrites).toEqual([]);
 });

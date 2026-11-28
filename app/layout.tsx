@@ -1,3 +1,5 @@
+import "./landing.css";
+import "@/components/record/recorder.css";
 import "../app/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";

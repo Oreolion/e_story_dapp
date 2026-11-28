@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import SocialPage from "./SocialPageClient";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Community Stories",
@@ -13,5 +14,9 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <SocialPage />;
+  return (
+    <Suspense fallback={<p role="status">Loading stories…</p>}>
+      <SocialPage />
+    </Suspense>
+  );
 }

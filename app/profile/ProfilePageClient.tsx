@@ -662,7 +662,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="min-w-0 max-w-6xl mx-auto space-y-8 pb-20 [overflow-wrap:anywhere]">
       {/* Header */}
       <div className="text-center space-y-4">
         <motion.div
@@ -682,7 +682,7 @@ export default function ProfilePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Profile Card */}
-        <div className="lg:col-span-1 sticky">
+        <div className="min-w-0 lg:col-span-1 sticky">
           <Card className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-0 shadow-xl top-24">
             <CardHeader className="text-center">
               <Avatar className="h-24 w-24 mx-auto">
@@ -791,9 +791,9 @@ export default function ProfilePage() {
         </div>
 
         {/* Main Content Tabs */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="achievements">Achievements</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ interface StoryCardProps {
   onShare?: (id: number) => void;
   onUnlock?: (id: number) => void;
   variant?: 'default' | 'compact' | 'featured';
+  linkTitle?: boolean;
 }
 
 const ESTORY_TOKEN_ADDRESS = "0xYoureStoryTokenAddress";
@@ -53,7 +56,7 @@ export function StoryCard({
   onFollow,
   onShare,
   onUnlock,
-  variant = 'default',
+  variant = 'default', linkTitle = false,
 }: StoryCardProps) {
   const [tipAmount, setTipAmount] = useState(5);
   const [isPaying, setIsPaying] = useState(false);
@@ -128,7 +131,7 @@ export function StoryCard({
 
   // Build card classes based on story properties
   const cardClasses = [
-    'rounded-xl overflow-hidden transition-all duration-200',
+    'min-w-0 max-w-full rounded-xl overflow-hidden [overflow-wrap:anywhere] transition-all duration-200',
     emotionalTone ? `card-tone ${getToneClass(emotionalTone)}` : 'card-elevated',
     isCanonical ? 'card-canonical ring-1 ring-[hsl(var(--story-500)/0.3)]' : '',
     'hover-shadow-subtle',
@@ -141,7 +144,7 @@ export function StoryCard({
         <CardContent className="p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-foreground line-clamp-2">
-              {story.title}
+              {linkTitle ? <Link href={`/story/${story.id}`} className="hover:underline underline-offset-4">{story.title}</Link> : story.title}
             </h3>
             {isCanonical && (
               <Star className="w-4 h-4 text-[hsl(var(--story-500))] flex-shrink-0" fill="currentColor" />
@@ -172,9 +175,9 @@ export function StoryCard({
     <Card className={cardClasses}>
       <CardHeader className="pb-3">
         {/* Author Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start space-x-3">
-            <Avatar className="w-11 h-11">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <Avatar className="w-11 h-11 shrink-0">
               <Image
                 src={story.author_wallet?.avatar || DEFAULT_AVATAR}
                 alt={story.author_wallet?.name || "avatar"}
@@ -189,7 +192,7 @@ export function StoryCard({
                   .join("")}
               </AvatarFallback>
             </Avatar>
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
                 <span className="font-semibold text-foreground">
                   {story.author_wallet?.name}
@@ -198,7 +201,7 @@ export function StoryCard({
                   @{story.author_wallet?.username}
                 </span>
                 {story.author_wallet?.badges?.map((badge) => (
-                  <Badge key={badge} variant="secondary" className="badge-subtle text-xs">
+                  <Badge key={badge} variant="secondary" className="badge-subtle max-w-full whitespace-normal text-xs">
                     {badge}
                   </Badge>
                 ))}
@@ -256,8 +259,8 @@ export function StoryCard({
       <CardContent className="space-y-4">
         {/* Title with canonical indicator and verified badge */}
         <div className="flex items-start gap-2">
-          <h3 className="text-xl font-semibold text-foreground flex-1">
-            {story.title}
+          <h3 className="min-w-0 text-xl font-semibold text-foreground flex-1">
+            {linkTitle ? <Link href={`/story/${story.id}`} className="hover:underline underline-offset-4">{story.title}</Link> : story.title}
           </h3>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <VerifiedBadge
@@ -307,7 +310,7 @@ export function StoryCard({
         {story.tags && story.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {story.tags.map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs">
+              <Badge key={tag} variant="outline" className="max-w-full whitespace-normal text-xs">
                 #{tag}
               </Badge>
             ))}
@@ -324,11 +327,13 @@ export function StoryCard({
         )}
 
         {/* Actions Footer */}
-        <div className="flex items-center justify-between pt-4 border-t border-[hsl(var(--memory-500)/0.1)]">
+        <div className="flex flex-wrap gap-3 items-center justify-between pt-4 border-t border-[hsl(var(--memory-500)/0.1)]">
           <div className="flex items-center gap-1">
             <Button
               size="sm"
               variant="ghost"
+              aria-label={story.isLiked ? "Unlike story" : "Like story"}
+              aria-pressed={Boolean(story.isLiked)}
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLike?.(story.id); }}
               className={`hover:bg-transparent ${story.isLiked ? "text-red-500" : "text-muted-foreground hover:text-foreground"}`}
             >

@@ -2,12 +2,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
 import { resolveUserId, validateAuth } from "@/lib/auth";
+import { paginatedFeed } from "@/lib/stories/paginated-feed";
 
 /**
  * GET /api/stories/feed — Fetch public stories feed with author info (bypasses RLS)
  * No auth required — this is public content.
  */
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("pagination") === "cursor") return paginatedFeed(req);
   try {
     const admin = createSupabaseAdminClient();
     const authenticatedUserId = await validateAuth(req);

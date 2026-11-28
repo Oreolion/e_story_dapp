@@ -491,7 +491,7 @@ export default function LibraryPage() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 mb-6">
+        <TabsList className="grid h-auto w-full grid-cols-2 min-[390px]:grid-cols-4 lg:grid-cols-7 gap-1 mb-6">
           <TabsTrigger value="all" className="text-xs sm:text-sm">
             <FileText className="w-4 h-4 mr-1 hidden sm:inline" /> All
           </TabsTrigger>

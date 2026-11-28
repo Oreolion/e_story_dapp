@@ -3,19 +3,19 @@ import { test, expect } from "@playwright/test";
 test.slow();
 
 test.describe("Landing Page Fixes", () => {
-  test('Main writing action opens the recording page', async ({
-    page,
-  }) => {
+  test("Main writing action opens the recording page", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("Preparing your experience")).not.toBeVisible({
       timeout: 30000,
     });
 
     // The restored hero retains its original writing action.
-    const startBtn = page.getByRole("button", {
-      name: "Start Writing — Free",
-      exact: true,
-    }).first();
+    const startBtn = page
+      .getByRole("link", {
+        name: "Start Writing — Free",
+        exact: true,
+      })
+      .first();
     await expect(startBtn).toBeVisible({ timeout: 10000 });
 
     // Click and verify navigation goes to /record (not /api/auth/callback)
@@ -30,55 +30,93 @@ test.describe("Landing Page Fixes", () => {
       timeout: 30000,
     });
 
-    const heading = page.getByRole("heading", { name: /Speak your story, see your patterns/i });
+    const heading = page.getByRole("heading", {
+      name: /Speak your story, see your patterns/i,
+    });
     await expect(heading).toBeVisible({ timeout: 10000 });
   });
 });
 
 test.describe("Social Page", () => {
-  test("loads with real story count and writer count", async ({ page }) => {
+  // A controlling service worker can bypass page.route() in WebKit. These
+  // fixture tests must use their synthetic feed, rather than the dummy backend.
+  test.use({ serviceWorkers: "block" });
+  test.beforeEach(async ({ context, baseURL }) => {
+    const origin = new URL(baseURL!).origin;
+    await context.route("**/*", (route) =>
+      new URL(route.request().url()).origin === origin
+        ? route.continue()
+        : route.abort(),
+    );
+  });
+  test("shows bounded feed navigation without fabricated community totals", async ({
+    page,
+  }) => {
+    await page.route("**/api/stories/feed**", (route) =>
+      route.fulfill({ json: { stories: [], nextCursor: null } }),
+    );
     await page.goto("/social");
-    await expect(page.getByText("Preparing your experience")).not.toBeVisible({
-      timeout: 30000,
-    });
-
-    // Heading should say "Discover Stories"
     await expect(
       page.getByRole("heading", { name: /Discover.*Stories/i }),
     ).toBeVisible({ timeout: 15000 });
-
-    // Stats bar should NOT show hardcoded "2.8K"
-    const statsSection = page.getByRole("region", { name: "Community statistics" });
-    await expect(statsSection).toBeVisible({ timeout: 15000 });
-    await expect(statsSection.getByText("2.8K")).not.toBeVisible();
-
-    // "Published Stories" label should be present
-    await expect(page.getByText("Published Stories")).toBeVisible();
-
-    // "Active Writers" label should be present
-    await expect(page.getByText("Active Writers")).toBeVisible();
+    for (const name of ["Latest", "Trending", "Following"])
+      await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Community statistics" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "No stories found" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Next stories" }),
+    ).toBeDisabled();
+    await expect(page.getByText("2.8K", { exact: true })).toHaveCount(0);
   });
-
-  test("story cards render in feed", async ({ page }) => {
-    await page.goto("/social");
-    await expect(page.getByText("Preparing your experience")).not.toBeVisible({
-      timeout: 30000,
+  test("renders the requested public story and a separate reader link", async ({
+    page,
+  }) => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    await page.route("**/api/stories/feed**", (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      expect(params.get("pagination")).toBe("cursor");
+      expect(params.get("limit")).toBe("20");
+      return route.fulfill({
+        json: {
+          stories: [
+            {
+              id,
+              numeric_id: 1,
+              title: "A synthetic Sunday",
+              content: "A fictional memory for this browser test.",
+              created_at: "2026-11-27T10:00:00Z",
+              is_public: true,
+              paywall_amount: 0,
+              author: {
+                id: "22222222-2222-4222-8222-222222222222",
+                name: "Synthetic Writer",
+                username: "synthetic_writer",
+              },
+            },
+          ],
+          nextCursor: null,
+        },
+      });
     });
-
-    // Wait for loading to finish — either stories appear or empty state shows
-    await page.waitForTimeout(5000);
-
-    // Stories are rendered as Card components with story titles or empty state
-    const hasStories = (await page.locator("h3").count()) > 0;
-    const hasEmptyState = await page
-      .getByText("No stories found")
-      .isVisible()
-      .catch(() => false);
-    const hasPublishedLabel = await page
-      .getByText("Published Stories")
-      .isVisible()
-      .catch(() => false);
-    expect(hasStories || hasEmptyState || hasPublishedLabel).toBeTruthy();
+    await page.goto("/social");
+    await expect(
+      page.getByRole("link", { name: "A synthetic Sunday" }),
+    ).toHaveAttribute("href", `/story/${id}`, { timeout: 15000 });
+    await expect(
+      page.getByText("A fictional memory for this browser test.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Like story", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Next stories" }),
+    ).toBeDisabled();
   });
 });
 

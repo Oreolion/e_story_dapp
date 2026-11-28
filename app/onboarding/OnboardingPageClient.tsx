@@ -9,6 +9,7 @@ import { Check, ArrowRight, Loader2 } from "lucide-react";
 import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
 import { LogoMark } from "@/components/LogoMark";
 import { trackCompleteRegistration } from "@/lib/meta-pixel";
+import { clearDestination, pendingDestination } from "@/lib/auth/navigation";
 export default function OnboardingPageClient() {
   const { profile, needsOnboarding, isLoading, completeOnboarding } = useAuth();
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function OnboardingPageClient() {
   const [pending, setPending] = useState(false);
   const locked = useRef(false);
   const initialized = useRef<string | null>(null);
+  const destination = useRef(pendingDestination() ?? "/home");
   useEffect(() => {
     if (profile && initialized.current !== profile.id) {
       initialized.current = profile.id;
@@ -30,7 +32,7 @@ export default function OnboardingPageClient() {
   useEffect(() => {
     if (!isLoading && !profile) router.replace("/");
     else if (!isLoading && profile && !needsOnboarding)
-      router.replace("/record");
+      router.replace(destination.current);
   }, [isLoading, profile, needsOnboarding, router]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -59,7 +61,8 @@ export default function OnboardingPageClient() {
         status: true,
         auth_provider: profile.auth_provider,
       });
-      router.replace("/record");
+      clearDestination();
+      router.replace(destination.current);
     } catch {
       setError(
         "Your profile could not be saved. Try another username or retry in a moment.",
@@ -168,7 +171,7 @@ export default function OnboardingPageClient() {
               ) : (
                 <ArrowRight aria-hidden className="size-4" />
               )}
-              {pending ? "Saving your profile…" : "Start my first story"}
+              {pending ? "Saving your profile…" : destination.current.startsWith("/record") ? "Start my first story" : "Open my home feed"}
             </Button>
           </form>
           <p className="mt-5 text-sm text-muted-foreground">

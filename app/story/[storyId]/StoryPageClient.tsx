@@ -548,10 +548,10 @@ export default function StoryPage({
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+    <div className="min-w-0 max-w-4xl mx-auto space-y-8 pb-20 [overflow-wrap:anywhere]">
       <TestnetBanner />
       {/* Top Navigation */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap gap-3 justify-between items-center">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </Button>
@@ -576,10 +576,10 @@ export default function StoryPage({
         <Card className="border-0 shadow-xl overflow-hidden">
           {/* Dynamic Header */}
           <div
-            className={`h-48 bg-linear-to-r ${gradientClass} relative overflow-hidden flex items-end p-6`}
+            className={`min-h-48 bg-linear-to-r ${gradientClass} relative overflow-hidden flex items-end p-6`}
           >
             <div className="relative z-10 text-white w-full">
-              <div className="flex justify-between items-end">
+              <div className="flex flex-wrap gap-4 justify-between items-end">
                 <div>
                    {/* NEW: Visibility Badge next to Mood */}
                   <div className="flex items-center gap-2 mb-3">
@@ -656,7 +656,7 @@ export default function StoryPage({
           <CardContent className="pt-8">
             {/* Author & Meta Row */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 pb-6 border-b dark:border-gray-700">
-              <div className="flex items-center space-x-4">
+              <div className="flex min-w-0 items-center gap-4">
                 <Avatar className="w-12 h-12 border-2 border-purple-100">
                   <AvatarImage src={story.author.avatar || undefined} alt={story.author.name || "Author"} />
                   <AvatarFallback>
@@ -677,7 +677,7 @@ export default function StoryPage({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center text-sm text-gray-500 gap-4 mr-2">
                   <span className="flex items-center">
                     <Heart className="w-4 h-4 mr-1" /> {story.likes}
@@ -790,7 +790,7 @@ export default function StoryPage({
             <Separator className="my-8" />
 
             {/* Actions */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap gap-3 justify-between items-center">
               <div className="flex gap-2 flex-wrap">
                 <Button
                   variant={isLiked ? "default" : "outline"}
@@ -874,7 +874,7 @@ export default function StoryPage({
               <AvatarImage src={authInfo?.avatar || undefined} alt="Your avatar" />
               <AvatarFallback>ME</AvatarFallback>
             </Avatar>
-            <div className="flex-1 space-y-2">
+            <div className="min-w-0 flex-1 space-y-2">
               <Textarea
                 placeholder="Share your thoughts..."
                 value={newComment}
